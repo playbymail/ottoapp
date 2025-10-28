@@ -1,4 +1,5 @@
 import { pageTitle } from 'ember-page-title';
+import { on } from '@ember/modifier';
 
 <template>
 <h1>Sign in</h1>

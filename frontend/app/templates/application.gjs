@@ -1,4 +1,5 @@
 import { pageTitle } from 'ember-page-title';
+import { on } from '@ember/modifier';
 
 <template>
 <header class="p-4 bg-gray-100 border-b flex justify-between">

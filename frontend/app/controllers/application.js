@@ -7,15 +7,9 @@ export default class ApplicationController extends Controller {
   @service currentUser;
   @service router;
 
-  constructor() {
-    super(...arguments);
-    // Load user data once ESA restores a valid session
-    this.session.on('authenticationSucceeded', () => this.currentUser.load());
-    this.session.on('invalidationSucceeded', () => (this.currentUser.user = null));
-  }
-
   @action async logout() {
     await this.session.invalidate();
+    this.currentUser.user = null;
     this.router.transitionTo('login');
   }
 }
