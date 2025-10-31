@@ -5,6 +5,7 @@ import loadInitializers from 'ember-load-initializers';
 import config from 'frontend/config/environment';
 import { importSync, isDevelopingApp, macroCondition } from '@embroider/macros';
 import setupInspector from '@embroider/legacy-inspector-support/ember-source-4.12';
+import '@warp-drive/ember/install';
 
 if (macroCondition(isDevelopingApp())) {
   importSync('./deprecation-workflow');

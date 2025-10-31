@@ -1,26 +1,28 @@
-# compiled output
-/dist/
-/declarations/
-/tmp/
-
-# dependencies
-/node_modules/
-
-# misc
+*~
+*.gz
 *.local
-/.pnp*
-/.eslintcache
-/coverage/
-/npm-debug.log*
-/testem.log
-/yarn-error.log
+*.swp
+*.tar
+*.tgz
+*.zip
 
-# ember-try
+.archive/
+.idea/
+.vscode/
+
+/.eslintcache
 /.node_modules.ember-try/
+/.pnp*
+/DEBUG/
+/coverage/
+/declarations/
+/dist/
+/node_modules/
+/npm-debug.log*
 /npm-shrinkwrap.json.ember-try
 /package.json.ember-try
 /package-lock.json.ember-try
+/testem.log
+/tmp/
+/yarn-error.log
 /yarn.lock.ember-try
-
-# broccoli-debug
-/DEBUG/

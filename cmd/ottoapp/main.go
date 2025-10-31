@@ -1,191 +1,377 @@
+// Package main implements the backend server and CLI for OttoApp.
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
+	"context"
+	"fmt"
 	"log"
-	"net/http"
+	"os"
+	"strings"
 	"time"
+
+	"github.com/mdhender/phrases/v2"
+	"github.com/playbymail/ottoapp"
+	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/servers/rest"
+	"github.com/playbymail/ottoapp/backend/stores/sqlite"
+	"github.com/spf13/cobra"
 )
 
-type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
-}
-
-type Session struct {
-	User   User
-	CSRF   string
-	Expiry time.Time
-}
-
-var sessions = map[string]*Session{}
-
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/ping", pingHandler)
-	mux.HandleFunc("/api/login", loginHandler)
-	mux.Handle("/api/logout", csrfOnly(http.HandlerFunc(logoutHandler)))
-	mux.HandleFunc("/api/session", sessionHandler) // returns CSRF
-	mux.Handle("/api/me", authOnly(http.HandlerFunc(meHandler)))
+	log.SetFlags(log.Lshortfile)
 
-	// Protect all state-changing routes with CSRF:
-	protected := csrfOnly(mux)
-
-	srv := &http.Server{
-		Addr:         ":8181",
-		Handler:      protected,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
+	var cmdRoot = &cobra.Command{
+		Use:   "ottoapp",
+		Short: "OttoApp web server",
+		Long:  `OttoApp is a web server for OttoMap.`,
 	}
-	log.Println("Go API on :8181")
-	log.Fatal(srv.ListenAndServe())
+	cmdRoot.CompletionOptions.DisableDefaultCmd = true
+
+	cmdRoot.AddCommand(cmdDb)
+	cmdDb.PersistentFlags().String("db", ".", "path to the database file")
+
+	cmdDb.AddCommand(cmdDbBackup)
+	cmdDb.AddCommand(cmdDbCompact)
+	cmdDb.AddCommand(cmdDbCreate)
+	cmdDbCreate.AddCommand(cmdDbCreateUser)
+	cmdDbCreateUser.Flags().String("email", "", "email address for user")
+	cmdDbCreateUser.Flags().String("password", "", "password for user (generates random if not provided)")
+	cmdDbCreateUser.Flags().String("tz", "UTC", "IANA timezone for user")
+	cmdDb.AddCommand(cmdDbInit)
+	cmdDbInit.Flags().Bool("overwrite", false, "overwrite existing database")
+	cmdDb.AddCommand(cmdDbMigrate)
+	cmdDbMigrate.AddCommand(cmdDbMigrateUp)
+	//cmdDb.AddCommand(cmdDbSeed)
+	cmdDb.AddCommand(cmdDbUpdate)
+	cmdDbUpdate.AddCommand(cmdDbUpdateUser)
+	cmdDbUpdateUser.Flags().Bool("active", true, "active flag user")
+	cmdDbUpdateUser.Flags().String("email", "", "email address for user")
+	cmdDbUpdateUser.Flags().String("password", "", "password for user (generates random if \":\")")
+	cmdDbUpdateUser.Flags().String("tz", "", "IANA timezone for user")
+
+	cmdRoot.AddCommand(cmdServe)
+	cmdServe.PersistentFlags().String("db", ".", "path to the database file")
+	cmdServe.PersistentFlags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
+	cmdServe.PersistentFlags().Duration("shutdown-timer", 0, "timer to shut server down")
+
+	cmdRoot.AddCommand(cmdVersion)
+	cmdVersion.Flags().Bool("build-info", false, "show build information")
+
+	if err := cmdRoot.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 
-func pingHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok","msg":"pong"}`))
+var cmdDb = &cobra.Command{
+	Use:   "db",
+	Short: "Database management commands",
+	Long:  `Manage the OttoApp database including migrations and seeding.`,
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var body struct{ Username, Password string }
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-	u, ok := checkUser(body.Username, body.Password)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	sid := newID(32)
-	csrf := newID(16)
-	sessions[sid] = &Session{User: u, CSRF: csrf, Expiry: time.Now().Add(14 * 24 * time.Hour)}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "sid",
-		Value:    sid,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,                 // HTTPS via Caddy (dev & prod)
-		SameSite: http.SameSiteLaxMode, // same-site SPA+API
-		MaxAge:   60 * 60 * 24 * 14,
-	})
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method", http.StatusMethodNotAllowed)
-		return
-	}
-	if sid, ok := readSID(r); ok {
-		delete(sessions, sid)
-		http.SetCookie(w, &http.Cookie{
-			Name: "sid", Value: "", Path: "/", MaxAge: -1,
-			HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
-		})
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func sessionHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method", http.StatusMethodNotAllowed)
-		return
-	}
-	if s, ok := currentSession(r); ok {
-		_ = json.NewEncoder(w).Encode(struct {
-			CSRF string `json:"csrf"`
-		}{CSRF: s.CSRF})
-		return
-	}
-	http.Error(w, "unauthorized", http.StatusUnauthorized)
-}
-
-func meHandler(w http.ResponseWriter, r *http.Request) {
-	if s, ok := currentSession(r); ok {
-		_ = json.NewEncoder(w).Encode(s.User)
-		return
-	}
-	http.Error(w, "unauthorized", http.StatusUnauthorized)
-}
-
-/*** middleware & helpers ***/
-
-func authOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := currentSession(r); !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
+var cmdDbBackup = &cobra.Command{
+	Use:   "backup",
+	Short: "Backup the database",
+	Long:  `Backup the database.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
 		}
-		next.ServeHTTP(w, r)
-	})
+		name, err := sqlite.Backup(context.Background(), path)
+		if err != nil {
+			log.Fatalf("db: backup: %v\n", err)
+		}
+		log.Printf("db: %s: backup\n", name)
+		return nil
+	},
 }
 
-func csrfOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Only enforce on state-changing methods
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			s, ok := currentSession(r)
-			if !ok {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
+var cmdDbCompact = &cobra.Command{
+	Use:   "compact",
+	Short: "Compact the database",
+	Long:  `Compact the database.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		err = sqlite.Compact(context.Background(), path)
+		if err != nil {
+			log.Fatalf("db: compact: %v\n", err)
+		}
+		log.Printf("db: %s: compacted\n", path)
+		return nil
+	},
+}
+
+var cmdDbCreate = &cobra.Command{
+	Use:   "create",
+	Short: "Create data base records",
+	Long:  `Create new database records.`,
+}
+
+var cmdDbCreateUser = &cobra.Command{
+	Use:   "user <handle>",
+	Short: "Create a new user",
+	Long:  `Create a new user with specified handle.`,
+	Args:  cobra.ExactArgs(1), // require handle
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		handle := strings.ToLower(args[0])
+		if !sqlite.ValidateHandle(handle) {
+			return domains.ErrInvalidHandle
+		}
+		emailSet, email := cmd.Flags().Changed("email"), handle+"@ottoapp"
+		if emailSet {
+			email, err = cmd.Flags().GetString("email")
+			if err != nil {
+				return err
+			} else if !sqlite.ValidateEmail(email) {
+				return domains.ErrInvalidEmail
 			}
-			if got := r.Header.Get("X-CSRF-Token"); got == "" || got != s.CSRF {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
+			email = strings.ToLower(email)
+		}
+		passwordSet, password := cmd.Flags().Changed("password"), phrases.Generate(6)
+		if passwordSet {
+			password, err = cmd.Flags().GetString("password")
+			if err != nil {
+				return err
+			} else if !sqlite.ValidatePassword(password) {
+				return domains.ErrInvalidPassword
 			}
 		}
-		next.ServeHTTP(w, r)
-	})
+		var loc *time.Location
+		if tz, err := cmd.Flags().GetString("tz"); err != nil {
+			return err
+		} else if ctz, ok := iana.CanonicalName(tz); !ok {
+			return fmt.Errorf("invalid time zone")
+		} else if loc, err = time.LoadLocation(ctz); err != nil {
+			return err
+		}
+		if loc == nil { // default to UTC
+			if loc, err = time.LoadLocation("UTC"); err != nil {
+				return err
+			}
+		}
+
+		ctx := context.Background()
+		db, err := sqlite.Open(ctx, path, true)
+		if err != nil {
+			log.Fatalf("db: open: %v\n", err)
+		}
+		defer func() {
+			_ = db.Close()
+		}()
+
+		_, err = db.CreateUser(handle, email, password, loc)
+		if err != nil {
+			log.Fatalf("db: create: user %q: %v\n", handle, err)
+		}
+
+		log.Printf("db: create: user %q: email %q: tz %q: password %q)", handle, email, loc.String(), password)
+
+		return nil
+	},
 }
 
-func currentSession(r *http.Request) (*Session, bool) {
-	sid, ok := readSID(r)
-	if !ok {
-		return nil, false
-	}
-	s, ok := sessions[sid]
-	if !ok {
-		return nil, false
-	}
-	if time.Now().After(s.Expiry) {
-		delete(sessions, sid)
-		return nil, false
-	}
-	return s, true
+var cmdDbInit = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize the database",
+	Long:  `Create the database file if it doesn't exist.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		overwrite, err := cmd.Flags().GetBool("overwrite")
+		if err != nil {
+			return err
+		}
+		err = sqlite.Init(context.Background(), path, overwrite)
+		if err != nil {
+			log.Fatalf("db: init: %v\n", err)
+		}
+		log.Printf("db: %s: initialized\n", path)
+		return nil
+	},
 }
 
-func readSID(r *http.Request) (string, bool) {
-	c, err := r.Cookie("sid")
-	if err != nil || c.Value == "" {
-		return "", false
-	}
-	return c.Value, true
+var cmdDbMigrate = &cobra.Command{
+	Use:   "migrate",
+	Short: "Run database migrations",
+	Long:  `Apply schema migrations to the database.`,
 }
 
-func newID(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+var cmdDbMigrateUp = &cobra.Command{
+	Use:   "up",
+	Short: "Run database migration up",
+	Long:  `Apply schema migrations to upgrade the database.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		started := time.Now()
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		err = sqlite.MigrateUp(context.Background(), path, false)
+		if err != nil {
+			log.Fatalf("db: migrate: up: %v\n", err)
+		}
+		log.Printf("db: migrate: up: completed in %v\n", time.Since(started))
+		return nil
+	},
 }
 
-func checkUser(username, password string) (User, bool) {
-	// TODO: replace with real lookup + password hash check
-	if username == "admin" && password == "secret" {
-		return User{ID: "1", Username: "admin", Role: "admin"}, true
-	}
-	return User{}, false
+var cmdDbUpdate = &cobra.Command{
+	Use:   "update",
+	Short: "Update database records",
+	Long:  `Update existing database records.`,
+}
+
+var cmdDbUpdateUser = &cobra.Command{
+	Use:   "user <handle>",
+	Short: "Update user record",
+	Long:  `Update fields for a specific user. At least one update flag must be provided.`,
+	Args:  cobra.ExactArgs(1), // require handle
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		handle := strings.ToLower(args[0])
+		if !sqlite.ValidateHandle(handle) {
+			return domains.ErrInvalidHandle
+		}
+		var newEmail *string
+		emailSet := cmd.Flags().Changed("email")
+		if emailSet {
+			value, err := cmd.Flags().GetString("email")
+			if err != nil {
+				return err
+			} else if !sqlite.ValidateEmail(value) {
+				return fmt.Errorf("invalid new email")
+			}
+			newEmail = &value
+		}
+		var newPassword *string
+		passwordSet := cmd.Flags().Changed("password")
+		if passwordSet {
+			value, err := cmd.Flags().GetString("password")
+			if err != nil {
+				return err
+			} else if value == "+" {
+				value = phrases.Generate(6)
+				log.Printf("generated random password: %q", value)
+			}
+			if !sqlite.ValidatePassword(value) {
+				return fmt.Errorf("invalid new password")
+			}
+			newPassword = &value
+		}
+		var newTimeZone *time.Location
+		tzSet := cmd.Flags().Changed("tz")
+		if tzSet {
+			if tz, err := cmd.Flags().GetString("tz"); err != nil {
+				return err
+			} else if ctz, ok := iana.CanonicalName(tz); !ok {
+				return fmt.Errorf("invalid time zone")
+			} else if newTimeZone, err = time.LoadLocation(ctz); err != nil {
+				return err
+			}
+		}
+		if !(emailSet || passwordSet || tzSet) {
+			return fmt.Errorf("must update at least one field")
+		}
+
+		ctx := context.Background()
+		db, err := sqlite.Open(ctx, path, true)
+		if err != nil {
+			log.Fatalf("db: open: %v\n", err)
+		}
+		defer func() {
+			_ = db.Close()
+		}()
+
+		err = db.UpdateUser(handle, newEmail, newTimeZone)
+		if err != nil {
+			log.Fatalf("db: update: user %q: %v\n", handle, err)
+		}
+		if newPassword != nil {
+			err = db.UpdateUserPassword(handle, *newPassword)
+			if err != nil {
+				log.Fatalf("db: update: user %q: password %v\n", handle, err)
+			}
+		}
+
+		log.Printf("db: update: user %q: completed", handle)
+		return nil
+	},
+}
+
+var cmdServe = &cobra.Command{
+	Use:   "serve",
+	Short: "start the server",
+	Long:  `Start the REST server.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+
+		var options []rest.Option
+		if timer, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
+			return err
+		} else if timer != 0 {
+			options = append(options, rest.WithGrace(timer))
+		}
+		if timer, err := cmd.Flags().GetDuration("shutdown-timer"); err != nil {
+			return err
+		} else if timer != 0 {
+			options = append(options, rest.WithTimer(timer))
+		}
+
+		log.Printf("[serve] db %q\n", path)
+
+		ctx := context.Background()
+		db, err := sqlite.Open(ctx, path, true)
+		if err != nil {
+			log.Fatalf("[serve] db: open: %v\n", err)
+		}
+		defer func() {
+			log.Printf("[serve] db: close\n")
+			_ = db.Close()
+		}()
+
+		s, err := rest.New(db, options...)
+		if err != nil {
+			_ = db.Close()
+			log.Fatalf("[serve] rest: %v\n", err)
+		}
+		err = s.Run()
+		if err != nil {
+			_ = db.Close()
+			log.Fatalf("[serve] rest: %v\n", err)
+		}
+
+		return nil
+	},
+}
+
+var cmdVersion = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number",
+	Long:  `Display the current version of OttoApp.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if showBuildInfo, err := cmd.Flags().GetBool("build-info"); err != nil {
+			return err
+		} else if showBuildInfo {
+			fmt.Println(ottoapp.Version().String())
+		} else {
+			fmt.Println(ottoapp.Version().Core())
+		}
+		return nil
+	},
 }
