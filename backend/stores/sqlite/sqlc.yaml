@@ -1,0 +1,17 @@
+version: 2
+sql:
+  - engine: "sqlite"
+    schema:
+    - "migrations"
+    queries:
+    - "sqlc/auth.sql"
+    - "sqlc/users.sql"
+    gen:
+      go:
+        package: "sqlc"
+        out: "sqlc"
+        overrides:
+        - db_type: "bool"
+          nullable: true
+          go_type:
+            type: "bool"
