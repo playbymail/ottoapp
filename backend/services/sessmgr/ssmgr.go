@@ -4,10 +4,7 @@ package sessmgr
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"log"
-	"math/rand/v2"
 	"net/http"
 	"sync"
 	"time"
@@ -16,79 +13,57 @@ import (
 // Based on the excellent articles by Mohamed Said at themsaid.com.
 // * https://themsaid.com/building-secure-session-manager-in-go
 
-type Session struct {
+type Session_t struct {
 	mu             sync.Mutex
-	createdAt      time.Time
-	lastActivityAt time.Time
-	id             string
-	data           map[string]any
+	CreatedAt      time.Time
+	LastActivityAt time.Time
+	Id             string
+	Data           map[string]any
 }
 
-type SessionStore interface {
-	read(id string) (*Session, error)
-	write(session *Session) error
-	destroy(id string) error
-	gc(idleExpiration, absoluteExpiration time.Duration) error
+type SessionStore_i interface {
+	readSession(id string) (*Session_t, error)
+	writeSession(session *Session_t) error
+	destroySession(id string) error
+	gcSessions(idleExpiration, absoluteExpiration time.Duration) error
 }
 
-type SessionManager struct {
-	store              SessionStore
+type SessionManager_t struct {
+	store              SessionStore_i
 	idleExpiration     time.Duration
 	absoluteExpiration time.Duration
 	cookieName         string
 }
 
-// generateSessionId creates a Base64 URL–encoded string from 32 bytes of
-// non-cryptographic random data. Intended for demos and tests only.
-//
-// ⚠️ Not secure! Use crypto/rand for production systems.
-func generateSessionId() string {
-	id := make([]byte, 32)
-	binary.LittleEndian.PutUint64(id[0*8:], rand.Uint64())
-	binary.LittleEndian.PutUint64(id[1*8:], rand.Uint64())
-	binary.LittleEndian.PutUint64(id[2*8:], rand.Uint64())
-	binary.LittleEndian.PutUint64(id[3*8:], rand.Uint64())
-	return base64.RawURLEncoding.EncodeToString(id)
-}
-
-// Example secure version (production):
-// func generateSecureSessionId() string {
-// 	id := make([]byte, 32)
-// 	if _, err := crypto/rand.Read(id); err != nil {
-// 		panic(err)
-// 	}
-// 	return base64.RawURLEncoding.EncodeToString(id)
-// }
-
-func newSession() *Session {
-	return &Session{
-		id:             generateSessionId(),
-		data:           map[string]any{"csrf_token": generateCSRFToken()},
-		createdAt:      time.Now(),
-		lastActivityAt: time.Now(),
+func newSession() *Session_t {
+	return &Session_t{
+		Id:             generateSessionId(),
+		Data:           map[string]any{"csrf_token": generateCSRFToken()},
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
 	}
 }
 
-func (s *Session) Get(key string) any {
-	return s.data[key]
+func (s *Session_t) Get(key string) any {
+	return s.Data[key]
 }
 
-func (s *Session) Put(key string, value any) {
-	s.data[key] = value
+func (s *Session_t) Put(key string, value any) {
+	s.Data[key] = value
 }
 
-func (s *Session) Delete(key string) {
-	delete(s.data, key)
+func (s *Session_t) Delete(key string) {
+	delete(s.Data, key)
 }
 
 func NewSessionManager(
-	store SessionStore,
+	store SessionStore_i,
 	gcInterval,
 	idleExpiration,
 	absoluteExpiration time.Duration,
-	cookieName string) *SessionManager {
+	cookieName string) *SessionManager_t {
 
-	m := &SessionManager{
+	m := &SessionManager_t{
 		store:              store,
 		idleExpiration:     idleExpiration,
 		absoluteExpiration: absoluteExpiration,
@@ -100,20 +75,20 @@ func NewSessionManager(
 	return m
 }
 
-func (m *SessionManager) gc(d time.Duration) {
+func (m *SessionManager_t) gc(d time.Duration) {
 	ticker := time.NewTicker(d)
 
 	for range ticker.C {
-		m.store.gc(m.idleExpiration, m.absoluteExpiration)
+		m.store.gcSessions(m.idleExpiration, m.absoluteExpiration)
 	}
 }
 
-func (m *SessionManager) validate(session *Session) bool {
-	if time.Since(session.createdAt) > m.absoluteExpiration ||
-		time.Since(session.lastActivityAt) > m.idleExpiration {
+func (m *SessionManager_t) validate(session *Session_t) bool {
+	if time.Since(session.CreatedAt) > m.absoluteExpiration ||
+		time.Since(session.LastActivityAt) > m.idleExpiration {
 
 		// Delete the session from the store
-		err := m.store.destroy(session.id)
+		err := m.store.destroySession(session.Id)
 		if err != nil {
 			panic(err)
 		}
@@ -128,13 +103,13 @@ type sessionContextKeyType string
 
 const sessionContextKey = sessionContextKeyType("")
 
-func (m *SessionManager) start(r *http.Request) (*Session, *http.Request) {
-	var session *Session
+func (m *SessionManager_t) start(r *http.Request) (*Session_t, *http.Request) {
+	var session *Session_t
 
 	// Read From Cookie
 	cookie, err := r.Cookie(m.cookieName)
 	if err == nil {
-		session, err = m.store.read(cookie.Value)
+		session, err = m.store.readSession(cookie.Value)
 		if err != nil {
 			log.Printf("Failed to read session from store: %v", err)
 		}
@@ -152,10 +127,10 @@ func (m *SessionManager) start(r *http.Request) (*Session, *http.Request) {
 	return session, r
 }
 
-func (m *SessionManager) save(session *Session) error {
-	session.lastActivityAt = time.Now()
+func (m *SessionManager_t) save(session *Session_t) error {
+	session.LastActivityAt = time.Now()
 
-	err := m.store.write(session)
+	err := m.store.writeSession(session)
 	if err != nil {
 		return err
 	}
@@ -163,21 +138,21 @@ func (m *SessionManager) save(session *Session) error {
 	return nil
 }
 
-func (m *SessionManager) migrate(session *Session) error {
+func (m *SessionManager_t) migrate(session *Session_t) error {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 
-	err := m.store.destroy(session.id)
+	err := m.store.destroySession(session.Id)
 	if err != nil {
 		return err
 	}
 
-	session.id = generateSessionId()
+	session.Id = generateSessionId()
 
 	return nil
 }
 
-func (m *SessionManager) Handle(next http.Handler) http.Handler {
+func (m *SessionManager_t) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Start the session
 		session, rws := m.start(r)
@@ -214,7 +189,7 @@ func (m *SessionManager) Handle(next http.Handler) http.Handler {
 
 type sessionResponseWriter struct {
 	http.ResponseWriter
-	sessionManager *SessionManager
+	sessionManager *SessionManager_t
 	request        *http.Request
 	done           bool
 }
@@ -240,14 +215,14 @@ func writeCookieIfNecessary(w *sessionResponseWriter) {
 		return
 	}
 
-	session, ok := w.request.Context().Value(sessionContextKey).(*Session)
+	session, ok := w.request.Context().Value(sessionContextKey).(*Session_t)
 	if !ok {
 		panic("session not found in request context")
 	}
 
 	cookie := &http.Cookie{
 		Name:     w.sessionManager.cookieName,
-		Value:    session.id,
+		Value:    session.Id,
 		Domain:   "mywebsite.com",
 		HttpOnly: true,
 		Path:     "/",
@@ -262,8 +237,8 @@ func writeCookieIfNecessary(w *sessionResponseWriter) {
 	w.done = true
 }
 
-func GetSession(r *http.Request) *Session {
-	session, ok := r.Context().Value(sessionContextKey).(*Session)
+func GetSession(r *http.Request) *Session_t {
+	session, ok := r.Context().Value(sessionContextKey).(*Session_t)
 	if !ok {
 		panic("session not found in request context")
 	}
@@ -273,16 +248,16 @@ func GetSession(r *http.Request) *Session {
 
 type InMemorySessionStore struct {
 	mu       sync.RWMutex
-	sessions map[string]*Session
+	sessions map[string]*Session_t
 }
 
 func NewInMemorySessionStore() *InMemorySessionStore {
 	return &InMemorySessionStore{
-		sessions: make(map[string]*Session),
+		sessions: make(map[string]*Session_t),
 	}
 }
 
-func (s *InMemorySessionStore) read(id string) (*Session, error) {
+func (s *InMemorySessionStore) readSession(id string) (*Session_t, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -291,16 +266,16 @@ func (s *InMemorySessionStore) read(id string) (*Session, error) {
 	return session, nil
 }
 
-func (s *InMemorySessionStore) write(session *Session) error {
+func (s *InMemorySessionStore) writeSession(session *Session_t) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.sessions[session.id] = session
+	s.sessions[session.Id] = session
 
 	return nil
 }
 
-func (s *InMemorySessionStore) destroy(id string) error {
+func (s *InMemorySessionStore) destroySession(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -309,13 +284,13 @@ func (s *InMemorySessionStore) destroy(id string) error {
 	return nil
 }
 
-func (s *InMemorySessionStore) gc(idleExpiration, absoluteExpiration time.Duration) error {
+func (s *InMemorySessionStore) gcSessions(idleExpiration, absoluteExpiration time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for id, session := range s.sessions {
-		if time.Since(session.lastActivityAt) > idleExpiration ||
-			time.Since(session.createdAt) > absoluteExpiration {
+		if time.Since(session.LastActivityAt) > idleExpiration ||
+			time.Since(session.CreatedAt) > absoluteExpiration {
 			delete(s.sessions, id)
 		}
 	}
@@ -323,7 +298,7 @@ func (s *InMemorySessionStore) gc(idleExpiration, absoluteExpiration time.Durati
 	return nil
 }
 
-// example using SessionManager
+// example using SessionManager_t
 //func main() {
 //	sessionManager := ssmgr.NewSessionManager(
 //		ssmgr.NewInMemorySessionStore(),

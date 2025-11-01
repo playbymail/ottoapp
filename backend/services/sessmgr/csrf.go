@@ -21,7 +21,7 @@ func generateCSRFToken() string {
 	return base64.RawURLEncoding.EncodeToString(id)
 }
 
-func (m *SessionManager) verifyCSRFToken(r *http.Request, session *Session) bool {
+func (m *SessionManager_t) verifyCSRFToken(r *http.Request, session *Session_t) bool {
 	sToken, ok := session.Get("csrf_token").(string)
 	if !ok {
 		return false

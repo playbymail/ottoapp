@@ -84,7 +84,7 @@ func VerifyCredentials(
 
 func Login(
 	r *http.Request,
-	sm *SessionManager,
+	sm *SessionManager_t,
 	handle string,
 ) error {
 	session := GetSession(r)
@@ -101,7 +101,7 @@ func Login(
 
 func Logout(
 	r *http.Request,
-	sm *SessionManager,
+	sm *SessionManager_t,
 ) error {
 	session := GetSession(r)
 
@@ -135,7 +135,7 @@ func Auth(auth AuthStore, next http.Handler) http.Handler {
 }
 
 // LoginWithDelay to avoid timing attack
-func LoginWithDelay(w http.ResponseWriter, r *http.Request, auth AuthStore, sm *SessionManager, minDelay time.Duration) {
+func LoginWithDelay(w http.ResponseWriter, r *http.Request, auth AuthStore, sm *SessionManager_t, minDelay time.Duration) {
 	//timingAttackGuard := time.NewTimer(500 * time.Microsecond)
 	timingAttackGuard := time.NewTimer(minDelay)
 

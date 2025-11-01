@@ -21,7 +21,7 @@ export default class LoginController extends Controller {
     e.preventDefault();
     this.error = null;
     try {
-      await this.session.authenticate('authenticator:cookie', {
+      await this.session.authenticate('authenticator:server', {
         username: this.username, password: this.password,
       });
     } catch {

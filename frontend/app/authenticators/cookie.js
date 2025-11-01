@@ -8,24 +8,27 @@ export default class CookieAuthenticator extends Base {
   // authenticates the credentials and returns an HTTP 200 response
   // if they are valid, anything else is taken as invalid.
   async authenticate({ username, password }) {
+    console.log('esa', 'app/authenticators/cookie:restore');
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    console.log('cookie:authenticate', 'res.ok', res.ok);
+    console.log('esa', 'app/authenticators/cookie:authenticate', 'res.ok', res.ok);
     if (!res.ok) throw new Error('Bad credentials');
     return { isAuthenticated: true };
   }
 
   async restore(data) {
+    console.log('esa', 'app/authenticators/cookie:restore');
     const res = await fetch('/api/session');
-    console.log('cookie:restore', 'res.ok', res.ok);
+    console.log('esa', 'app/authenticators/cookie:restore', 'res.ok', res.ok);
     if (res.ok) return data;
     throw new Error('Session expired');
   }
 
   async invalidate() {
+    console.log('esa', 'app/authenticators/cookie:invalidate');
     await fetch('/api/logout', { method: 'POST' });
   }
 }

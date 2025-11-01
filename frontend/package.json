@@ -23,6 +23,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "start": "vite",
+    "dev": "concurrently -k -n FRONTEND,BACKEND -c cyan,magenta \"vite\" \"cd .. && ~/go/bin/air serve --db testdata --log-routes\"",
     "test": "vite build --mode development && ember test --path dist"
   },
   "exports": {

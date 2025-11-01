@@ -3,12 +3,10 @@ import { service } from '@ember/service';
 
 export default class ApplicationRoute extends Route {
   @service session;
-  @service currentUser;
 
   async beforeModel() {
+    console.log('esa', 'app/routes/application:beforeModel');
     await this.session.setup();
-    if (this.session.isAuthenticated) {
-      await this.currentUser.load();
-    }
+    console.log('esa', 'app/authenticators/server:restore', 'session.isAuthenticated', this.session.isAuthenticated);
   }
 }

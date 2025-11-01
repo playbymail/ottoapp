@@ -1,12 +1,11 @@
-import ApplicationHeader from '../components/application-header';
+import ApplicationHeader from 'frontend/components/application-header';
 import { service } from '@ember/service';
 
 <template>
-  {{#let (service "session") (service "currentUser") as |session currentUser|}}
-    <ApplicationHeader 
-      @session={{session}} 
-      @currentUser={{currentUser}} 
-      @onLogout={{this.logout}} 
+  {{#let (service "session") as |session|}}
+    <ApplicationHeader
+      @session={{session}}
+      @onLogout={{this.logout}}
     />
   {{/let}}
 

@@ -27,3 +27,17 @@ ember build --environment=production   # outputs to dist/
 ```
 
 Assuming that we deploy the entire `dist/` folder to `/var/www/ottoapp.mdhenderson.com/dist`, the Caddyfile should be configured to serve `dist/` at `/` and proxy `/api/` to Go.
+
+## Testing
+
+If the server's debug.autoLog flag is set,
+
+```curl
+curl https://ottoapp.localhost:8443/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"catbird","password":"secret"}'
+```
+
+If the password is `admin`, or `chief`, the session will be created with the same role.
+Otherwise, the role will be `guest`.
+
