@@ -6,7 +6,13 @@ import (
 )
 
 var (
-	version = semver.Version{Major: 0, Minor: 10, Patch: 0, PreRelease: "alpha", Build: semver.Commit()}
+	version = semver.Version{
+		Major:      0,
+		Minor:      11,
+		Patch:      0,
+		PreRelease: "alpha",
+		Build:      semver.Commit(),
+	}
 )
 
 func Version() semver.Version {

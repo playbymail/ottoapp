@@ -51,7 +51,9 @@ func main() {
 	cmdDbUpdateUser.Flags().String("tz", "", "IANA timezone for user")
 
 	cmdRoot.AddCommand(cmdServe)
+	cmdServe.PersistentFlags().Bool("csrf-guard", false, "enable csrf guards")
 	cmdServe.PersistentFlags().String("db", ".", "path to the database file")
+	cmdServe.PersistentFlags().Bool("log-routes", false, "enable route logging")
 	cmdServe.PersistentFlags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
 	cmdServe.PersistentFlags().Duration("shutdown-timer", 0, "timer to shut server down")
 
@@ -322,6 +324,16 @@ var cmdServe = &cobra.Command{
 		}
 
 		var options []rest.Option
+		if value, err := cmd.Flags().GetBool("csrf-guard"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithCsrfGuard(value))
+		}
+		if value, err := cmd.Flags().GetBool("log-routes"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithRouteLogging(value))
+		}
 		if timer, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
 			return err
 		} else if timer != 0 {

@@ -3,7 +3,10 @@ import { service } from '@ember/service';
 
 export default class SecureRoute extends Route {
   @service session;
+  @service router;
+
   beforeModel() {
-    if (!this.session.isAuthenticated) this.transitionTo('login');
+    console.log('SecureRoute:beforeModel', 'this.session.isAuthenticated', this.session.isAuthenticated);
+    if (!this.session.isAuthenticated) this.router.transitionTo('login');
   }
 }

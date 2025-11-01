@@ -53,6 +53,7 @@ type AuthStore interface {
 	AuthenticateUser(handle, plainTextSecret string) (domains.ID, error)
 	CreateUser(handle, email, plainTextSecret string, timezone *time.Location) (*domains.User_t, error)
 	GetUserByHandle(handle string) (*domains.User_t, error)
+	GetUserByID(id domains.ID) (*domains.User_t, error)
 }
 
 func Register(

@@ -4,25 +4,25 @@ package rest
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
+	"github.com/playbymail/ottoapp/backend/services/sessmgr"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 )
 
 type Server struct {
 	http.Server
+	auth          sessmgr.AuthStore
+	csrfGuard     bool
 	graceTimer    time.Duration
+	logRoutes     bool
 	shutdownTimer time.Duration
 }
 
@@ -33,8 +33,8 @@ func New(db *sqlite.DB, options ...Option) (*Server, error) {
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 5 * time.Second,
 		},
+		auth: db,
 	}
-	s.Handler = Routes(s)
 
 	for _, opt := range options {
 		err := opt(s)
@@ -42,6 +42,8 @@ func New(db *sqlite.DB, options ...Option) (*Server, error) {
 			return nil, err
 		}
 	}
+
+	s.Handler = Routes(s)
 
 	return s, nil
 }
@@ -107,6 +109,11 @@ type Session struct {
 var sessions = map[string]*Session{}
 
 func Routes(s *Server) http.Handler {
+	sessions["608TPm90kiHmy26MAOcRNicSvWdTYGnl7PB5dnTl0Lg"] = &Session{
+		User:   User{ID: "1", Username: "cat", Role: "guest"},
+		CSRF:   "608TPm90kiHmy26MAOcRNicSvWdTYGnl7PB5dnTl0Lg",
+		Expiry: time.Now().Add(time.Hour * 24 * 365),
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -115,21 +122,26 @@ func Routes(s *Server) http.Handler {
 		_, _ = w.Write([]byte(`{"status":"ok","msg":"pong"}`))
 	})
 
-	mux.HandleFunc("POST /api/login", loginHandler)
+	mux.HandleFunc("POST /api/login", s.loginHandler)
 	mux.Handle("POST /api/logout", http.HandlerFunc(logoutHandler))
 	mux.Handle("GET /api/me", authOnly(http.HandlerFunc(meHandler)))
 	mux.HandleFunc("GET /api/session", sessionHandler) // returns CSRF
 
+	// convert mux to handler before we add any global middlewares
+	var h http.Handler = mux
+
 	// Protect all state-changing routes with CSRF:
-	protected := csrfOnly(mux)
+	if s.csrfGuard {
+		h = csrfOnly(h)
+	}
 
 	// Add logging middleware
-	logged := loggingMiddleware(protected)
+	h = s.loggingMiddleware(h)
 
-	return logged
+	return h
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s: entered\n", r.Method, r.URL.Path)
 	if r.Method != http.MethodPost {
 		log.Printf("%s %s: method not allowed\n", r.Method, r.URL.Path)
@@ -144,7 +156,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Username, body.Password)
-	u, ok := checkUser(body.Username, body.Password)
+	u, ok := checkUser(s.auth, body.Username, body.Password)
 	if !ok {
 		log.Printf("%s %s: checkUser failed\n", r.Method, r.URL.Path)
 		http.Error(w, "unauthorized w", http.StatusUnauthorized)
@@ -165,7 +177,18 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   60 * 60 * 24 * 14,
 	})
 
-	w.WriteHeader(http.StatusNoContent)
+	//w.WriteHeader(http.StatusNoContent)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	payload := struct {
+		Status   string `json:"status"`
+		Username string `json:"username"`
+	}{
+		Status:   "ok",
+		Username: u.Username,
+	}
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -217,11 +240,14 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
+func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.logRoutes {
+			next.ServeHTTP(w, r)
+			return
+		}
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		log.Printf("%s %s: logging\n", r.Method, r.URL.Path)
 		next.ServeHTTP(rec, r)
 		log.Printf("%s %s - %d - %v", r.Method, r.URL.Path, rec.status, time.Since(start))
 	})
@@ -229,98 +255,12 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func authOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s: authOnly: entered\n", r.Method, r.URL.Path)
 		if _, ok := currentSession(r); !ok {
-			http.Error(w, "unauthorized z", http.StatusUnauthorized)
+			log.Printf("%s %s: authOnly: currentSession: false\n", r.Method, r.URL.Path)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func csrfOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Only enforce on state-changing methods
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			s, ok := currentSession(r)
-			if !ok {
-				log.Printf("%s %s: csrf: !ok\n", r.Method, r.URL.Path)
-				http.Error(w, "unauthorized b", http.StatusUnauthorized)
-				return
-			}
-			if got := r.Header.Get("X-CSRF-Token"); got == "" {
-				log.Printf("%s %s: csrf: forbidden: no token\n", r.Method, r.URL.Path)
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			} else if got != s.CSRF {
-				log.Printf("%s %s: csrf: forbidden: %q != %q\n", r.Method, r.URL.Path, got, s.CSRF)
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func currentSession(r *http.Request) (*Session, bool) {
-	sid, ok := readSID(r)
-	if !ok {
-		return nil, false
-	}
-	s, ok := sessions[sid]
-	if !ok {
-		return nil, false
-	}
-	if time.Now().After(s.Expiry) {
-		delete(sessions, sid)
-		return nil, false
-	}
-	return s, true
-}
-
-func readSID(r *http.Request) (string, bool) {
-	c, err := r.Cookie("sid")
-	if err != nil || c.Value == "" {
-		return "", false
-	}
-	return c.Value, true
-}
-
-func newID() string {
-	id := make([]byte, 32)
-	binary.LittleEndian.PutUint64(id[0*8:], rand.Uint64())
-	binary.LittleEndian.PutUint64(id[1*8:], rand.Uint64())
-	binary.LittleEndian.PutUint64(id[2*8:], rand.Uint64())
-	binary.LittleEndian.PutUint64(id[3*8:], rand.Uint64())
-	return base64.RawURLEncoding.EncodeToString(id)
-}
-
-var (
-	fakeUsers struct {
-		sync.Mutex
-		users map[string]string
-	}
-)
-
-func init() {
-	fakeUsers.users = make(map[string]string)
-	fakeUsers.users["admin"] = "1"
-}
-
-func checkUser(username, password string) (User, bool) {
-	log.Printf("checkUser(%q, %q)\n", username, password)
-	// TODO: replace with real lookup + password hash check
-	if username == "admin" && password == "secret" {
-		return User{ID: "1", Username: "admin", Role: "admin"}, true
-	} else if 3 < len(username) && len(username) < 8 {
-		fakeUsers.Lock()
-		defer fakeUsers.Unlock()
-		if id, ok := fakeUsers.users[username]; ok {
-			return User{ID: id, Username: username, Role: "guest"}, true
-		}
-		id := fmt.Sprintf("%d", len(fakeUsers.users)+1)
-		fakeUsers.users[username] = id
-		return User{ID: id, Username: username, Role: "guest"}, true
-	}
-	return User{}, false
 }

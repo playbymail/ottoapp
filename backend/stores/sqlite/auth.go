@@ -32,14 +32,8 @@ func (db *DB) AuthenticateUser(handle, plainTextSecret string) (domains.ID, erro
 	return domains.ID(id), err
 }
 
-// HashPassword uses the cheapest bcrypt cost to hash the password because we are not going to use
-// it for anything other than authentication in non-production environments.
-func HashPassword(plainTextPassword string) (string, error) {
-	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(plainTextPassword), bcrypt.MinCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hashedPasswordBytes), err
+func (db *DB) GetUserByHandle(handle string) (*domains.User_t, error) {
+	return nil, fmt.Errorf("GetUserByHandle: not implemented")
 }
 
 func (db *DB) UpdateUserPassword(handle string, newPlainTextSecret string) error {
@@ -66,10 +60,20 @@ func (db *DB) UpdateUserPassword(handle string, newPlainTextSecret string) error
 	return nil
 }
 
+// HashPassword uses the cheapest bcrypt cost to hash the password because we are not going to use
+// it for anything other than authentication in non-production environments.
+func HashPassword(plainTextPassword string) (string, error) {
+	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(plainTextPassword), bcrypt.MinCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashedPasswordBytes), err
+}
+
 func ValidatePassword(plainTextPassword string) bool {
 	if strings.TrimSpace(plainTextPassword) != plainTextPassword {
 		return false
-	} else if !(4 < len(plainTextPassword) && len(plainTextPassword) < 128) {
+	} else if !(4 <= len(plainTextPassword) && len(plainTextPassword) < 128) {
 		return false
 	}
 	return true

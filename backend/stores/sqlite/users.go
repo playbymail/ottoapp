@@ -152,7 +152,7 @@ func ValidateEmail(email string) bool {
 func ValidateHandle(handle string) bool {
 	if handle != strings.TrimSpace(handle) {
 		return false
-	} else if !(4 < len(handle) && len(handle) < 14) {
+	} else if !(3 <= len(handle) && len(handle) < 14) {
 		return false
 	} else if strings.Contains(handle, "@") {
 		return false

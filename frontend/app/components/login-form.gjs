@@ -15,6 +15,8 @@ export default class LoginFormComponent extends Component {
   @action updateUsername(e) { this.username = e.target.value; }
   @action updatePassword(e) { this.password = e.target.value; }
 
+  // submit invokes session.authenticate with the user's credentials.
+  // if the authentication succeeds, we route to the secure page.
   @action async submit(e) {
     e.preventDefault();
     this.error = null;
@@ -22,6 +24,7 @@ export default class LoginFormComponent extends Component {
       await this.session.authenticate('authenticator:cookie', {
         username: this.username, password: this.password,
       });
+      console.log('login-form', 'submit', this.session.isAuthenticated);
       this.router.transitionTo('secure');
     } catch {
       this.error = 'Invalid username or password.';
