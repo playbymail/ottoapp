@@ -53,6 +53,9 @@ func main() {
 	cmdRoot.AddCommand(cmdServe)
 	cmdServe.PersistentFlags().Bool("csrf-guard", false, "enable csrf guards")
 	cmdServe.PersistentFlags().String("db", ".", "path to the database file")
+	cmdServe.PersistentFlags().Bool("debug", false, "enable debugging options")
+	cmdServe.PersistentFlags().Bool("dev", false, "enable development mode")
+	cmdServe.PersistentFlags().Bool("enable-catbird", false, "enable catbird testing")
 	cmdServe.PersistentFlags().Bool("log-routes", false, "enable route logging")
 	cmdServe.PersistentFlags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
 	cmdServe.PersistentFlags().Duration("shutdown-timer", 0, "timer to shut server down")
@@ -324,6 +327,11 @@ var cmdServe = &cobra.Command{
 		}
 
 		var options []rest.Option
+		if value, err := cmd.Flags().GetBool("enable-catbird"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithCatbird(value))
+		}
 		if value, err := cmd.Flags().GetBool("csrf-guard"); err != nil {
 			return err
 		} else {

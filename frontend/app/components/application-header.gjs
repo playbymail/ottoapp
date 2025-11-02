@@ -27,7 +27,7 @@ export default class ApplicationHeaderComponent extends Component {
 
   <template>
     <header class="p-4 bg-gray-100 border-b flex justify-between">
-      <h1 class="font-bold text-lg">Frontend Demo</h1>
+      <h1 class="font-bold text-lg">OttoApp</h1>
       {{#if this.session.isAuthenticated}}
         <div class="flex items-center space-x-2">
           {{#if this.currentUser}}
@@ -43,12 +43,6 @@ export default class ApplicationHeaderComponent extends Component {
         </LinkTo>
       {{/if}}
     </header>
-    <div>
-      <p>this.session.isAuthenticated: "{{this.session.isAuthenticated}}"</p>
-      <p>this.session.data: "{{this.session.data}}"</p>
-      <p>this.currentUser: "{{this.currentUser}}"</p>
-      <p>this.currentUser: "{{this.currentUser.username}}"</p>
-    </div>
   </template>
 }
 

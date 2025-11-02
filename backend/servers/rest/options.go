@@ -9,6 +9,13 @@ import (
 
 type Option func(*Server) error
 
+func WithCatbird(flag bool) Option {
+	return func(s *Server) error {
+		s.debug.autoLogin = flag
+		return nil
+	}
+}
+
 func WithCsrfGuard(csrfGuard bool) Option {
 	return func(s *Server) error {
 		s.csrfGuard = csrfGuard
