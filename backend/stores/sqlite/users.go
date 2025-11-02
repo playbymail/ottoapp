@@ -85,8 +85,9 @@ func (db *DB) GetUserByID(userID domains.ID) (*domains.User_t, error) {
 	}
 
 	user := &domains.User_t{
-		ID:    userID,
-		Email: row.Email,
+		ID:     userID,
+		Handle: row.Handle,
+		Email:  row.Email,
 		Locale: domains.UserLocale_t{
 			DateFormat: "2006-01-02",
 			Timezone: domains.UserTimezone_t{

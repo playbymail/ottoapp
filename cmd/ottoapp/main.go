@@ -14,6 +14,7 @@ import (
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/servers/rest"
+	ssi "github.com/playbymail/ottoapp/backend/services/sessions"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/spf13/cobra"
 )
@@ -365,7 +366,13 @@ var cmdServe = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		s, err := rest.New(db, options...)
+		sessionManager, err := ssi.NewInMemorySessionManager(db)
+		if err != nil {
+			_ = db.Close()
+			log.Fatalf("[serve] sessionManager: %v\n", err)
+		}
+
+		s, err := rest.New(sessionManager, options...)
 		if err != nil {
 			_ = db.Close()
 			log.Fatalf("[serve] rest: %v\n", err)

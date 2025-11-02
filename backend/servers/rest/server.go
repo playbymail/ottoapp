@@ -12,13 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/services/sessmgr"
-	"github.com/playbymail/ottoapp/backend/stores/sqlite"
+	ssi "github.com/playbymail/ottoapp/backend/services/sessions"
 )
 
 type Server struct {
 	http.Server
-	auth          sessmgr.AuthStore
+	services struct {
+		sessionManager ssi.SessionManager_i
+	}
 	csrfGuard     bool
 	graceTimer    time.Duration
 	logRoutes     bool
@@ -29,15 +30,15 @@ type Server struct {
 	}
 }
 
-func New(db *sqlite.DB, options ...Option) (*Server, error) {
+func New(sm ssi.SessionManager_i, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			Addr:         ":8181",
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 5 * time.Second,
 		},
-		auth: db,
 	}
+	s.services.sessionManager = sm
 	s.debug.autoLogin = true
 	s.debug.debug = true
 
@@ -102,17 +103,17 @@ func (s *Server) Run() error {
 func Routes(s *Server) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/cookies/delete", deleteCookie)
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","msg":"pong"}`))
 	})
 
-	mux.HandleFunc("POST /api/login", loginHandler(s.auth, s.debug.debug, s.debug.autoLogin))
-	mux.Handle("POST /api/logout", http.HandlerFunc(logoutHandler))
-	mux.Handle("GET /api/me", authOnly(http.HandlerFunc(meHandler)))
-	mux.HandleFunc("GET /api/session", sessionHandler) // returns CSRF
+	mux.HandleFunc("GET /api/cookies/delete", s.services.sessionManager.DeleteCookie)
+	mux.HandleFunc("POST /api/login", s.services.sessionManager.PostLoginHandler)
+	mux.HandleFunc("POST /api/logout", s.services.sessionManager.PostLogoutHandler)
+	mux.HandleFunc("GET /api/me", s.services.sessionManager.GetMeHandler)
+	mux.HandleFunc("GET /api/session", s.services.sessionManager.GetSessionHandler) // returns CSRF
 
 	// convert mux to handler before we add any global middlewares
 	var h http.Handler = mux
