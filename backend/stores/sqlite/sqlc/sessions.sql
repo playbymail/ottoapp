@@ -23,7 +23,7 @@ WHERE session_id = :session_id;
 --
 -- name: ReapSessions :exec
 DELETE FROM sessions
-WHERE CURRENT_TIMESTAMP >= expires_at;
+WHERE expires_at <= :now_utc;
 
 -- UpdateSession updates a session.
 --

@@ -8,11 +8,11 @@ CREATE TABLE sessions
     session_id TEXT PRIMARY KEY,
     csrf       TEXT      NOT NULL,
     user_id    INTEGER   NOT NULL,
-    expires_at TIMESTAMP NOT NULL, -- must always be UTC
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at INTEGER   NOT NULL,                           -- unix timestamp, must always be UTC
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
     FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
 );
 
-INSERT INTO schema_version (version, applied_at)
-VALUES (5, current_timestamp);
+INSERT INTO schema_version (version)
+VALUES (5);

@@ -7,9 +7,9 @@ CREATE TABLE user_secrets
 (
     user_id         INTEGER PRIMARY KEY,
     hashed_password TEXT      NOT NULL,
-    last_login      INTEGER   NOT NULL,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login      INTEGER   NOT NULL,                           -- unix timestamp, must be UTC
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
     FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
 );
 
@@ -19,5 +19,5 @@ select user_id,
        0
 from users;
 
-INSERT INTO schema_version (version, applied_at)
-VALUES (3, current_timestamp);
+INSERT INTO schema_version (version)
+VALUES (3);

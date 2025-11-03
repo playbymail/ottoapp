@@ -7,7 +7,6 @@ package sqlc
 
 import (
 	"context"
-	"time"
 )
 
 const createSession = `-- name: CreateSession :exec
@@ -20,7 +19,7 @@ type CreateSessionParams struct {
 	SessionID string
 	Csrf      string
 	UserID    int64
-	ExpiresAt time.Time
+	ExpiresAt int64
 }
 
 //	Copyright (c) 2025 Michael D Henderson. All rights reserved.
@@ -56,7 +55,7 @@ WHERE session_id = ?1
 type GetSessionRow struct {
 	Csrf      string
 	UserID    int64
-	ExpiresAt time.Time
+	ExpiresAt int64
 }
 
 // GetSession returns the session tied to an id.
@@ -69,12 +68,12 @@ func (q *Queries) GetSession(ctx context.Context, sessionID string) (GetSessionR
 
 const reapSessions = `-- name: ReapSessions :exec
 DELETE FROM sessions
-WHERE CURRENT_TIMESTAMP >= expires_at
+WHERE expires_at <= ?1
 `
 
 // ReapSessions deletes expired sessions.
-func (q *Queries) ReapSessions(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, reapSessions)
+func (q *Queries) ReapSessions(ctx context.Context, nowUtc int64) error {
+	_, err := q.db.ExecContext(ctx, reapSessions, nowUtc)
 	return err
 }
 
@@ -85,7 +84,7 @@ WHERE session_id = ?2
 `
 
 type UpdateSessionParams struct {
-	ExpiresAt time.Time
+	ExpiresAt int64
 	SessionID string
 }
 

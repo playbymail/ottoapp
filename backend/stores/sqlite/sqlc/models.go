@@ -36,20 +36,20 @@ type Role struct {
 type SchemaMigration struct {
 	ID        int64
 	Name      string
-	AppliedAt string
+	AppliedAt time.Time
 }
 
 type SchemaVersion struct {
 	ID        int64
 	Version   int64
-	AppliedAt string
+	AppliedAt time.Time
 }
 
 type Session struct {
 	SessionID string
 	Csrf      string
 	UserID    int64
-	ExpiresAt time.Time
+	ExpiresAt int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

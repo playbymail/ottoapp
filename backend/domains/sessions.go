@@ -19,8 +19,9 @@ type Session struct {
 }
 
 const (
-	ErrSessionExpired   = Error("expired session")
-	ErrSessionInvalid   = Error("invalid session")
-	ErrSessionIdInvalid = Error("invalid session id")
-	ErrTtlInvalid       = Error("invalid ttl")
+	ErrInvalidGcInterval = Error("invalid gc interval")
+	ErrSessionExpired    = Error("expired session")
+	ErrSessionInvalid    = Error("invalid session")
+	ErrSessionIdInvalid  = Error("invalid session id")
+	ErrInvalidTtl        = Error("invalid ttl")
 )

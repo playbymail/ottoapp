@@ -6,6 +6,7 @@ package sessions
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -24,15 +25,33 @@ Sessions:what are the 4 routes for?
   GET /api/me       → “is this cookie valid? give me csrf + user”
 */
 
-func NewSessionManager(authStore AuthStore, sessionStore SessionStore, ttl time.Duration) (SessionManager, error) {
-	if ttl < 5*time.Second {
-		return nil, domains.ErrTtlInvalid
+func NewSessionManager(authStore AuthStore, sessionStore SessionStore, ttl time.Duration, gcInterval time.Duration) (SessionManager, error) {
+	if ttl < 1*time.Minute {
+		return nil, domains.ErrInvalidTtl
+	} else if gcInterval < 1*time.Minute {
+		return nil, domains.ErrInvalidGcInterval
 	}
 	m := &Manager{
 		ttl: ttl,
 	}
 	m.stores.auth = authStore
 	m.stores.sessions = sessionStore
+
+	// start the go routine that will delete expired sessions
+	log.Printf("[sessions] reaping %v\n", gcInterval)
+	if err := m.stores.sessions.ReapSessions(); err != nil {
+		log.Printf("[sessions] reap %v: %v\n", gcInterval, err)
+	}
+	go func(d time.Duration) {
+		ticker := time.NewTicker(d)
+		for range ticker.C {
+			//log.Printf("[sessions] reaping %v\n", time.Now().UTC())
+			if err := m.stores.sessions.ReapSessions(); err != nil {
+				log.Printf("[sessions] reap %v: %v\n", d, err)
+			}
+		}
+	}(gcInterval)
+
 	return m, nil
 }
 

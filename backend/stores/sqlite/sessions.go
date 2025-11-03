@@ -55,7 +55,7 @@ func (db *DB) CreateSession(userId domains.ID, ttl time.Duration) (*domains.Sess
 		SessionID: string(sess.Id),
 		Csrf:      sess.Csrf,
 		UserID:    int64(sess.User.ID),
-		ExpiresAt: sess.ExpiresAt,
+		ExpiresAt: sess.ExpiresAt.Unix(),
 	})
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (db *DB) ReadSession(sessionId domains.SessionId) (*domains.Session, error)
 	if err != nil {
 		//log.Printf("readSession %q: getSession %v\n", sessionId, err)
 		return nil, errors.Join(domains.ErrNotExists, err)
-	} else if !time.Now().UTC().Before(ss.ExpiresAt) {
+	} else if !time.Now().UTC().Before(time.Unix(ss.ExpiresAt, 0)) {
 		//log.Printf("readSession %q: expired %v\n", sessionId, ss.ExpiresAt)
 		//log.Printf("readSession %q: not is  %v\n", sessionId, time.Now().UTC())
 		return nil, domains.ErrNotExists
@@ -113,14 +113,14 @@ func (db *DB) ReadSession(sessionId domains.SessionId) (*domains.Session, error)
 			Created: user.CreatedAt,
 			Updated: user.UpdatedAt,
 		},
-		ExpiresAt:      ss.ExpiresAt,
+		ExpiresAt:      time.Unix(ss.ExpiresAt, 0),
 		LastActivityAt: time.Now().UTC(),
 	}
 	return sess, nil
 }
 
 func (db *DB) ReapSessions() error {
-	return db.q.ReapSessions(db.ctx)
+	return db.q.ReapSessions(db.ctx, time.Now().UTC().Unix())
 }
 
 func (db *DB) SessionStoreID() string {
@@ -132,7 +132,7 @@ func (db *DB) UpdateSession(session *domains.Session) error {
 		return domains.ErrSessionInvalid
 	}
 	return db.q.UpdateSession(db.ctx, sqlc.UpdateSessionParams{
-		ExpiresAt: session.ExpiresAt,
+		ExpiresAt: session.ExpiresAt.Unix(),
 		SessionID: string(session.Id),
 	})
 }

@@ -8,8 +8,8 @@ CREATE TABLE roles
     role_id     TEXT PRIMARY KEY,
     is_active   BOOL      NOT NULL,
     description TEXT      NOT NULL,
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
+    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP  -- sqlite timestamp should be UTC
 );
 
 insert into roles (role_id, is_active, description)
@@ -41,5 +41,5 @@ from users
                      where role_id in ('active', 'sysop'))
 where users.handle = 'sysop';
 
-INSERT INTO schema_version (version, applied_at)
-VALUES (4, current_timestamp);
+INSERT INTO schema_version (version)
+VALUES (4);

@@ -8,8 +8,8 @@ export default class LoginFormComponent extends Component {
   @service session;
   @service router;
 
-  @tracked username = 'penguin';
-  @tracked password = 'happy.bird';
+  @tracked username = '';
+  @tracked password = '';
   @tracked error = null;
   @tracked avoidAutoFill = true;
   @tracked passwordType = 'text';

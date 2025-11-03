@@ -8,13 +8,13 @@ CREATE TABLE users
     user_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     handle     TEXT UNIQUE NOT NULL,
     email      TEXT UNIQUE NOT NULL,
-    timezone   TEXT        NOT NULL DEFAULT 'UTC',
-    created_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+    timezone   TEXT        NOT NULL,                           -- IANA zone name
+    created_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
+    updated_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP  -- sqlite timestamp should be UTC
 );
 
 insert into users (handle, email, timezone)
 values ('sysop', 'sysop', 'America/Panama');
 
-INSERT INTO schema_version (version, applied_at)
-VALUES (2, current_timestamp);
+INSERT INTO schema_version (version)
+VALUES (2);

@@ -25,8 +25,7 @@ type Server struct {
 	logRoutes     bool
 	shutdownTimer time.Duration
 	debug         struct {
-		autoLogin bool
-		debug     bool
+		debug bool
 	}
 }
 
@@ -39,7 +38,6 @@ func New(sm ssi.SessionManager, options ...Option) (*Server, error) {
 		},
 	}
 	s.services.sessionManager = sm
-	s.debug.autoLogin = true
 	s.debug.debug = true
 
 	for _, opt := range options {
@@ -99,6 +97,18 @@ func (s *Server) Run() error {
 
 	return nil
 }
+
+/*
+Sessions:what are the 4 routes for?
+
+  POST /api/login → create session + Set-Cookie
+
+  POST /api/logout → delete session + clear cookie
+
+  GET /api/session → “is this cookie valid? give me csrf + user”
+
+  GET /api/me → (optional) “give me just user again”
+*/
 
 func Routes(s *Server) http.Handler {
 	mux := http.NewServeMux()
