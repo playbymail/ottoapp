@@ -15,7 +15,7 @@ import (
 )
 
 func (db *DB) CreateSession(userId domains.ID, ttl time.Duration) (*domains.Session, error) {
-	log.Printf("createSession: user %d: ttl %v: expires %v\n", userId, ttl, time.Now().Add(ttl).UTC())
+	//log.Printf("createSession: user %d: ttl %v: expires %v\n", userId, ttl, time.Now().Add(ttl).UTC())
 	user, err := db.q.GetUser(db.ctx, int64(userId))
 	if err != nil {
 		return nil, errors.Join(domains.ErrNotExists, err)
@@ -63,15 +63,23 @@ func (db *DB) CreateSession(userId domains.ID, ttl time.Duration) (*domains.Sess
 	return sess, nil
 }
 
+func (db *DB) DeleteSession(id domains.SessionId) error {
+	err := db.q.DeleteSession(db.ctx, string(id))
+	if err != nil {
+		log.Printf("[sqldb] deleteSession %v\n", err)
+	}
+	return nil
+}
+
 func (db *DB) ReadSession(sessionId domains.SessionId) (*domains.Session, error) {
-	log.Printf("readSession %q\n", sessionId)
+	//log.Printf("readSession %q\n", sessionId)
 	ss, err := db.q.GetSession(db.ctx, string(sessionId))
 	if err != nil {
-		log.Printf("readSession %q: getSession %v\n", sessionId, err)
+		//log.Printf("readSession %q: getSession %v\n", sessionId, err)
 		return nil, errors.Join(domains.ErrNotExists, err)
 	} else if !time.Now().UTC().Before(ss.ExpiresAt) {
-		log.Printf("readSession %q: expired %v\n", sessionId, ss.ExpiresAt)
-		log.Printf("readSession %q: not is  %v\n", sessionId, time.Now().UTC())
+		//log.Printf("readSession %q: expired %v\n", sessionId, ss.ExpiresAt)
+		//log.Printf("readSession %q: not is  %v\n", sessionId, time.Now().UTC())
 		return nil, domains.ErrNotExists
 	}
 	user, err := db.q.GetUser(db.ctx, ss.UserID)
@@ -111,23 +119,22 @@ func (db *DB) ReadSession(sessionId domains.SessionId) (*domains.Session, error)
 	return sess, nil
 }
 
+func (db *DB) ReapSessions() error {
+	return db.q.ReapSessions(db.ctx)
+}
+
 func (db *DB) SessionStoreID() string {
 	return "backend/stores/sqlite:DB"
 }
 
 func (db *DB) UpdateSession(session *domains.Session) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (db *DB) DeleteSession(id domains.SessionId) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (db *DB) ReapSessions() error {
-	//TODO implement me
-	panic("implement me")
+	if session == nil {
+		return domains.ErrSessionInvalid
+	}
+	return db.q.UpdateSession(db.ctx, sqlc.UpdateSessionParams{
+		ExpiresAt: session.ExpiresAt,
+		SessionID: string(session.Id),
+	})
 }
 
 func newCsrf() string {

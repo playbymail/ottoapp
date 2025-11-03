@@ -13,7 +13,7 @@ import (
 const createSession = `-- name: CreateSession :exec
 
 INSERT INTO sessions (session_id, csrf, user_id, expires_at)
-VALUES(?1, ?2, ?3, ?4)
+VALUES (?1, ?2, ?3, ?4)
 `
 
 type CreateSessionParams struct {
@@ -36,6 +36,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions
+WHERE session_id = ?1
+`
+
+// DeleteSession deletes a session.
+func (q *Queries) DeleteSession(ctx context.Context, sessionID string) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, sessionID)
+	return err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT csrf, user_id, expires_at
 FROM sessions
@@ -54,4 +65,32 @@ func (q *Queries) GetSession(ctx context.Context, sessionID string) (GetSessionR
 	var i GetSessionRow
 	err := row.Scan(&i.Csrf, &i.UserID, &i.ExpiresAt)
 	return i, err
+}
+
+const reapSessions = `-- name: ReapSessions :exec
+DELETE FROM sessions
+WHERE CURRENT_TIMESTAMP >= expires_at
+`
+
+// ReapSessions deletes expired sessions.
+func (q *Queries) ReapSessions(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, reapSessions)
+	return err
+}
+
+const updateSession = `-- name: UpdateSession :exec
+UPDATE sessions
+SET expires_at = ?1
+WHERE session_id = ?2
+`
+
+type UpdateSessionParams struct {
+	ExpiresAt time.Time
+	SessionID string
+}
+
+// UpdateSession updates a session.
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, updateSession, arg.ExpiresAt, arg.SessionID)
+	return err
 }

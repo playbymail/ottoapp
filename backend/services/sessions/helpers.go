@@ -5,7 +5,7 @@ package sessions
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"log"
+	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"slices"
@@ -16,15 +16,15 @@ import (
 func authenticateCredentials(s AuthStore, username, password string) (domains.User_t, bool) {
 	id, err := s.AuthenticateUser(username, password)
 	if err != nil {
-		log.Printf("authenticateCredentials(%q, %q) %v\n", username, password, err)
+		//log.Printf("authenticateCredentials(%q, %q) %v\n", username, password, err)
 		return domains.User_t{}, false
 	}
 	user, err := s.GetUserByID(id)
 	if err != nil {
-		log.Printf("authenticateCredentials(%q, %q) %v\n", username, password, err)
+		//log.Printf("authenticateCredentials(%q, %q) %v\n", username, password, err)
 		return domains.User_t{}, false
 	}
-	log.Printf("authenticateCredentials(%q, %q) %+v\n", username, password, *user)
+	//log.Printf("authenticateCredentials(%q, %q) %+v\n", username, password, *user)
 	return domains.User_t{
 		ID:       user.ID,
 		Username: user.Username,
@@ -91,7 +91,7 @@ func toPayload(csrf string, user domains.User_t) sessionPayload {
 	return sessionPayload{
 		CSRF: csrf,
 		User: userPayload{
-			ID:       string(user.ID),
+			ID:       fmt.Sprintf("%d", user.ID),
 			Username: user.Username,
 			Roles:    roles,
 		},

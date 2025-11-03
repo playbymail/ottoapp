@@ -6,7 +6,6 @@ package sessions
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
@@ -85,16 +84,16 @@ func (m *Manager) DeleteCookie(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Manager) GetCurrentSession(r *http.Request) (*domains.Session, error) {
-	log.Printf("%s %s: gcs: entered\n", r.Method, r.URL.Path)
-	log.Printf("%s %s: gcs: storeId %q\n", r.Method, r.URL.Path, m.stores.sessions.SessionStoreID())
+	//log.Printf("%s %s: gcs: entered\n", r.Method, r.URL.Path)
+	//log.Printf("%s %s: gcs: storeId %q\n", r.Method, r.URL.Path, m.stores.sessions.SessionStoreID())
 	sid, ok := readSID(r)
-	log.Printf("%s %s: gcs: sid %q: ok %v\n", r.Method, r.URL.Path, sid, ok)
+	//log.Printf("%s %s: gcs: sid %q: ok %v\n", r.Method, r.URL.Path, sid, ok)
 	if !ok {
 		return nil, domains.ErrNotExists
 	}
 	sess, err := m.stores.sessions.ReadSession(sid)
 	if err != nil {
-		log.Printf("%s %s: gcs: read %q: failed %v\n", r.Method, r.URL.Path, sid, err)
+		//log.Printf("%s %s: gcs: read %q: failed %v\n", r.Method, r.URL.Path, sid, err)
 		return nil, err
 	}
 	return sess, nil
@@ -118,18 +117,18 @@ func (m *Manager) GetMeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Manager) GetSessionHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%s %s: entered\n", r.Method, r.URL.Path)
+	//log.Printf("%s %s: entered\n", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 	sess, err := m.GetCurrentSession(r)
 	if err != nil {
-		log.Printf("%s %s: gcs: error %v\n", r.Method, r.URL.Path, err)
+		//log.Printf("%s %s: gcs: error %v\n", r.Method, r.URL.Path, err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	log.Printf("%s %s: gcs %+v\n", r.Method, r.URL.Path, sess)
+	//log.Printf("%s %s: gcs %+v\n", r.Method, r.URL.Path, sess)
 	// Ember Simple Auth requires an HTTP 200 response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -145,7 +144,7 @@ func (m *Manager) PostLoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	var body struct{ Username, Password string }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		log.Printf("%s %s: bad json\n", r.Method, r.URL.Path)
+		//log.Printf("%s %s: bad json\n", r.Method, r.URL.Path)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -159,19 +158,19 @@ func (m *Manager) PostLoginHandler(w http.ResponseWriter, r *http.Request) {
 			u.Roles["guest"] = true
 		}
 	} else {
-		log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Username, body.Password)
+		//log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Username, body.Password)
 		u, ok = authenticateCredentials(m.stores.auth, body.Username, body.Password)
 	}
 	if !ok {
-		log.Printf("%s %s: authenticateCredentials failed\n", r.Method, r.URL.Path)
+		//log.Printf("%s %s: authenticateCredentials failed\n", r.Method, r.URL.Path)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	log.Printf("%s %s: user %q: roles %+v: authenticated\n", r.Method, r.URL.Path, u.Username, u.Roles)
+	//log.Printf("%s %s: user %q: roles %+v: authenticated\n", r.Method, r.URL.Path, u.Username, u.Roles)
 
 	sess, err := m.stores.sessions.CreateSession(u.ID, m.ttl)
 	if err != nil {
-		log.Printf("%s %s: user %q: createSession %v\n", r.Method, r.URL.Path, u.ID, err)
+		//log.Printf("%s %s: user %q: createSession %v\n", r.Method, r.URL.Path, u.ID, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -199,13 +198,13 @@ func (m *Manager) PostLogoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sid, ok := readSID(r); ok {
-		log.Printf("%s %s: deleting session\n", r.Method, r.URL)
+		//log.Printf("%s %s: deleting session\n", r.Method, r.URL)
 		err := m.stores.sessions.DeleteSession(sid)
 		if err != nil && !errors.Is(err, domains.ErrNotExists) {
-			log.Printf("%s %s: deleteSession\n", r.Method, r.URL)
+			//log.Printf("%s %s: deleteSession\n", r.Method, r.URL)
 		}
 	}
-	log.Printf("%s %s: deleting cookie\n", r.Method, r.URL)
+	//log.Printf("%s %s: deleting cookie\n", r.Method, r.URL)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "sid",
 		Value:    "",
@@ -217,7 +216,7 @@ func (m *Manager) PostLogoutHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Ember Simple Auth requires an HTTP 200 response
-	log.Printf("%s %s: sending response\n", r.Method, r.URL)
+	//log.Printf("%s %s: sending response\n", r.Method, r.URL)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	err := json.NewEncoder(w).Encode(struct {
@@ -226,6 +225,6 @@ func (m *Manager) PostLogoutHandler(w http.ResponseWriter, r *http.Request) {
 		Status: "ok",
 	})
 	if err != nil {
-		log.Printf("%s %s: write: json %v\n", r.Method, r.URL, err)
+		//log.Printf("%s %s: write: json %v\n", r.Method, r.URL, err)
 	}
 }
