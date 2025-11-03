@@ -12,5 +12,6 @@ const (
 	ErrInvalidPath         = Error("invalid path")
 	ErrMissingUserdataPath = Error("missing userdata path")
 	ErrNotDirectory        = Error("not a directory")
+	ErrNotExists           = Error("does not exist")
 	ErrNotImplemented      = Error("not implemented")
 )

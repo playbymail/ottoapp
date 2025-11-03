@@ -16,7 +16,10 @@ insert into roles (role_id, is_active, description)
 VALUES ('active', 1, 'active user role'),
        ('sysop', 1, 'sysop role'),
        ('admin', 1, 'administrator role'),
-       ('guest', 1, 'guest / anonymous visitor role')
+       ('player', 1, 'player role'),
+       ('guest', 1, 'guest / anonymous visitor role'),
+       ('tn3', 1, 'game TN3 role'),
+       ('tn3.1', 1, 'game TN3.1 role')
 ;
 
 CREATE TABLE user_roles
@@ -31,14 +34,12 @@ CREATE TABLE user_roles
 );
 
 insert into user_roles (user_id, role_id)
-select user_id, 'active'
+select user_id, role_id
 from users
-where handle = 'sysop';
-
-insert into user_roles (user_id, role_id)
-select user_id, 'sysop'
-from users
-where handle = 'sysop';
+         cross join (select roles.role_id
+                     from roles
+                     where role_id in ('active', 'sysop'))
+where users.handle = 'sysop';
 
 INSERT INTO schema_version (version, applied_at)
 VALUES (4, current_timestamp);

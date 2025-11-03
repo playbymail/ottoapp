@@ -78,16 +78,15 @@ func (db *DB) GetUserByID(userID domains.ID) (*domains.User_t, error) {
 	if err != nil {
 		return nil, err
 	}
-	// convert row.Timezone to a time.Location
-	loc, err := time.LoadLocation(row.Timezone)
-	if err != nil {
-		return nil, err
+	loc, ok := NormalizeTimeZone(row.Timezone)
+	if !ok {
+		return nil, domains.ErrInvalidTimezone
 	}
 
 	user := &domains.User_t{
-		ID:     userID,
-		Handle: row.Handle,
-		Email:  row.Email,
+		ID:       userID,
+		Username: row.Handle,
+		Email:    row.Email,
 		Locale: domains.UserLocale_t{
 			DateFormat: "2006-01-02",
 			Timezone: domains.UserTimezone_t{
@@ -159,4 +158,16 @@ func ValidateHandle(handle string) bool {
 		return false
 	}
 	return true
+}
+
+func NormalizeTimeZone(tz string) (loc *time.Location, ok bool) {
+	tz, ok = iana.Normalize(tz)
+	if !ok {
+		return nil, false
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Printf("[sqldb] internal error: tz %q: %v\n", tz, err)
+	}
+	return loc, true
 }

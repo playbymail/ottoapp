@@ -5,28 +5,29 @@ package sessions
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"log"
 	"math/rand/v2"
 	"net/http"
 	"slices"
+
+	"github.com/playbymail/ottoapp/backend/domains"
 )
 
-func authenticateCredentials(s AuthStore_i, username, password string) (User_t, bool) {
+func authenticateCredentials(s AuthStore, username, password string) (domains.User_t, bool) {
 	id, err := s.AuthenticateUser(username, password)
 	if err != nil {
 		log.Printf("authenticateCredentials(%q, %q) %v\n", username, password, err)
-		return User_t{}, false
+		return domains.User_t{}, false
 	}
 	user, err := s.GetUserByID(id)
 	if err != nil {
 		log.Printf("authenticateCredentials(%q, %q) %v\n", username, password, err)
-		return User_t{}, false
+		return domains.User_t{}, false
 	}
 	log.Printf("authenticateCredentials(%q, %q) %+v\n", username, password, *user)
-	return User_t{
-		ID:       fmt.Sprintf("%d", user.ID),
-		Username: user.Handle,
+	return domains.User_t{
+		ID:       user.ID,
+		Username: user.Username,
 		Roles:    map[string]bool{"authenticated": true},
 	}, true
 }
@@ -40,27 +41,24 @@ func newCSRF() string {
 	return base64.RawURLEncoding.EncodeToString(id)
 }
 
-func newSID() string {
+func newSID() domains.SessionId {
 	id := make([]byte, 32)
 	binary.LittleEndian.PutUint64(id[0*8:], rand.Uint64())
 	binary.LittleEndian.PutUint64(id[1*8:], rand.Uint64())
 	binary.LittleEndian.PutUint64(id[2*8:], rand.Uint64())
 	binary.LittleEndian.PutUint64(id[3*8:], rand.Uint64())
-	return base64.RawURLEncoding.EncodeToString(id)
+	return domains.SessionId(base64.RawURLEncoding.EncodeToString(id))
 }
 
-func readSID(r *http.Request) (string, bool) {
-	log.Printf("%s %s: readSID: entered\n", r.Method, r.URL.Path)
+func readSID(r *http.Request) (domains.SessionId, bool) {
 	c, err := r.Cookie("sid")
 	if err != nil {
-		log.Printf("%s %s: readSID: %v\n", r.Method, r.URL.Path, err)
 		return "", false
 	}
-	log.Printf("%s %s: readSID: %q\n", r.Method, r.URL.Path, c.Value)
 	if c.Value == "" {
 		return "", false
 	}
-	return c.Value, true
+	return domains.SessionId(c.Value), true
 }
 
 type sessionPayload struct {
@@ -77,7 +75,7 @@ type userPayload struct {
 	Roles    []string `json:"roles"`
 }
 
-func toPayload(csrf string, user User_t) sessionPayload {
+func toPayload(csrf string, user domains.User_t) sessionPayload {
 	// convert roles to a slice
 	var roles []string
 	for k, v := range user.Roles {
@@ -93,7 +91,7 @@ func toPayload(csrf string, user User_t) sessionPayload {
 	return sessionPayload{
 		CSRF: csrf,
 		User: userPayload{
-			ID:       user.ID,
+			ID:       string(user.ID),
 			Username: user.Username,
 			Roles:    roles,
 		},

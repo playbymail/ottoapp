@@ -366,7 +366,7 @@ var cmdServe = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		sessionManager, err := ssi.NewInMemorySessionManager(db)
+		sessionManager, err := ssi.NewSessionManager(db, db, 14*24*time.Hour)
 		if err != nil {
 			_ = db.Close()
 			log.Fatalf("[serve] sessionManager: %v\n", err)

@@ -12,8 +12,8 @@ import (
 const createUserSecrets = `-- name: CreateUserSecrets :exec
 
 INSERT INTO user_secrets (user_id,
-                   hashed_password,
-                   last_login)
+                          hashed_password,
+                          last_login)
 VALUES (?1,
         ?2,
         ?3)
@@ -34,13 +34,43 @@ func (q *Queries) CreateUserSecrets(ctx context.Context, arg CreateUserSecretsPa
 	return err
 }
 
+const getUserRoles = `-- name: GetUserRoles :many
+SELECT role_id
+FROM user_roles
+WHERE user_id = ?1
+`
+
+// GetUserRoles returns the roles for a user.
+func (q *Queries) GetUserRoles(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getUserRoles, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_id string
+		if err := rows.Scan(&role_id); err != nil {
+			return nil, err
+		}
+		items = append(items, role_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserSecrets = `-- name: GetUserSecrets :one
 SELECT hashed_password
 FROM user_secrets
 WHERE user_id = ?1
 `
 
-// GetUserPassword returns the password for a user.
+// GetUserSecrets returns the password for a user.
 // The password is stored as a bcrypt hash.
 func (q *Queries) GetUserSecrets(ctx context.Context, userID int64) (string, error) {
 	row := q.db.QueryRowContext(ctx, getUserSecrets, userID)

@@ -2,12 +2,25 @@
 
 package domains
 
-import "time"
+import (
+	"time"
+)
 
-type Session_t struct {
-	Id             string
-	UserId         ID // id of the user that owns the session
+type SessionId string
+
+type Session struct {
+	Id             SessionId
+	Csrf           string
+	User           User_t
 	Data           map[string]any
 	CreatedAt      time.Time // always UTC
+	ExpiresAt      time.Time // always UTC
 	LastActivityAt time.Time // always UTC
 }
+
+const (
+	ErrSessionExpired   = Error("expired session")
+	ErrSessionInvalid   = Error("invalid session")
+	ErrSessionIdInvalid = Error("invalid session id")
+	ErrTtlInvalid       = Error("invalid ttl")
+)

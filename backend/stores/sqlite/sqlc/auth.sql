@@ -5,13 +5,20 @@
 --
 -- name: CreateUserSecrets :exec
 INSERT INTO user_secrets (user_id,
-                   hashed_password,
-                   last_login)
+                          hashed_password,
+                          last_login)
 VALUES (:user_id,
         :hashed_password,
         :last_login);
 
--- GetUserPassword returns the password for a user.
+-- GetUserRoles returns the roles for a user.
+--
+-- name: GetUserRoles :many
+SELECT role_id
+FROM user_roles
+WHERE user_id = :user_id;
+
+-- GetUserSecrets returns the password for a user.
 -- The password is stored as a bcrypt hash.
 --
 -- name: GetUserSecrets :one

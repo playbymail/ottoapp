@@ -5,17 +5,21 @@ package domains
 import "time"
 
 const (
-	ErrInvalidEmail  = Error("invalid email")
-	ErrInvalidHandle = Error("invalid handle")
+	ErrInvalidEmail    = Error("invalid email")
+	ErrInvalidHandle   = Error("invalid handle")
+	ErrInvalidTimezone = Error("invalid timezone")
+	ErrInvalidUserId   = Error("invalid user id")
 )
 
 // User_t is the type for a user.
 type User_t struct {
 	ID ID // unique identifier
 
-	Handle string // must be unique and lowercase
-	Email  string // must be unique and lowercase
-	Locale UserLocale_t
+	Username string // must be unique and lowercase
+	Email    string // must be unique and lowercase
+	Locale   UserLocale_t
+
+	Roles map[string]bool
 
 	Created time.Time // always UTC
 	Updated time.Time // always UTC
@@ -26,14 +30,6 @@ type User_t struct {
 type UserLocale_t struct {
 	DateFormat string // date format, e.g. "2006-01-02"
 	Timezone   UserTimezone_t
-}
-
-type UserRoles_t struct {
-	IsActive        bool // true if the user is active
-	IsAdministrator bool // true if the user is an administrator
-	IsAuthenticated bool // true if the user is authenticated
-	IsOperator      bool // true if the user is an operator
-	IsUser          bool // true if the user is a user
 }
 
 type UserTimezone_t struct {

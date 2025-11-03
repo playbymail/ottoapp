@@ -74,7 +74,7 @@ func checkUser(auth sessmgr.AuthStore, handle, password string) (User, bool) {
 	log.Printf("checkUser(%q, %q) %+v\n", handle, password, *user)
 	return User{
 		ID:       fmt.Sprintf("%d", user.ID),
-		Username: user.Handle,
+		Username: user.Username,
 		Role:     "guest",
 	}, true
 }

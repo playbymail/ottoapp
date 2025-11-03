@@ -16,7 +16,7 @@ import (
 
 const (
 	// don't forget to update the schema version to match the expected migrations
-	schemaVersion = 4
+	schemaVersion = 5
 )
 
 type DB struct {

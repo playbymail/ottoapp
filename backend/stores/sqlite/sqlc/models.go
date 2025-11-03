@@ -25,6 +25,14 @@ type Game struct {
 	UpdatedAt   time.Time
 }
 
+type Role struct {
+	RoleID      string
+	IsActive    bool
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type SchemaMigration struct {
 	ID        int64
 	Name      string
@@ -37,11 +45,27 @@ type SchemaVersion struct {
 	AppliedAt string
 }
 
+type Session struct {
+	SessionID string
+	Csrf      string
+	UserID    int64
+	ExpiresAt time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type User struct {
 	UserID    int64
 	Handle    string
 	Email     string
 	Timezone  string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type UserRole struct {
+	UserID    int64
+	RoleID    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

@@ -18,7 +18,7 @@ import (
 type Server struct {
 	http.Server
 	services struct {
-		sessionManager ssi.SessionManager_i
+		sessionManager ssi.SessionManager
 	}
 	csrfGuard     bool
 	graceTimer    time.Duration
@@ -30,7 +30,7 @@ type Server struct {
 	}
 }
 
-func New(sm ssi.SessionManager_i, options ...Option) (*Server, error) {
+func New(sm ssi.SessionManager, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			Addr:         ":8181",
