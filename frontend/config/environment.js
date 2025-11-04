@@ -18,6 +18,10 @@ module.exports = function (environment) {
       // Here you can pass flags/options to your application instance
       // when it is created
     },
+
+    'simple-auth': {
+      routeAfterAuthentication: '/login',
+    },
   };
 
   if (environment === 'development') {

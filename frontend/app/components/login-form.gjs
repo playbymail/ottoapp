@@ -1,18 +1,23 @@
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+
 import Component from '@glimmer/component';
 import {service} from '@ember/service';
 import {tracked} from '@glimmer/tracking';
 import {action} from '@ember/object';
 import {on} from '@ember/modifier';
 
-export default class LoginFormComponent extends Component {
+// https://tailwindcss.com/plus/ui-blocks/application-ui/forms/sign-in-forms#simple
+// Requires a TailwindCSS Plus license.
+
+import { LinkTo } from '@ember/routing';
+
+export default class LoginForm extends Component {
   @service session;
   @service router;
 
   @tracked username = '';
   @tracked password = '';
   @tracked error = null;
-  @tracked avoidAutoFill = true;
-  @tracked passwordType = 'text';
 
   @action updateUsername(e) {
     this.username = e.target.value;
@@ -23,7 +28,7 @@ export default class LoginFormComponent extends Component {
   }
 
   // submit invokes session.authenticate with the user's credentials.
-  // if the authentication succeeds, we route to the secure page.
+  // if the authentication succeeds, we route to the dashboard.
   @action async submit(e) {
     e.preventDefault();
     this.error = null;
@@ -32,41 +37,61 @@ export default class LoginFormComponent extends Component {
         username: this.username, password: this.password,
       });
       console.log('login-form', 'submit', this.session.isAuthenticated);
-      this.router.transitionTo('secure');
+      this.router.transitionTo('dashboard');
     } catch {
       this.error = 'Invalid username or password.';
     }
   }
 
   <template>
-    {{#if this.error}}
-      <p role="alert">{{this.error}}</p>
-    {{/if}}
+    <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+      {{#if this.error}}
+        <p role="alert">{{this.error}}</p>
+      {{/if}}
 
-    <div class="flex-grow flex items-center justify-center">
-      <div class="bg-gray-800 p-8 rounded-lg shadow-lg w-96">
-        <h1 class="text-2xl font-bold mb-6 text-center">OttoApp Login</h1>
-        <form {{on "submit" this.submit}}
-          autocomplete="off" data-1p-ignore data-lpignore="true">
-          <div class="mb-4">
-            <label for="username" class="block text-sm font-medium mb-2">Username</label>
-            <input type="text" id="username" name="username" required
-                   value={{this.username}} {{on "input" this.updateUsername}}
-                   autocomplete="off" data-1p-ignore data-lpignore="true"
-                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500">
-          </div>
-          <div class="mb-6">
-            <label for="password" class="block text-sm font-medium mb-2">Password</label>
-            <input type="password" id="password" name="password" required
-                   value={{this.password}} {{on "input" this.updatePassword}}
-                   autocomplete="off" data-1p-ignore data-lpignore="true"
-                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500">
-          </div>
-          <button type="submit"
-                  class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded transition">
-            Login
-          </button>
-        </form>
+      <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
+        <div class="sm:mx-auto sm:w-full sm:max-w-sm">
+          <img src="https://tailwindcss.com/plus-assets/img/logos/mark.svg?color=indigo&shade=600" alt="Your Company" class="mx-auto h-10 w-auto" />
+          <h2 class="mt-10 text-center text-2xl/9 font-bold tracking-tight text-gray-900">Sign in to your account</h2>
+        </div>
+
+        <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
+          <form {{on "submit" this.submit}} class="space-y-6">
+            <div>
+              <label for="username" class="block text-sm/6 font-medium text-gray-900">Username</label>
+              <div class="mt-2">
+                <input id="username" type="text" name="username" required autocomplete="username"
+                       value={{this.username}} {{on "input" this.updateUsername}}
+                       class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6" />
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between">
+                <label for="password" class="block text-sm/6 font-medium text-gray-900">Password</label>
+                <div class="text-sm">
+                  <LinkTo @route="login" class="font-semibold text-indigo-600 hover:text-indigo-500">
+                    Forgot password?
+                  </LinkTo>
+                </div>
+              </div>
+              <div class="mt-2">
+                <input id="password" type="password" name="password" required autocomplete="current-password"
+                       value={{this.password}} {{on "input" this.updatePassword}}
+                       class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6" />
+              </div>
+            </div>
+
+            <div>
+              <button type="submit" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm/6 font-semibold text-white shadow-xs hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">Sign in</button>
+            </div>
+          </form>
+
+          <p class="mt-10 text-center text-sm/6 text-gray-500">
+            Need an account?
+            <a href="https://discord.gg/xR9HVYGFXs" target="_blank" class="font-semibold text-indigo-600 hover:text-indigo-500">Request one here.</a>
+          </p>
+        </div>
       </div>
     </div>
   </template>

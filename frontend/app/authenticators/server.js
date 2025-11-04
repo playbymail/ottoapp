@@ -2,6 +2,7 @@
 import Base from 'ember-simple-auth/authenticators/base';
 
 export default class ServerAuthenticator extends Base {
+
   async restore() {
     console.log('esa', 'app/authenticators/server:restore');
     const resp = await fetch('/api/session', { credentials: 'include' });
@@ -34,18 +35,14 @@ export default class ServerAuthenticator extends Base {
   async invalidate() {
     // console.log('esa', 'app/authenticators/server:invalidate', 'enter');
     try {
-      console.log('esa', 'app/authenticators/server:invalidate', 'fetching');
       await fetch('/api/logout', {
         method: 'POST',
         credentials: 'include',
       });
       // even if the request never comes back, we still want to clear the Ember session
       // console.log('esa', 'app/authenticators/server:invalidate', 'fetch finished');
-    } catch (_e) {
+    } catch {
       // ignore network/abort errors on logout.
-      // console.log('esa', 'app/authenticators/server:invalidate', 'fetch failed', _e);
-      // // when this happens, what happens with the cookie from the backend's session manager?
-      // console.log('invalidate', _e);
     }
     // console.log('esa', 'app/authenticators/server:invalidate', 'exit');
   }

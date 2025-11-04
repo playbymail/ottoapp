@@ -10,7 +10,7 @@ Router.map(function () {
   this.route('about');
   this.route('dashboard')
   this.route('login');
-  this.route('logout');
   this.route('my');
+  this.route('profile');
   this.route('secure');
 });

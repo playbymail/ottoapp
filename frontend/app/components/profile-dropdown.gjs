@@ -9,24 +9,40 @@ import { LinkTo } from '@ember/routing';
 // https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 // Requires a TailwindCSS Plus license.
 
+function minimumDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default class ProfileDropdown extends Component {
   @service session;
   @service router; // so we can redirect after logout
 
   get currentUser() {
-    console.log('esa', 'app/components/application-header:getCurrentUser');
-    console.log('esa', 'app/components/application-header:getCurrentUser', 'session.data', this.session.data);
-    console.log('esa', 'app/components/application-header:getCurrentUser', 'session.data.authenticated', this.session.data.authenticated);
-    console.log('esa', 'app/components/application-header:getCurrentUser', 'session.data.authenticated.user', this.session.data.authenticated.user);
+    if (!this.session.isAuthenticated) {
+      console.log('app:components:profile-dropdown', '!isAuthenticated');
+      return {
+        username: 'Guest',
+      }
+    }
     return this.session.data.authenticated.user;
   }
+
   get csrf() {
     return this.session.data.authenticated.csrf;
   }
+
   @action async logout() {
-    // in dev, we can hit timing issues with the response, so ignore errors and assume the library did its job.
-    await this.session.invalidate().catch(() => {}); // ← this calls app/authenticators/server.js → invalidate()
-    this.router.transitionTo("/");  // force the browser back to the login page
+    // note: ESA forces a route change after logout, so the route in
+    // the LinkTo that calls us gets ignored.
+
+    // create a promise to call app/authenticators/server.js → invalidate()
+    let invalidatePromise = this.session.invalidate().catch(() => {
+      // Ignore errors during development. We can hit timing issues
+      // with the response, so we must ignore errors and assume the
+      // library did its job.
+    });
+    // run the promise in parallel with our minimum delay, ensuring at least 250ms passes
+    await Promise.all([invalidatePromise, minimumDelay(250)]);
   }
 
   <template>
@@ -51,9 +67,10 @@ export default class ProfileDropdown extends Component {
       </button>
       <el-menu anchor="bottom end" popover class="w-32 origin-top-right rounded-md bg-white py-2 shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(2.5)] data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
         {{#if this.session.isAuthenticated}}
-          <a href="#" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Your profile</a>
-          <a href="/login" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Sign out</a>
-          <LinkTo @route="logout" {{on 'click' this.logout}}
+          <LinkTo @route="profile" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
+            Your profile
+          </LinkTo>
+          <LinkTo @route="login" {{on 'click' this.logout}}
                   class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
             Sign out
           </LinkTo>
