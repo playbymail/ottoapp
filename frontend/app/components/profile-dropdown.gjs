@@ -1,11 +1,34 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
 import Component from '@glimmer/component';
+import {service} from "@ember/service";
+import { on } from '@ember/modifier';
+import { action } from "@ember/object";
+import { LinkTo } from '@ember/routing';
 
 // https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 // Requires a TailwindCSS Plus license.
 
 export default class ProfileDropdown extends Component {
+  @service session;
+  @service router; // so we can redirect after logout
+
+  get currentUser() {
+    console.log('esa', 'app/components/application-header:getCurrentUser');
+    console.log('esa', 'app/components/application-header:getCurrentUser', 'session.data', this.session.data);
+    console.log('esa', 'app/components/application-header:getCurrentUser', 'session.data.authenticated', this.session.data.authenticated);
+    console.log('esa', 'app/components/application-header:getCurrentUser', 'session.data.authenticated.user', this.session.data.authenticated.user);
+    return this.session.data.authenticated.user;
+  }
+  get csrf() {
+    return this.session.data.authenticated.csrf;
+  }
+  @action async logout() {
+    // in dev, we can hit timing issues with the response, so ignore errors and assume the library did its job.
+    await this.session.invalidate().catch(() => {}); // ← this calls app/authenticators/server.js → invalidate()
+    this.router.transitionTo("/");  // force the browser back to the login page
+  }
+
   <template>
     <!-- Profile dropdown -->
     <el-dropdown class="relative">
@@ -14,15 +37,31 @@ export default class ProfileDropdown extends Component {
         <span class="sr-only">Open user menu</span>
         <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt="" class="size-8 rounded-full bg-gray-50 outline -outline-offset-1 outline-black/5 dark:bg-gray-800 dark:outline-white/10" />
         <span class="hidden lg:flex lg:items-center">
-          <span aria-hidden="true" class="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white">Tom Cook</span>
+          <span aria-hidden="true" class="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white">
+            {{#if this.session.isAuthenticated}}
+              {{#if this.currentUser}}{{this.currentUser.username}}{{else}}👋{{/if}}
+            {{else}}
+              Guest
+            {{/if}}
+          </span>
           <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="ml-2 size-5 text-gray-400 dark:text-gray-500">
             <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
           </svg>
         </span>
       </button>
       <el-menu anchor="bottom end" popover class="w-32 origin-top-right rounded-md bg-white py-2 shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(2.5)] data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
-        <a href="#" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Your profile</a>
-        <a href="#" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Sign out</a>
+        {{#if this.session.isAuthenticated}}
+          <a href="#" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Your profile</a>
+          <a href="/login" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Sign out</a>
+          <LinkTo @route="logout" {{on 'click' this.logout}}
+                  class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
+            Sign out
+          </LinkTo>
+        {{else}}
+          <LinkTo @route="login" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
+            Sign in
+          </LinkTo>
+        {{/if}}
       </el-menu>
     </el-dropdown>
   </template>
