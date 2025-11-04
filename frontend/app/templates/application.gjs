@@ -1,15 +1,21 @@
-import ApplicationHeader from 'frontend/components/application-header';
 import { service } from '@ember/service';
 
-<template>
-  {{#let (service "session") as |session|}}
-    <ApplicationHeader
-      @session={{session}}
-      @onLogout={{this.logout}}
-    />
-  {{/let}}
+// https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
+// Requires a TailwindCSS Plus license.
 
-  <main class="p-6">
-    {{outlet}}
-  </main>
+import Sidebar from 'frontend/components/sidebar';
+import StickyHeader from 'frontend/components/sticky-header';
+
+<template>
+  <Sidebar />
+
+  <div class="lg:pl-72">
+    <StickyHeader />
+
+    <main class="py-10">
+      <div class="px-4 sm:px-6 lg:px-8">
+        {{outlet}}
+      </div>
+    </main>
+  </div>
 </template>

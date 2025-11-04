@@ -41,3 +41,10 @@ curl https://ottoapp.localhost:8443/api/login \
 If the password is `admin`, or `chief`, the session will be created with the same role.
 Otherwise, the role will be `guest`.
 
+## License
+
+The frontend is built with Tailwind. The styles, components, and javascript are not open source and are not licensed to be used outside of this applicatin.
+
+Proprietary License | https://tailwindcss.com/plus/license
+* tailwindplus/blocks
+* tailwindplus/elements 
