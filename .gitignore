@@ -15,6 +15,7 @@
 *.tgz
 *.tmp
 *.tsbuildinfo
+.DS_Store
 .archive/
 .cache/
 .code/

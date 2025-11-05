@@ -41,7 +41,8 @@ export default class ProfileDropdown extends Component {
       // with the response, so we must ignore errors and assume the
       // library did its job.
     });
-    // run the promise in parallel with our minimum delay, ensuring at least 250ms passes
+    // run the promise in parallel with our minimum delay, ensuring at
+    // least 250ms passes so that any background workers can finish.
     await Promise.all([invalidatePromise, minimumDelay(250)]);
   }
 
