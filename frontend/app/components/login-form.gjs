@@ -47,8 +47,7 @@ export default class LoginForm extends Component {
     <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
       <div
         class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8 bg-center bg-no-repeat bg-cover"
-        style="background-image: url('/img/hero-bg-washed.jpg');"
-      >
+        style="background-image: url('/img/hero-bg-washed.jpg');">
         {{#if this.error}}
           <p role="alert">{{this.error}}</p>
         {{/if}}
