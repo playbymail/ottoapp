@@ -6,7 +6,8 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE roles
 (
     role_id     TEXT PRIMARY KEY,
-    is_active   BOOL      NOT NULL,
+    is_active   BOOL      NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+
     description TEXT      NOT NULL,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
     updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP  -- sqlite timestamp should be UTC
