@@ -4,10 +4,11 @@ import Component from '@glimmer/component';
 import {service} from "@ember/service";
 import { on } from '@ember/modifier';
 import { action } from "@ember/object";
-import { LinkTo } from '@ember/routing';
 
 // https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 // Requires a TailwindCSS Plus license.
+
+import { LinkTo } from '@ember/routing';
 
 function minimumDelay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,7 +20,6 @@ export default class ProfileDropdown extends Component {
 
   get currentUser() {
     if (!this.session.isAuthenticated) {
-      console.log('app:components:profile-dropdown', '!isAuthenticated');
       return {
         username: 'Guest',
       }

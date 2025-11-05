@@ -1,7 +1,7 @@
 // app/components/my.js
 
 import Component from '@ember/component';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 export default class MyComponent extends Component {
   @service session;

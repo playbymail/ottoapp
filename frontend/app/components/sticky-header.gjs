@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 // https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 // Requires a TailwindCSS Plus license.
 
-import ProfileDropdown from 'frontend/components/profile-dropdown';
+import ProfileDropdown from 'frontend/components/profile/dropdown';
 
 export default class StickyHeader extends Component {
   <template>
