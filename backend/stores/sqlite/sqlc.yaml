@@ -5,6 +5,7 @@ sql:
     - "migrations"
     queries:
     - "sqlc/auth.sql"
+    - "sqlc/config.sql"
     - "sqlc/sessions.sql"
     - "sqlc/users.sql"
     gen:

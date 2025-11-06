@@ -16,3 +16,8 @@ CREATE TABLE sessions
 
 INSERT INTO schema_version (version)
 VALUES (5);
+
+UPDATE config
+SET VALUE = '20251102_1548',
+    updated_at = CURRENT_TIMESTAMP
+WHERE key = 'schema_version';

@@ -44,3 +44,8 @@ where users.handle = 'sysop';
 
 INSERT INTO schema_version (version)
 VALUES (4);
+
+UPDATE config
+SET VALUE = '20251030_1821',
+    updated_at = CURRENT_TIMESTAMP
+WHERE key = 'schema_version';

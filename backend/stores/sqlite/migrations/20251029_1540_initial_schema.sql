@@ -14,5 +14,20 @@ CREATE TABLE schema_version
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP -- sqlite timestamp should be UTC
 );
 
+CREATE TABLE config
+(
+    key        TEXT      NOT NULL,
+    value      TEXT      NOT NULL,
+
+    -- columns for auditing
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- sqlite timestamp should be UTC
+
+    PRIMARY KEY (key)
+);
+
 INSERT INTO schema_version (version)
 VALUES (1);
+
+INSERT INTO config (key, value)
+VALUES ('schema_version', '20251029_1540');

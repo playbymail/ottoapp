@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -38,6 +39,7 @@ func main() {
 	cmdDb.AddCommand(cmdDbCreate)
 	cmdDb.AddCommand(cmdDbInit)
 	cmdDbInit.Flags().Bool("overwrite", false, "overwrite existing database")
+	cmdDbInit.Flags().String("documents", "documents", "path to documents folder")
 	cmdDb.AddCommand(cmdDbMigrate)
 	cmdDbMigrate.AddCommand(cmdDbMigrateUp)
 	//cmdDb.AddCommand(cmdDbSeed)
@@ -114,19 +116,30 @@ var cmdDbInit = &cobra.Command{
 	Short: "Initialize the database",
 	Long:  `Create the database file if it doesn't exist.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := cmd.Flags().GetString("db")
+		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
+		}
+		documentsPath, err := cmd.Flags().GetString("documents")
+		if err != nil {
+			return err
+		} else if sb, err := os.Stat(documentsPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("documents does not exist")
+			}
+			return fmt.Errorf("documents must be a valid path")
+		} else if !sb.IsDir() {
+			return fmt.Errorf("documents must be a valid path")
 		}
 		overwrite, err := cmd.Flags().GetBool("overwrite")
 		if err != nil {
 			return err
 		}
-		err = sqlite.Init(context.Background(), path, overwrite)
+		err = sqlite.Init(context.Background(), dbPath, documentsPath, overwrite)
 		if err != nil {
 			log.Fatalf("db: init: %v\n", err)
 		}
-		log.Printf("db: %s: initialized\n", path)
+		log.Printf("db: %s: initialized\n", dbPath)
 		return nil
 	},
 }

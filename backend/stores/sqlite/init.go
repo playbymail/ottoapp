@@ -19,12 +19,13 @@ import (
 // and verifies that the sqlite library supports foreign keys.
 //
 // Returns an error if the path already exists or there are errors initializing it.
-func Init(ctx context.Context, path string, overwrite bool) error {
+func Init(ctx context.Context, path, documentsPath string, overwrite bool) error {
 	started := time.Now()
 
-	sb, err := os.Stat(path)
-	if err != nil || !sb.IsDir() {
-		return errors.Join(fmt.Errorf("invalid path"), err)
+	if sb, err := os.Stat(path); err != nil || !sb.IsDir() {
+		return errors.Join(fmt.Errorf("invalid db path"), err)
+	} else if sb, err = os.Stat(documentsPath); err != nil || !sb.IsDir() {
+		return errors.Join(fmt.Errorf("invalid documents path"), err)
 	}
 
 	name := filepath.Join(path, "ottoapp.db")
@@ -79,6 +80,9 @@ func Init(ctx context.Context, path string, overwrite bool) error {
 	if err != nil {
 		log.Printf("[sqldb] init: migration %v\n", err)
 		return err
+	}
+	if _, err := db.Exec(`INSERT INTO config(key, value) VALUES(?,?)`, "documents.root", documentsPath); err != nil {
+		return errors.Join(fmt.Errorf("check foreign_keys failed"), err)
 	}
 	log.Printf("[sqldb] init: migration: applied %d\n", n)
 

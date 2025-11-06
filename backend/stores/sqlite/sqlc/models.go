@@ -9,20 +9,49 @@ import (
 )
 
 type Clan struct {
-	ClanID    int64
-	UserID    int64
-	GameID    string
-	Clan      string
+	ClanID      int64
+	GameID      string
+	UserID      int64
+	Clan        int64
+	SetupTurnNo int64
+	IsActive    bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type Config struct {
+	Key       string
+	Value     string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
+type Document struct {
+	DocumentID        string
+	DocumentCreatedBy int64
+	DocumentCreatedAt int64
+	DocumentPath      string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type Element struct {
+	ElementType   string
+	ElementSuffix string
+	Description   string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type Game struct {
-	GameID      int64
-	Description string
-	IsActive    bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	GameID         int64
+	Description    string
+	SetupTurnNo    int64
+	SetupTurnYear  int64
+	SetupTurnMonth int64
+	IsActive       bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type Role struct {
@@ -52,6 +81,25 @@ type Session struct {
 	ExpiresAt int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type TurnReport struct {
+	TurnReportID int64
+	DocumentID   int64
+	GameID       int64
+	UserID       int64
+	TurnNo       int64
+}
+
+type TurnReportAcl struct {
+	TurnReportID int64
+	UserID       int64
+	IsOwner      bool
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 type User struct {

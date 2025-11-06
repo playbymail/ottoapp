@@ -87,7 +87,7 @@ VALUES ('GARRISON', 'g', 'Garrison element');
 -- Documents contains meta-data for documents (e.g., turn reports) that are uploaded or created on the server.
 CREATE TABLE documents
 (
-    document_id         TEXT      NOT NULL,                           -- SHA-1 hash of the document contents
+    document_id         TEXT      NOT NULL,                           -- SHA-256 hash of the document contents
     document_created_by INTEGER   NOT NULL,                           -- user that created the document
     document_created_at INTEGER   NOT NULL,                           -- unix timestamp, must always be UTC
     document_path       TEXT      NOT NULL,                           -- location of the document on the server
@@ -143,3 +143,7 @@ CREATE TABLE turn_report_acl
 INSERT INTO schema_version (version)
 VALUES (6);
 
+UPDATE config
+SET VALUE = '20251105_0844',
+    updated_at = CURRENT_TIMESTAMP
+WHERE key = 'schema_version';

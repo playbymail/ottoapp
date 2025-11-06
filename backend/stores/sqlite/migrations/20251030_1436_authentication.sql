@@ -21,3 +21,8 @@ from users;
 
 INSERT INTO schema_version (version)
 VALUES (3);
+
+UPDATE config
+SET VALUE = '20251030_1436',
+    updated_at = CURRENT_TIMESTAMP
+WHERE key = 'schema_version';

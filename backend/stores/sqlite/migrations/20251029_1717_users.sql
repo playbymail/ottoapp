@@ -18,3 +18,8 @@ values ('sysop', 'sysop', 'America/Panama');
 
 INSERT INTO schema_version (version)
 VALUES (2);
+
+UPDATE config
+SET VALUE = '20251029_1717',
+    updated_at = CURRENT_TIMESTAMP
+WHERE key = 'schema_version';
