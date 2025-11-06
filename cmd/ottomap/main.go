@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp"
+	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +25,14 @@ func main() {
 	}
 	cmdRoot.CompletionOptions.DisableDefaultCmd = true
 	cmdRoot.PersistentFlags().String("db", ".", "path to the database file")
+
+	var cmdDocument = &cobra.Command{
+		Use:   "document",
+		Short: "Manage documents reports",
+		Long:  `Commands to manage documents on the server.`,
+	}
+	cmdRoot.AddCommand(cmdDocument)
+	cmdDocument.AddCommand(cmdDocumentParse)
 
 	var cmdReport = &cobra.Command{
 		Use:   "report",
@@ -54,6 +63,14 @@ func main() {
 	if err := cmdRoot.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+var cmdDocumentParse = &cobra.Command{
+	Use:   "parse <document>",
+	Short: "Parse a turn report document",
+	Long:  `Parse a turn report that has been uploaded to the server.`,
+	Args:  cobra.ExactArgs(1), // require document id
+	
 }
 
 var cmdReportUpload = &cobra.Command{
@@ -97,10 +114,12 @@ var cmdReportUpload = &cobra.Command{
 		}
 		log.Printf("report: documentRoot %q\n", documentRoot)
 
-		// write the document to the folder
+		// create a path to store the document
 		if d.Path == "" {
 			d.Path = filepath.Join(documentRoot, d.ID)
 		}
+
+		// write the document to the folder
 		if err := os.WriteFile(d.Path, d.Data, 0o644); err != nil {
 			log.Printf("report: upload: write failed %v\n", err)
 			return nil
@@ -108,7 +127,10 @@ var cmdReportUpload = &cobra.Command{
 			log.Printf("report: upload: saved %q\n", d.Path)
 		}
 
+		// update the documents table
+		log.Printf("todo: create document record\n")
+
 		log.Printf("report: %q: upload: completed in %v\n", d.Path, time.Since(startedAt))
-		return nil
+		return domains.ErrNotImplemented
 	},
 }

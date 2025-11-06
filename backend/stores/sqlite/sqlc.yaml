@@ -6,6 +6,7 @@ sql:
     queries:
     - "sqlc/auth.sql"
     - "sqlc/config.sql"
+    - "sqlc/documents.sql"
     - "sqlc/sessions.sql"
     - "sqlc/users.sql"
     gen:
