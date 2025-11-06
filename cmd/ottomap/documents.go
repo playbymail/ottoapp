@@ -13,10 +13,10 @@ import (
 	"github.com/playbymail/ottoapp/backend/domains"
 )
 
-// Document_t represents an uploaded document *as it was first seen*.
+// Document represents an uploaded document *as it was first seen*.
 // We keep the original bytes because later pipeline stages (parsing,
 // cleaning, writing to server storage) need the exact input.
-type Document_t struct {
+type Document struct {
 	ID         string    // SHA-256 hash of document contents (hex, 64 chars) – used as document ID / dedupe key
 	Path       string    // Path on the server filesystem (where we wrote it to)
 	SourcePath string    // Path to the source (where we read it from, untrusted!)
@@ -28,7 +28,7 @@ type Document_t struct {
 // NewDocument loads the file, hashes it, and returns a Document_t.
 // It reads the whole file into memory on purpose, because later
 // stages need the original bytes.
-func NewDocument(path string) (*Document_t, error) {
+func NewDocument(path string) (*Document, error) {
 	// Stat first so we can validate the path and get size/timestamps.
 	sb, err := os.Stat(path)
 	if err != nil {
@@ -57,7 +57,7 @@ func NewDocument(path string) (*Document_t, error) {
 		return nil, domains.ErrHashFailed
 	}
 
-	doc := &Document_t{
+	doc := &Document{
 		ID:         hex.EncodeToString(h.Sum(nil)), // stable 64-char hex
 		SourcePath: path,
 		Length:     sb.Size(),

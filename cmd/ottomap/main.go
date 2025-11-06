@@ -19,9 +19,9 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 
 	var cmdRoot = &cobra.Command{
-		Use:   "ottoapp",
+		Use:   "ottomap",
 		Short: "OttoMap application",
-		Long:  `OttoMap reads turn reports and renders maps.`,
+		Long:  `OttoMap parses turn reports and renders maps.`,
 	}
 	cmdRoot.CompletionOptions.DisableDefaultCmd = true
 	cmdRoot.PersistentFlags().String("db", ".", "path to the database file")
@@ -70,7 +70,7 @@ var cmdDocumentParse = &cobra.Command{
 	Short: "Parse a turn report document",
 	Long:  `Parse a turn report that has been uploaded to the server.`,
 	Args:  cobra.ExactArgs(1), // require document id
-	
+
 }
 
 var cmdReportUpload = &cobra.Command{

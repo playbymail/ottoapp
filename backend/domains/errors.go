@@ -15,6 +15,7 @@ const (
 	ErrNotDirectory        = Error("not a directory")
 	ErrNotExists           = Error("does not exist")
 	ErrNotImplemented      = Error("not implemented")
+	ErrOpenFailed          = Error("open failed")
 	ErrReadFailed          = Error("read failed")
 	ErrWriteFailed         = Error("write failed")
 )

@@ -40,7 +40,27 @@ Ember v6.8 defaults to Vite + Embroider.
     * Serves Ember frontend directly.
     * Handles same-domain cookie scoping automatically.
 
+### Command Line applications
+
+* cmd/gentz - rebuild the IANA timezone database if needed
+* cmd/ottdb - create and update the application database
+* cmd/ottomap - parse and render files locally
+* cmd/ottorun - use the API to run commands on the server
+* cmd/ottsrv - the REST-is API server
+
+Use `cmd/ottomap` for testing the parsing and rendering packages using inputs on the file system.
+
+Use `cmd/ottorun` for testing handlers on the service.
+
 ## Development Setup
+
+We have Caddy serving `https://ottoapp.localhost:8443` and forwarding requests to both Ember and Go.
+Caddy is configured to forward `/api/` routes to the Go API server at `localhost:8181`.
+All other routes are forwarded to EmberJS at `localhost:4200`.
+
+For testing the backend, we can create a new instance on a temporary port.
+We can start the server with a timeout to kill it after a delay.
+We can pass the server a flag to enable a shutdown route to stop the server.
 
 ### Prerequisites
 
@@ -49,14 +69,31 @@ Ember v6.8 defaults to Vite + Embroider.
 * Ember CLI (latest LTS)
 * Caddy ≥ 2.7
 
-### Running Locally
+### Running Instances locally
 
-We can assume that Caddy is serving `https://ottoapp.localhost` and forwarding requests to both Ember and Go.
 
-#### 1. Start the Go Backend
+We can build and tear down local instances in the `tmp` folder as needed.
+We're assuming that we're using `tmp/foo` for agent builds and testing.
+
+#### Initialize a new database
 
 ```bash
-go run ./cmd/ottoapp
+OTTO_DBPATH=tmp/foo
+OTTO_DOCPATH=${OTTO_DBPATH}/documents
+mkdir ${OTTO_DBPATH} ${OTTO_DOCPATH}
+go run ./cmd/ottodb db init --db ${OTTO_DBPATH}  --documents ${OTTO_DOCPATH}
+```
+
+#### Start the Go Web Server as a background process
+
+```bash
+go run ./cmd/ottosrv serve --db ${OTTO_DBPATH}```
+```
+
+If you're running a quick test, add a flag to have the server shutdown automatically:
+
+```bash
+go run ./cmd/ottosrv serve --db ${OTTO_DBPATH} --shutdown-timer 20s```
 ```
 
 #### 2. Start the Ember Frontend

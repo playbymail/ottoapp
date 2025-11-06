@@ -32,10 +32,13 @@ func main() {
 	cmdServe.PersistentFlags().String("db", ".", "path to the database file")
 	cmdServe.PersistentFlags().Bool("debug", false, "enable debugging options")
 	cmdServe.PersistentFlags().Bool("dev", false, "enable development mode")
+	cmdServe.PersistentFlags().String("host", "localhost", "change the bind network")
 	cmdServe.PersistentFlags().Bool("log-routes", false, "enable route logging")
+	cmdServe.PersistentFlags().String("port", "8181", "change the bind port")
 	cmdServe.PersistentFlags().Duration("sessions-reap-interval", 15*time.Minute, "interval to remove expired sessions")
 	cmdServe.PersistentFlags().Duration("sessions-ttl", 24*time.Hour, "session duration")
 	cmdServe.PersistentFlags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
+	cmdServe.PersistentFlags().String("shutdown-key", "", "api key authorizing shutdown")
 	cmdServe.PersistentFlags().Duration("shutdown-timer", 0, "timer to shut server down")
 
 	cmdRoot.AddCommand(cmdVersion)
@@ -62,20 +65,37 @@ var cmdServe = &cobra.Command{
 		} else {
 			options = append(options, rest.WithCsrfGuard(value))
 		}
+		if value, err := cmd.Flags().GetString("host"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithHost(value))
+		}
 		if value, err := cmd.Flags().GetBool("log-routes"); err != nil {
 			return err
 		} else {
 			options = append(options, rest.WithRouteLogging(value))
 		}
-		if timer, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
+		if value, err := cmd.Flags().GetString("port"); err != nil {
 			return err
-		} else if timer != 0 {
-			options = append(options, rest.WithGrace(timer))
+		} else {
+			options = append(options, rest.WithPort(value))
 		}
-		if timer, err := cmd.Flags().GetDuration("shutdown-timer"); err != nil {
+		if value, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
 			return err
-		} else if timer != 0 {
-			options = append(options, rest.WithTimer(timer))
+		} else if value != 0 {
+			options = append(options, rest.WithGrace(value))
+		}
+		if cmd.Flags().Changed("shutdown-key") {
+			if value, err := cmd.Flags().GetString("shutdown-key"); err != nil {
+				return err
+			} else {
+				options = append(options, rest.WithShutdownKey(value))
+			}
+		}
+		if value, err := cmd.Flags().GetDuration("shutdown-timer"); err != nil {
+			return err
+		} else if value != 0 {
+			options = append(options, rest.WithTimer(value))
 		}
 
 		log.Printf("[serve] db %q\n", path)

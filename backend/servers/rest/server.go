@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,23 +21,32 @@ type Server struct {
 	services struct {
 		sessionManager ssi.SessionManager
 	}
-	csrfGuard     bool
-	graceTimer    time.Duration
-	logRoutes     bool
-	shutdownTimer time.Duration
-	debug         struct {
-		debug bool
+	csrfGuard bool
+	logRoutes bool
+	channels  struct {
+		graceTimer    time.Duration
+		shutdown      chan os.Signal
+		shutdownTimer time.Duration
+	}
+	network struct {
+		scheme string
+		host   string
+		port   string
+	}
+	debug struct {
+		debug       bool
+		shutdownKey []byte
 	}
 }
 
 func New(sm ssi.SessionManager, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
-			Addr:         ":8181",
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 5 * time.Second,
 		},
 	}
+	s.network.scheme, s.network.host, s.network.port = "http", "localhost", "8181"
 	s.services.sessionManager = sm
 	s.debug.debug = true
 
@@ -47,44 +57,48 @@ func New(sm ssi.SessionManager, options ...Option) (*Server, error) {
 		}
 	}
 
+	log.Printf("[server] host %q: port %q\n", s.network.host, s.network.port)
+
+	s.Addr = net.JoinHostPort(s.network.host, s.network.port)
+	log.Printf("[server] address %q\n", s.Addr)
+
 	s.Handler = Routes(s)
 
 	return s, nil
 }
 
 func (s *Server) Run() error {
-	log.Printf("[rest] serving API on %q\n", fmt.Sprintf("http://localhost%s", s.Addr))
-	if s.shutdownTimer != 0 {
-		log.Printf("[rest] server timeout %v\n", s.shutdownTimer)
+	log.Printf("[rest] serving API on %q\n", fmt.Sprintf("%s://%s", s.network.scheme, s.Addr))
+	if s.channels.shutdownTimer != 0 {
+		log.Printf("[rest] server timeout %v\n", s.channels.shutdownTimer)
 	}
-	if s.graceTimer != 0 {
-		log.Printf("[rest] shutdown delay %v\n", s.graceTimer)
+	if s.channels.graceTimer != 0 {
+		log.Printf("[rest] shutdown delay %v\n", s.channels.graceTimer)
 	}
 
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Printf("server listening on port %s\n", s.Addr)
 		serverErrors <- s.ListenAndServe()
 	}()
 
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	s.channels.shutdown = make(chan os.Signal, 1)
+	signal.Notify(s.channels.shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	if s.shutdownTimer > 0 {
+	if s.channels.shutdownTimer > 0 {
 		go func() {
-			time.Sleep(s.shutdownTimer)
-			log.Printf("[rest] timeout reached (%v), initiating shutdown\n", s.shutdownTimer)
-			shutdown <- syscall.SIGTERM
+			time.Sleep(s.channels.shutdownTimer)
+			log.Printf("[rest] timeout reached (%v), initiating shutdown\n", s.channels.shutdownTimer)
+			s.channels.shutdown <- syscall.SIGTERM
 		}()
 	}
 
 	select {
 	case err := <-serverErrors:
 		return fmt.Errorf("server error: %w", err)
-	case sig := <-shutdown:
+	case sig := <-s.channels.shutdown:
 		log.Printf("[rest] received signal %v, starting graceful shutdown\n", sig)
 
-		ctx, cancel := context.WithTimeout(context.Background(), s.graceTimer)
+		ctx, cancel := context.WithTimeout(context.Background(), s.channels.graceTimer)
 		defer cancel()
 
 		if err := s.Shutdown(ctx); err != nil {
@@ -124,6 +138,7 @@ func Routes(s *Server) http.Handler {
 	mux.HandleFunc("POST /api/logout", s.services.sessionManager.PostLogoutHandler)
 	mux.HandleFunc("GET /api/me", s.services.sessionManager.GetMeHandler)
 	mux.HandleFunc("GET /api/session", s.services.sessionManager.GetSessionHandler) // returns CSRF
+	mux.HandleFunc("POST /api/shutdown", s.postShutdown(s.debug.shutdownKey))
 
 	// convert mux to handler before we add any global middlewares
 	var h http.Handler = mux
