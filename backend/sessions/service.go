@@ -182,14 +182,14 @@ func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct{ Username, Password string }
+	var body struct{ Email, Password string }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		log.Printf("%s %s: bad json\n", r.Method, r.URL.Path)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Username, body.Password)
-	userID, err := s.authSvc.AuthenticateUser(body.Username, body.Password)
+	log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Email, body.Password)
+	userID, err := s.authSvc.AuthenticateWithEmailSecret(body.Email, body.Password)
 	if err != nil {
 		log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)

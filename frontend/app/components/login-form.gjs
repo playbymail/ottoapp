@@ -15,12 +15,12 @@ export default class LoginForm extends Component {
   @service session;
   @service router;
 
-  @tracked username = '';
+  @tracked email = '';
   @tracked password = '';
   @tracked error = null;
 
-  @action updateUsername(e) {
-    this.username = e.target.value;
+  @action updateEmail(e) {
+    this.email = e.target.value;
   }
 
   @action updatePassword(e) {
@@ -34,12 +34,12 @@ export default class LoginForm extends Component {
     this.error = null;
     try {
       await this.session.authenticate('authenticator:server', {
-        username: this.username, password: this.password,
+        email: this.email, password: this.password,
       });
       console.log('login-form', 'submit', this.session.isAuthenticated);
       this.router.transitionTo('dashboard');
     } catch {
-      this.error = 'Invalid username or password.';
+      this.error = 'Invalid credentials.';
     }
   }
 
@@ -62,10 +62,10 @@ export default class LoginForm extends Component {
           <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
             <form {{on "submit" this.submit}} class="space-y-6">
               <div>
-                <label for="username" class="block text-sm/6 font-medium text-gray-900">Username</label>
+                <label for="email" class="block text-sm/6 font-medium text-gray-900">Email</label>
                 <div class="mt-2">
-                  <input id="username" type="text" name="username" required autocomplete="username"
-                         value={{this.username}} {{on "input" this.updateUsername}}
+                  <input id="email" type="text" name="email" required autocomplete="email"
+                         value={{this.email}} {{on "input" this.updateEmail}}
                          class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6" />
                 </div>
               </div>
