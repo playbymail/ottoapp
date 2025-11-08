@@ -11,8 +11,8 @@ import (
 
 const createSession = `-- name: CreateSession :exec
 
-INSERT INTO sessions (session_id, csrf, user_id, expires_at)
-VALUES (?1, ?2, ?3, ?4)
+INSERT INTO sessions (session_id, csrf, user_id, expires_at, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 `
 
 type CreateSessionParams struct {
@@ -20,6 +20,8 @@ type CreateSessionParams struct {
 	Csrf      string
 	UserID    int64
 	ExpiresAt int64
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 //	Copyright (c) 2025 Michael D Henderson. All rights reserved.
@@ -31,12 +33,15 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 		arg.Csrf,
 		arg.UserID,
 		arg.ExpiresAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }
 
 const deleteSession = `-- name: DeleteSession :exec
-DELETE FROM sessions
+DELETE
+FROM sessions
 WHERE session_id = ?1
 `
 
@@ -67,7 +72,8 @@ func (q *Queries) GetSession(ctx context.Context, sessionID string) (GetSessionR
 }
 
 const reapSessions = `-- name: ReapSessions :exec
-DELETE FROM sessions
+DELETE
+FROM sessions
 WHERE expires_at <= ?1
 `
 
@@ -79,17 +85,19 @@ func (q *Queries) ReapSessions(ctx context.Context, nowUtc int64) error {
 
 const updateSession = `-- name: UpdateSession :exec
 UPDATE sessions
-SET expires_at = ?1
-WHERE session_id = ?2
+SET expires_at = ?1,
+    updated_at = ?2
+WHERE session_id = ?3
 `
 
 type UpdateSessionParams struct {
 	ExpiresAt int64
+	UpdatedAt int64
 	SessionID string
 }
 
 // UpdateSession updates a session.
 func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
-	_, err := q.db.ExecContext(ctx, updateSession, arg.ExpiresAt, arg.SessionID)
+	_, err := q.db.ExecContext(ctx, updateSession, arg.ExpiresAt, arg.UpdatedAt, arg.SessionID)
 	return err
 }

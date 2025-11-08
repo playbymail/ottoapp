@@ -26,3 +26,18 @@ type DB struct {
 	ctx  context.Context
 	q    *sqlc.Queries
 }
+
+// Queries gives access to the generated sqlc functions.
+func (d *DB) Queries() *sqlc.Queries {
+	return d.q
+}
+
+// Stdlib gives access to the Sqlite DB
+func (d *DB) Stdlib() *sql.DB {
+	return d.db
+}
+
+// Context gives access to the default context for the store
+func (d *DB) Context() context.Context {
+	return d.ctx
+}

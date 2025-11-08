@@ -10,6 +10,14 @@ package domains
 type ID int64
 
 const (
+	InvalidID ID = 0
+)
+
+const (
 	ErrInvalidCredentials = Error("invalid credentials")
 	ErrInvalidPassword    = Error("invalid password")
+	ErrNoRolesAssigned    = Error("no roles assigned")
 )
+
+type Role string
+type Roles map[Role]bool

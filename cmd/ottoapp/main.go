@@ -16,14 +16,16 @@ import (
 	"github.com/mdhender/phrases/v2"
 	"github.com/mitchellh/go-homedir"
 	"github.com/playbymail/ottoapp"
+	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/binder"
 	"github.com/playbymail/ottoapp/backend/documents"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/runners"
 	"github.com/playbymail/ottoapp/backend/servers/rest"
-	ssi "github.com/playbymail/ottoapp/backend/services/sessions"
+	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
+	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -363,16 +365,9 @@ var cmdReportUpload = &cobra.Command{
 		}
 		path := args[0]
 		log.Printf("report: upload %q\n", path)
-
 		if ext := filepath.Ext(path); strings.ToLower(ext) != ".docx" {
 			log.Fatalf("report: ext %q: not a DOCX file\n", path)
 		}
-		d, err := documents.LoadDocx(path)
-		if err != nil {
-			log.Fatalf("%q: %v\n", path, err)
-		}
-		log.Printf("%q: read %d bytes\n", d.Path, d.ContentLength)
-		log.Printf("%q: hash %q\n", d.Path, d.ContentsHash)
 
 		ctx := context.Background()
 		db, err := sqlite.Open(ctx, dbPath, true, debug)
@@ -383,15 +378,13 @@ var cmdReportUpload = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		// update the documents table
-		id, err := db.InsertDocument(d)
+		docSvc := documents.New(db)
+		docId, err := docSvc.LoadDocxFromFS(path)
 		if err != nil {
-			_ = db.Close()
-			log.Fatalf("report: %v\n", err)
+			log.Fatalf("%q: %v\n", path, err)
 		}
-		log.Printf("report: %q: id %d\n", path, id)
 
-		log.Printf("report: %q: upload: completed in %v\n", d.Path, time.Since(startedAt))
+		log.Printf("report: docId %d: upload: completed in %v\n", docId, time.Since(startedAt))
 		return domains.ErrNotImplemented
 	},
 }
@@ -461,13 +454,16 @@ var cmdApiServe = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		sessionManager, err := ssi.NewSessionManager(db, db, 24*time.Hour, 15*time.Minute)
+		authSvc := auth.New(db)            // uses sqlite + domains
+		usersSvc := users.New(db, authSvc) // uses sqlite + domains
+
+		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
 		if err != nil {
 			_ = db.Close()
 			log.Fatalf("[serve] sessionManager: %v\n", err)
 		}
 
-		s, err := rest.New(sessionManager, options...)
+		s, err := rest.New(sessionsSvc, options...)
 		if err != nil {
 			_ = db.Close()
 			log.Fatalf("[serve] rest: %v\n", err)
@@ -493,7 +489,7 @@ var cmdUserCreate = &cobra.Command{
 			return err
 		}
 		handle := strings.ToLower(args[0])
-		if !sqlite.ValidateHandle(handle) {
+		if !users.ValidateHandle(handle) {
 			return domains.ErrInvalidHandle
 		}
 		emailSet, email := cmd.Flags().Changed("email"), handle+"@ottoapp"
@@ -501,7 +497,7 @@ var cmdUserCreate = &cobra.Command{
 			email, err = cmd.Flags().GetString("email")
 			if err != nil {
 				return err
-			} else if !sqlite.ValidateEmail(email) {
+			} else if !users.ValidateEmail(email) {
 				return domains.ErrInvalidEmail
 			}
 			email = strings.ToLower(email)
@@ -511,7 +507,7 @@ var cmdUserCreate = &cobra.Command{
 			password, err = cmd.Flags().GetString("password")
 			if err != nil {
 				return err
-			} else if !sqlite.ValidatePassword(password) {
+			} else if !auth.ValidatePassword(password) {
 				return domains.ErrInvalidPassword
 			}
 		}
@@ -538,7 +534,10 @@ var cmdUserCreate = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		_, err = db.CreateUser(handle, email, password, loc)
+		authSvc := auth.New(db)
+		usersSvc := users.New(db, authSvc)
+
+		_, err = usersSvc.CreateUser(handle, email, password, loc)
 		if err != nil {
 			log.Fatalf("user %q: create: %v\n", handle, err)
 		}
@@ -560,8 +559,19 @@ var cmdUserUpdate = &cobra.Command{
 			return err
 		}
 		handle := strings.ToLower(args[0])
-		if !sqlite.ValidateHandle(handle) {
+		if !users.ValidateHandle(handle) {
 			return domains.ErrInvalidHandle
+		}
+		var newHandle *string
+		handleSet := cmd.Flags().Changed("handle")
+		if handleSet {
+			value, err := cmd.Flags().GetString("handle")
+			if err != nil {
+				return err
+			} else if !users.ValidateHandle(value) {
+				return fmt.Errorf("invalid new handle")
+			}
+			newHandle = &value
 		}
 		var newEmail *string
 		emailSet := cmd.Flags().Changed("email")
@@ -569,7 +579,7 @@ var cmdUserUpdate = &cobra.Command{
 			value, err := cmd.Flags().GetString("email")
 			if err != nil {
 				return err
-			} else if !sqlite.ValidateEmail(value) {
+			} else if !users.ValidateEmail(value) {
 				return fmt.Errorf("invalid new email")
 			}
 			newEmail = &value
@@ -584,7 +594,7 @@ var cmdUserUpdate = &cobra.Command{
 				value = phrases.Generate(6)
 				log.Printf("generated random password: %q", value)
 			}
-			if !sqlite.ValidatePassword(value) {
+			if !auth.ValidatePassword(value) {
 				return fmt.Errorf("invalid new password")
 			}
 			newPassword = &value
@@ -613,7 +623,15 @@ var cmdUserUpdate = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		err = db.UpdateUser(handle, newEmail, newTimeZone)
+		authSvc := auth.New(db)
+		usersSvc := users.New(db, authSvc)
+
+		user, err := usersSvc.GetUserByHandle(handle)
+		if err != nil {
+			log.Fatalf("user: %q: update %v\n", handle, err)
+		}
+
+		err = usersSvc.UpdateUser(user.ID, newHandle, newEmail, newTimeZone)
 		if err != nil {
 			log.Fatalf("user: %q: update %v\n", handle, err)
 		} else {
@@ -626,7 +644,7 @@ var cmdUserUpdate = &cobra.Command{
 		}
 
 		if newPassword != nil {
-			err = db.UpdateUserPassword(handle, *newPassword)
+			err = authSvc.UpdateUserSecret(user.ID, *newPassword)
 			if err != nil {
 				log.Fatalf("user %q: password %q: update %v\n", handle, *newPassword, err)
 			}

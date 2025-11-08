@@ -52,7 +52,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, 
 }
 
 const getUser = `-- name: GetUser :one
-SELECT handle,
+SELECT user_id,
+       handle,
        email,
        timezone,
        created_at,
@@ -61,19 +62,12 @@ FROM users
 WHERE user_id = ?1
 `
 
-type GetUserRow struct {
-	Handle    string
-	Email     string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
-}
-
 // GetUserByID returns the user with the given id.
-func (q *Queries) GetUser(ctx context.Context, userID int64) (GetUserRow, error) {
+func (q *Queries) GetUser(ctx context.Context, userID int64) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUser, userID)
-	var i GetUserRow
+	var i User
 	err := row.Scan(
+		&i.UserID,
 		&i.Handle,
 		&i.Email,
 		&i.Timezone,
@@ -83,32 +77,56 @@ func (q *Queries) GetUser(ctx context.Context, userID int64) (GetUserRow, error)
 	return i, err
 }
 
-const getUserIDByEmail = `-- name: GetUserIDByEmail :one
-SELECT user_id
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT user_id,
+       handle,
+       email,
+       timezone,
+       created_at,
+       updated_at
 FROM users
 WHERE email = ?1
 `
 
-// GetUserIDByEmail returns the id of the user with the given email address.
-func (q *Queries) GetUserIDByEmail(ctx context.Context, email string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getUserIDByEmail, email)
-	var user_id int64
-	err := row.Scan(&user_id)
-	return user_id, err
+// GetUserByEmail returns the user with the given email address.
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.UserID,
+		&i.Handle,
+		&i.Email,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
-const getUserIDByHandle = `-- name: GetUserIDByHandle :one
-SELECT user_id
+const getUserByHandle = `-- name: GetUserByHandle :one
+SELECT user_id,
+       handle,
+       email,
+       timezone,
+       created_at,
+       updated_at
 FROM users
 WHERE handle = ?1
 `
 
-// GetUserIDByHandle returns the id of the user with the given handle.
-func (q *Queries) GetUserIDByHandle(ctx context.Context, handle string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getUserIDByHandle, handle)
-	var user_id int64
-	err := row.Scan(&user_id)
-	return user_id, err
+// GetUserByHandle returns the user with the given handle.
+func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByHandle, handle)
+	var i User
+	err := row.Scan(
+		&i.UserID,
+		&i.Handle,
+		&i.Email,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateUser = `-- name: UpdateUser :exec

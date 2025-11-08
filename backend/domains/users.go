@@ -19,7 +19,7 @@ type User_t struct {
 	Email    string // must be unique and lowercase
 	Locale   UserLocale_t
 
-	Roles map[string]bool
+	Roles Roles
 
 	Created time.Time // always UTC
 	Updated time.Time // always UTC

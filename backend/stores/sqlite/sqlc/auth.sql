@@ -1,9 +1,9 @@
 --  Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
--- CreateUserSecrets creates a secrets record for the user.
+-- CreateUserSecret creates a secrets record for the user.
 -- The password is stored as a bcrypt hash.
 --
--- name: CreateUserSecrets :exec
+-- name: CreateUserSecret :exec
 INSERT INTO user_secrets (user_id,
                           hashed_password,
                           last_login,
@@ -22,18 +22,18 @@ SELECT role_id
 FROM user_roles
 WHERE user_id = :user_id;
 
--- GetUserSecrets returns the password for a user.
+-- GetUserSecret returns the password for a user.
 -- The password is stored as a bcrypt hash.
 --
--- name: GetUserSecrets :one
+-- name: GetUserSecret :one
 SELECT hashed_password
 FROM user_secrets
 WHERE user_id = :user_id;
 
--- UpdateUserPassword updates password for a user.
+-- UpdateUserSecret updates password for a user.
 -- The password is stored as a bcrypt hash.
 --
--- name: UpdateUserPassword :exec
+-- name: UpdateUserSecret :exec
 UPDATE user_secrets
 SET hashed_password = :hashed_password,
     updated_at      = :updated_at

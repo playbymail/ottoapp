@@ -9,7 +9,7 @@ import (
 	"context"
 )
 
-const createUserSecrets = `-- name: CreateUserSecrets :exec
+const createUserSecret = `-- name: CreateUserSecret :exec
 
 INSERT INTO user_secrets (user_id,
                           hashed_password,
@@ -23,7 +23,7 @@ VALUES (?1,
         ?5)
 `
 
-type CreateUserSecretsParams struct {
+type CreateUserSecretParams struct {
 	UserID         int64
 	HashedPassword string
 	LastLogin      int64
@@ -33,10 +33,10 @@ type CreateUserSecretsParams struct {
 
 //	Copyright (c) 2025 Michael D Henderson. All rights reserved.
 //
-// CreateUserSecrets creates a secrets record for the user.
+// CreateUserSecret creates a secrets record for the user.
 // The password is stored as a bcrypt hash.
-func (q *Queries) CreateUserSecrets(ctx context.Context, arg CreateUserSecretsParams) error {
-	_, err := q.db.ExecContext(ctx, createUserSecrets,
+func (q *Queries) CreateUserSecret(ctx context.Context, arg CreateUserSecretParams) error {
+	_, err := q.db.ExecContext(ctx, createUserSecret,
 		arg.UserID,
 		arg.HashedPassword,
 		arg.LastLogin,
@@ -76,37 +76,37 @@ func (q *Queries) GetUserRoles(ctx context.Context, userID int64) ([]string, err
 	return items, nil
 }
 
-const getUserSecrets = `-- name: GetUserSecrets :one
+const getUserSecret = `-- name: GetUserSecret :one
 SELECT hashed_password
 FROM user_secrets
 WHERE user_id = ?1
 `
 
-// GetUserSecrets returns the password for a user.
+// GetUserSecret returns the password for a user.
 // The password is stored as a bcrypt hash.
-func (q *Queries) GetUserSecrets(ctx context.Context, userID int64) (string, error) {
-	row := q.db.QueryRowContext(ctx, getUserSecrets, userID)
+func (q *Queries) GetUserSecret(ctx context.Context, userID int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserSecret, userID)
 	var hashed_password string
 	err := row.Scan(&hashed_password)
 	return hashed_password, err
 }
 
-const updateUserPassword = `-- name: UpdateUserPassword :exec
+const updateUserSecret = `-- name: UpdateUserSecret :exec
 UPDATE user_secrets
 SET hashed_password = ?1,
     updated_at      = ?2
 WHERE user_id = ?3
 `
 
-type UpdateUserPasswordParams struct {
+type UpdateUserSecretParams struct {
 	HashedPassword string
 	UpdatedAt      int64
 	UserID         int64
 }
 
-// UpdateUserPassword updates password for a user.
+// UpdateUserSecret updates password for a user.
 // The password is stored as a bcrypt hash.
-func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.HashedPassword, arg.UpdatedAt, arg.UserID)
+func (q *Queries) UpdateUserSecret(ctx context.Context, arg UpdateUserSecretParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserSecret, arg.HashedPassword, arg.UpdatedAt, arg.UserID)
 	return err
 }

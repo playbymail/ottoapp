@@ -13,13 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	ssi "github.com/playbymail/ottoapp/backend/services/sessions"
+	"github.com/playbymail/ottoapp/backend/sessions"
 )
 
 type Server struct {
 	http.Server
 	services struct {
-		sessionManager ssi.SessionManager
+		sessionsSvc *sessions.Service
 	}
 	csrfGuard bool
 	logRoutes bool
@@ -39,7 +39,7 @@ type Server struct {
 	}
 }
 
-func New(sm ssi.SessionManager, options ...Option) (*Server, error) {
+func New(sessionsSvc *sessions.Service, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -47,7 +47,7 @@ func New(sm ssi.SessionManager, options ...Option) (*Server, error) {
 		},
 	}
 	s.network.scheme, s.network.host, s.network.port = "http", "localhost", "8181"
-	s.services.sessionManager = sm
+	s.services.sessionsSvc = sessionsSvc
 	s.debug.debug = true
 
 	for _, opt := range options {

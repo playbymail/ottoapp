@@ -25,11 +25,11 @@ func Routes(s *Server) http.Handler {
 		_, _ = w.Write([]byte(`{"status":"ok","msg":"pong"}`))
 	})
 
-	mux.HandleFunc("GET /api/cookies/delete", s.services.sessionManager.DeleteCookie)
-	mux.HandleFunc("POST /api/login", s.services.sessionManager.PostLoginHandler)
-	mux.HandleFunc("POST /api/logout", s.services.sessionManager.PostLogoutHandler)
-	mux.HandleFunc("GET /api/me", s.services.sessionManager.GetMeHandler)
-	mux.HandleFunc("GET /api/session", s.services.sessionManager.GetSessionHandler) // returns CSRF
+	mux.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
+	mux.HandleFunc("POST /api/login", s.services.sessionsSvc.HandlePostLogin)
+	mux.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
+	mux.HandleFunc("GET /api/me", s.services.sessionsSvc.HandleGetMe)
+	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession) // returns CSRF
 	mux.HandleFunc("POST /api/shutdown", s.postShutdown(s.debug.shutdownKey))
 	mux.HandleFunc("GET /api/version", s.getVersion)
 

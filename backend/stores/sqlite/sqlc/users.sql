@@ -21,7 +21,8 @@ RETURNING user_id;
 -- GetUserByID returns the user with the given id.
 --
 -- name: GetUser :one
-SELECT handle,
+SELECT user_id,
+       handle,
        email,
        timezone,
        created_at,
@@ -29,17 +30,27 @@ SELECT handle,
 FROM users
 WHERE user_id = :user_id;
 
--- GetUserIDByEmail returns the id of the user with the given email address.
+-- GetUserByEmail returns the user with the given email address.
 --
--- name: GetUserIDByEmail :one
-SELECT user_id
+-- name: GetUserByEmail :one
+SELECT user_id,
+       handle,
+       email,
+       timezone,
+       created_at,
+       updated_at
 FROM users
 WHERE email = :email;
 
--- GetUserIDByHandle returns the id of the user with the given handle.
+-- GetUserByHandle returns the user with the given handle.
 --
--- name: GetUserIDByHandle :one
-SELECT user_id
+-- name: GetUserByHandle :one
+SELECT user_id,
+       handle,
+       email,
+       timezone,
+       created_at,
+       updated_at
 FROM users
 WHERE handle = :handle;
 
