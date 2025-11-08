@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-package main
+package documents
 
 import (
 	"crypto/sha256"
@@ -12,8 +12,8 @@ import (
 	"github.com/playbymail/ottoapp/backend/domains"
 )
 
-// loadDocx loads the file, hashes it, and returns a Document.
-func loadDocx(path string) (*domains.Document, error) {
+// LoadDocx loads the file, hashes it, and returns a Document.
+func LoadDocx(path string) (*domains.Document, error) {
 	// Stat first so we can validate the path and get size/timestamps.
 	sb, err := os.Stat(path)
 	if err != nil {

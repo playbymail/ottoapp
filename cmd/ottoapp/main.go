@@ -17,6 +17,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/playbymail/ottoapp"
 	"github.com/playbymail/ottoapp/backend/binder"
+	"github.com/playbymail/ottoapp/backend/documents"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/runners"
@@ -107,21 +108,21 @@ func main() {
 	cmdRoot.AddCommand(cmdReport)
 	cmdReport.AddCommand(cmdReportUpload)
 
-	var cmdServer = &cobra.Command{
-		Use:   "server",
+	var cmdApi = &cobra.Command{
+		Use:   "api",
 		Short: "API server commands",
 	}
-	cmdRoot.AddCommand(cmdServer)
-	cmdServer.AddCommand(cmdServerServe)
-	cmdServerServe.Flags().Bool("csrf-guard", false, "enable csrf guards")
-	cmdServerServe.Flags().String("host", "localhost", "change the bind network")
-	cmdServerServe.Flags().Bool("log-routes", false, "enable route logging")
-	cmdServerServe.Flags().String("port", "8181", "change the bind port")
-	cmdServerServe.Flags().Duration("sessions-reap-interval", 15*time.Minute, "interval to remove expired sessions")
-	cmdServerServe.Flags().Duration("sessions-ttl", 24*time.Hour, "session duration")
-	cmdServerServe.Flags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
-	cmdServerServe.Flags().String("shutdown-key", "", "api key authorizing shutdown")
-	cmdServerServe.Flags().Duration("shutdown-timer", 0, "timer to shut server down")
+	cmdRoot.AddCommand(cmdApi)
+	cmdApi.AddCommand(cmdApiServe)
+	cmdApiServe.Flags().Bool("csrf-guard", false, "enable csrf guards")
+	cmdApiServe.Flags().String("host", "localhost", "change the bind network")
+	cmdApiServe.Flags().Bool("log-routes", false, "enable route logging")
+	cmdApiServe.Flags().String("port", "8181", "change the bind port")
+	cmdApiServe.Flags().Duration("sessions-reap-interval", 15*time.Minute, "interval to remove expired sessions")
+	cmdApiServe.Flags().Duration("sessions-ttl", 24*time.Hour, "session duration")
+	cmdApiServe.Flags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
+	cmdApiServe.Flags().String("shutdown-key", "", "api key authorizing shutdown")
+	cmdApiServe.Flags().Duration("shutdown-timer", 0, "timer to shut server down")
 
 	var cmdUser = &cobra.Command{
 		Use:   "user",
@@ -366,7 +367,7 @@ var cmdReportUpload = &cobra.Command{
 		if ext := filepath.Ext(path); strings.ToLower(ext) != ".docx" {
 			log.Fatalf("report: ext %q: not a DOCX file\n", path)
 		}
-		d, err := loadDocx(path)
+		d, err := documents.LoadDocx(path)
 		if err != nil {
 			log.Fatalf("%q: %v\n", path, err)
 		}
@@ -395,10 +396,9 @@ var cmdReportUpload = &cobra.Command{
 	},
 }
 
-var cmdServerServe = &cobra.Command{
+var cmdApiServe = &cobra.Command{
 	Use:   "serve",
-	Short: "start the server",
-	Long:  `Start the API server.`,
+	Short: "start the API server",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
