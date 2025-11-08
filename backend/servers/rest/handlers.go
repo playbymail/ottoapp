@@ -10,7 +10,34 @@ import (
 	"net/http"
 	"syscall"
 	"time"
+
+	"github.com/playbymail/ottoapp"
 )
+
+func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	var version string
+	showBuildInfo := r.URL.Query().Has("show-build-info")
+	if showBuildInfo {
+		version = ottoapp.Version().String()
+	} else {
+		version = ottoapp.Version().Core()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(struct {
+		Status  string `json:"status"`
+		Version string `json:"version"`
+	}{
+		Status:  "ok",
+		Version: version,
+	})
+}
 
 func (s *Server) postShutdown(key []byte) http.HandlerFunc {
 	if len(key) == 0 {
@@ -90,6 +117,14 @@ func (s *Server) postShutdown(key []byte) http.HandlerFunc {
 			return
 		}
 
-		w.WriteHeader(http.StatusNoContent)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(struct {
+			Status  string `json:"status"`
+			Message string `json:"msg"`
+		}{
+			Status:  "ok",
+			Message: "shutdown initiated",
+		})
 	}
 }

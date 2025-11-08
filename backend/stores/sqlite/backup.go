@@ -16,9 +16,9 @@ import (
 // It uses VACUUM INTO, so the result is a single .db file with no sidecars.
 //
 // It's safest if the server is not running during the backup.
-func Backup(ctx context.Context, path string) (string, error) {
+func Backup(ctx context.Context, path string, debug bool) (string, error) {
 	started := time.Now()
-	wdb, err := Open(ctx, path, false)
+	wdb, err := Open(ctx, path, false, debug)
 	if err != nil {
 		return "", err
 	} else if wdb == nil || wdb.db == nil {

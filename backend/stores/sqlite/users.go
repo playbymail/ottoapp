@@ -31,33 +31,48 @@ func (db *DB) CreateUser(handle, email, plainTextSecret string, timezone *time.L
 		return nil, fmt.Errorf("%q: invalid timezone", timezone.String())
 	}
 
-	// hash the password. can fail if the password is too long.
 	hashedPassword, err := HashPassword(plainTextSecret)
 	if err != nil {
 		return nil, err
 	}
 
-	// todo: wrap this in a transaction
+	// start transaction
+	tx, err := db.db.BeginTx(db.ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	// rollback if we return early; harmless after commit
+	defer tx.Rollback()
 
-	id, err := db.q.CreateUser(db.ctx, sqlc.CreateUserParams{
-		Handle:   handle,
-		Email:    email,
-		Timezone: timeZone,
+	qtx := db.q.WithTx(tx)
+
+	now := time.Now().UTC().Unix()
+
+	id, err := qtx.CreateUser(db.ctx, sqlc.CreateUserParams{
+		Handle:    handle,
+		Email:     email,
+		Timezone:  timeZone,
+		CreatedAt: now,
+		UpdatedAt: now,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// note: we let LastLogin be the zero-value for time.Time, which means never logged in.
-	err = db.q.CreateUserSecrets(db.ctx, sqlc.CreateUserSecretsParams{
+	if err := qtx.CreateUserSecrets(db.ctx, sqlc.CreateUserSecretsParams{
 		UserID:         id,
 		HashedPassword: hashedPassword,
-	})
-	if err != nil {
-		log.Printf("[sqldb] need to rollback create user\n")
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
 		return nil, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// safe to use the normal queries again after commit
 	return db.GetUserByID(domains.ID(id))
 }
 
@@ -93,8 +108,8 @@ func (db *DB) GetUserByID(userID domains.ID) (*domains.User_t, error) {
 				Location: loc,
 			},
 		},
-		Created: row.CreatedAt,
-		Updated: row.UpdatedAt,
+		Created: time.Unix(row.CreatedAt, 0).UTC(),
+		Updated: time.Unix(row.UpdatedAt, 0).UTC(),
 	}
 
 	return user, nil
@@ -127,10 +142,11 @@ func (db *DB) UpdateUser(handle string, newEmail *string, newTimeZone *time.Loca
 	}
 
 	err = db.q.UpdateUser(db.ctx, sqlc.UpdateUserParams{
-		UserID:   userID,
-		Handle:   handle,
-		Email:    email,
-		Timezone: timeZone,
+		UserID:    userID,
+		Handle:    handle,
+		Email:     email,
+		Timezone:  timeZone,
+		UpdatedAt: time.Now().UTC().Unix(),
 	})
 	if err != nil {
 		return errors.Join(fmt.Errorf("%q: update failed", email), err)

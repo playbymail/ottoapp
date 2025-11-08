@@ -13,19 +13,18 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 )
 
 // Init initializes a new store. It enables WAL (write-ahead logging) for concurrency
 // and verifies that the sqlite library supports foreign keys.
 //
 // Returns an error if the path already exists or there are errors initializing it.
-func Init(ctx context.Context, path, documentsPath string, overwrite bool) error {
+func Init(ctx context.Context, path string, overwrite bool) error {
 	started := time.Now()
 
 	if sb, err := os.Stat(path); err != nil || !sb.IsDir() {
 		return errors.Join(fmt.Errorf("invalid db path"), err)
-	} else if sb, err = os.Stat(documentsPath); err != nil || !sb.IsDir() {
-		return errors.Join(fmt.Errorf("invalid documents path"), err)
 	}
 
 	name := filepath.Join(path, "ottoapp.db")
@@ -81,12 +80,54 @@ func Init(ctx context.Context, path, documentsPath string, overwrite bool) error
 		log.Printf("[sqldb] init: migration %v\n", err)
 		return err
 	}
-	if _, err := db.Exec(`INSERT INTO config(key, value) VALUES(?,?)`, "documents.root", documentsPath); err != nil {
-		return errors.Join(fmt.Errorf("check foreign_keys failed"), err)
-	}
 	log.Printf("[sqldb] init: migration: applied %d\n", n)
 
 	log.Printf("[sqldb] init: completed in %v\n", time.Since(started))
 
 	return nil
+}
+
+// OpenTempDB returns an initialized in-memory store for testing.
+// It verifies that the sqlite library supports foreign keys.
+//
+// Returns an error if the path already exists or there are errors initializing it.
+func OpenTempDB(ctx context.Context) (*DB, error) {
+	started := time.Now()
+
+	log.Printf("[sqldb] initializing temp db...\n")
+
+	// Apply PRAGMA's per-connection via DSN so the pool always has them.
+	// modernc.org/sqlite supports repeated _pragma=... parameters.
+	dsn := "file::memory:?&cache=shared&_pragma=foreign_keys(ON)"
+
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = db.Close()
+		}
+	}()
+
+	// Sanity checks: ensure FK actually stuck for this connection
+	var fk int
+	if err := db.QueryRow(`PRAGMA foreign_keys;`).Scan(&fk); err != nil {
+		return nil, errors.Join(fmt.Errorf("check foreign_keys failed"), err)
+	} else if fk != 1 {
+		return nil, fmt.Errorf("foreign_keys pragma not enabled (got %d)", fk)
+	}
+
+	log.Printf("[sqldb] init: migrating up\n")
+	n, err := migrateUp(ctx, db, migrationsFS, true)
+	if err != nil {
+		log.Printf("[sqldb] init: migration %v\n", err)
+		return nil, err
+	}
+	log.Printf("[sqldb] init: migration: applied %d\n", n)
+
+	log.Printf("[sqldb] init: completed in %v\n", time.Since(started))
+
+	// return the store.
+	return &DB{path: ":memory:", name: ":memory:", db: db, ctx: ctx, q: sqlc.New(db)}, nil
 }

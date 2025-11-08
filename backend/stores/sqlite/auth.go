@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
@@ -53,6 +54,7 @@ func (db *DB) UpdateUserPassword(handle string, newPlainTextSecret string) error
 	err = db.q.UpdateUserPassword(db.ctx, sqlc.UpdateUserPasswordParams{
 		UserID:         userID,
 		HashedPassword: hashedPassword,
+		UpdatedAt:      time.Now().UTC().Unix(),
 	})
 	if err != nil {
 		return errors.Join(fmt.Errorf("%q: update failed", handle), err)

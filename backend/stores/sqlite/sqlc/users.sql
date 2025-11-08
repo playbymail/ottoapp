@@ -8,10 +8,14 @@
 -- name: CreateUser :one
 INSERT INTO users (handle,
                    email,
-                   timezone)
+                   timezone,
+                   created_at,
+                   updated_at)
 VALUES (:handle,
         :email,
-        :timezone)
+        :timezone,
+        :created_at,
+        :updated_at)
 RETURNING user_id;
 
 -- GetUserByID returns the user with the given id.
@@ -46,7 +50,7 @@ UPDATE users
 SET email      = :email,
     handle     = :handle,
     timezone   = :timezone,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = :updated_at
 WHERE user_id = :user_id;
 
 -- UpdateUserEmail updates the email for the given user.
@@ -54,7 +58,7 @@ WHERE user_id = :user_id;
 -- name: UpdateUserEmail :exec
 UPDATE users
 SET email      = :email,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = :updated_at
 WHERE user_id = :user_id;
 
 -- UpdateUserHandle updates the handle for the given user.
@@ -62,7 +66,7 @@ WHERE user_id = :user_id;
 -- name: UpdateUserHandle :exec
 UPDATE users
 SET handle     = :handle,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = :updated_at
 WHERE user_id = :user_id;
 
 -- UpdateUserTimezone updates the timezone for the given user.
@@ -70,6 +74,6 @@ WHERE user_id = :user_id;
 -- name: UpdateUserTimezone :exec
 UPDATE users
 SET timezone   = :timezone,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = :updated_at
 WHERE user_id = :user_id;
 

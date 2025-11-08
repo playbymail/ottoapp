@@ -6,10 +6,14 @@
 -- name: CreateUserSecrets :exec
 INSERT INTO user_secrets (user_id,
                           hashed_password,
-                          last_login)
+                          last_login,
+                          created_at,
+                          updated_at)
 VALUES (:user_id,
         :hashed_password,
-        :last_login);
+        :last_login,
+        :created_at,
+        :updated_at);
 
 -- GetUserRoles returns the roles for a user.
 --
@@ -32,5 +36,5 @@ WHERE user_id = :user_id;
 -- name: UpdateUserPassword :exec
 UPDATE user_secrets
 SET hashed_password = :hashed_password,
-    updated_at      = CURRENT_TIMESTAMP
+    updated_at      = :updated_at
 WHERE user_id = :user_id;

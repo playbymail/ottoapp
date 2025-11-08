@@ -7,24 +7,29 @@ package sqlc
 
 import (
 	"context"
-	"time"
 )
 
 const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (handle,
                    email,
-                   timezone)
+                   timezone,
+                   created_at,
+                   updated_at)
 VALUES (?1,
         ?2,
-        ?3)
+        ?3,
+        ?4,
+        ?5)
 RETURNING user_id
 `
 
 type CreateUserParams struct {
-	Handle   string
-	Email    string
-	Timezone string
+	Handle    string
+	Email     string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 //	Copyright (c) 2025 Michael D Henderson. All rights reserved.
@@ -34,7 +39,13 @@ type CreateUserParams struct {
 // Timezone is the user's timezone. Use UTC if unknown.
 // The password is stored as a bcrypt hash.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, createUser, arg.Handle, arg.Email, arg.Timezone)
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.Handle,
+		arg.Email,
+		arg.Timezone,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
 	var user_id int64
 	err := row.Scan(&user_id)
 	return user_id, err
@@ -54,8 +65,8 @@ type GetUserRow struct {
 	Handle    string
 	Email     string
 	Timezone  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 // GetUserByID returns the user with the given id.
@@ -105,15 +116,16 @@ UPDATE users
 SET email      = ?1,
     handle     = ?2,
     timezone   = ?3,
-    updated_at = CURRENT_TIMESTAMP
-WHERE user_id = ?4
+    updated_at = ?4
+WHERE user_id = ?5
 `
 
 type UpdateUserParams struct {
-	Email    string
-	Handle   string
-	Timezone string
-	UserID   int64
+	Email     string
+	Handle    string
+	Timezone  string
+	UpdatedAt int64
+	UserID    int64
 }
 
 // UpdateUser updates the given user.
@@ -122,6 +134,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 		arg.Email,
 		arg.Handle,
 		arg.Timezone,
+		arg.UpdatedAt,
 		arg.UserID,
 	)
 	return err
@@ -130,53 +143,56 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 const updateUserEmail = `-- name: UpdateUserEmail :exec
 UPDATE users
 SET email      = ?1,
-    updated_at = CURRENT_TIMESTAMP
-WHERE user_id = ?2
+    updated_at = ?2
+WHERE user_id = ?3
 `
 
 type UpdateUserEmailParams struct {
-	Email  string
-	UserID int64
+	Email     string
+	UpdatedAt int64
+	UserID    int64
 }
 
 // UpdateUserEmail updates the email for the given user.
 func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserEmail, arg.Email, arg.UserID)
+	_, err := q.db.ExecContext(ctx, updateUserEmail, arg.Email, arg.UpdatedAt, arg.UserID)
 	return err
 }
 
 const updateUserHandle = `-- name: UpdateUserHandle :exec
 UPDATE users
 SET handle     = ?1,
-    updated_at = CURRENT_TIMESTAMP
-WHERE user_id = ?2
+    updated_at = ?2
+WHERE user_id = ?3
 `
 
 type UpdateUserHandleParams struct {
-	Handle string
-	UserID int64
+	Handle    string
+	UpdatedAt int64
+	UserID    int64
 }
 
 // UpdateUserHandle updates the handle for the given user.
 func (q *Queries) UpdateUserHandle(ctx context.Context, arg UpdateUserHandleParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserHandle, arg.Handle, arg.UserID)
+	_, err := q.db.ExecContext(ctx, updateUserHandle, arg.Handle, arg.UpdatedAt, arg.UserID)
 	return err
 }
 
 const updateUserTimezone = `-- name: UpdateUserTimezone :exec
 UPDATE users
 SET timezone   = ?1,
-    updated_at = CURRENT_TIMESTAMP
-WHERE user_id = ?2
+    updated_at = ?2
+WHERE user_id = ?3
 `
 
 type UpdateUserTimezoneParams struct {
-	Timezone string
-	UserID   int64
+	Timezone  string
+	UpdatedAt int64
+	UserID    int64
 }
 
 // UpdateUserTimezone updates the timezone for the given user.
 func (q *Queries) UpdateUserTimezone(ctx context.Context, arg UpdateUserTimezoneParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserTimezone, arg.Timezone, arg.UserID)
+	_, err := q.db.ExecContext(ctx, updateUserTimezone, arg.Timezone, arg.UpdatedAt, arg.UserID)
 	return err
 }

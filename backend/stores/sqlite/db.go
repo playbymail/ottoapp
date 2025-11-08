@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	// don't forget to update the schema version to match the expected migrations
-	schemaVersion = 6
+	// the version of the database this application expects
+	expectedSchemaVersion = "20251106_2132"
 )
 
 type DB struct {
 	path string
-	name string
+	name string // :memory: for a temporary database
 	db   *sql.DB
 	ctx  context.Context
 	q    *sqlc.Queries

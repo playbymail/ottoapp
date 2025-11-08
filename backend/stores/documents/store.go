@@ -118,7 +118,7 @@ func LoadDocumentFromRequest(r *http.Request) (*Document, error) {
 //   - if d.ID is empty, it is computed from d.Data
 //   - if d.Path is empty, d.Path = d.ID
 //   - directories are created as needed
-//   - on success, d.Length and d.CreatedAt are updated
+//   - on success, d.ContentLength and d.CreatedAt are updated
 func (s *Store) Save(d *Document) error {
 	if d == nil {
 		return errors.Join(domains.ErrWriteFailed, fmt.Errorf("document is nil"))

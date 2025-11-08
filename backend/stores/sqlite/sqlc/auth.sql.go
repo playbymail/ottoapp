@@ -13,16 +13,22 @@ const createUserSecrets = `-- name: CreateUserSecrets :exec
 
 INSERT INTO user_secrets (user_id,
                           hashed_password,
-                          last_login)
+                          last_login,
+                          created_at,
+                          updated_at)
 VALUES (?1,
         ?2,
-        ?3)
+        ?3,
+        ?4,
+        ?5)
 `
 
 type CreateUserSecretsParams struct {
 	UserID         int64
 	HashedPassword string
 	LastLogin      int64
+	CreatedAt      int64
+	UpdatedAt      int64
 }
 
 //	Copyright (c) 2025 Michael D Henderson. All rights reserved.
@@ -30,7 +36,13 @@ type CreateUserSecretsParams struct {
 // CreateUserSecrets creates a secrets record for the user.
 // The password is stored as a bcrypt hash.
 func (q *Queries) CreateUserSecrets(ctx context.Context, arg CreateUserSecretsParams) error {
-	_, err := q.db.ExecContext(ctx, createUserSecrets, arg.UserID, arg.HashedPassword, arg.LastLogin)
+	_, err := q.db.ExecContext(ctx, createUserSecrets,
+		arg.UserID,
+		arg.HashedPassword,
+		arg.LastLogin,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
 	return err
 }
 
@@ -82,18 +94,19 @@ func (q *Queries) GetUserSecrets(ctx context.Context, userID int64) (string, err
 const updateUserPassword = `-- name: UpdateUserPassword :exec
 UPDATE user_secrets
 SET hashed_password = ?1,
-    updated_at      = CURRENT_TIMESTAMP
-WHERE user_id = ?2
+    updated_at      = ?2
+WHERE user_id = ?3
 `
 
 type UpdateUserPasswordParams struct {
 	HashedPassword string
+	UpdatedAt      int64
 	UserID         int64
 }
 
 // UpdateUserPassword updates password for a user.
 // The password is stored as a bcrypt hash.
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.HashedPassword, arg.UserID)
+	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.HashedPassword, arg.UpdatedAt, arg.UserID)
 	return err
 }

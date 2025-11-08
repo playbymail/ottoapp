@@ -43,14 +43,12 @@ Ember v6.8 defaults to Vite + Embroider.
 ### Command Line applications
 
 * cmd/gentz - rebuild the IANA timezone database if needed
-* cmd/ottdb - create and update the application database
+* cmd/ottoapp - manage the database, start the server, and use the API to run commands
 * cmd/ottomap - parse and render files locally
-* cmd/ottorun - use the API to run commands on the server
-* cmd/ottsrv - the REST-is API server
+
+Use `cmd/ottoapp` for testing the database and the API service.
 
 Use `cmd/ottomap` for testing the parsing and rendering packages using inputs on the file system.
-
-Use `cmd/ottorun` for testing handlers on the service.
 
 ## Development Setup
 
@@ -69,31 +67,39 @@ We can pass the server a flag to enable a shutdown route to stop the server.
 * Ember CLI (latest LTS)
 * Caddy ≥ 2.7
 
-### Running Instances locally
+### Running Temporary Instances for Testing
 
-
-We can build and tear down local instances in the `tmp` folder as needed.
-We're assuming that we're using `tmp/foo` for agent builds and testing.
-
-#### Initialize a new database
+Use `:memory:` as the database path to create an in-memory database for testing the server.
 
 ```bash
-OTTO_DBPATH=tmp/foo
-OTTO_DOCPATH=${OTTO_DBPATH}/documents
-mkdir ${OTTO_DBPATH} ${OTTO_DOCPATH}
-go run ./cmd/ottodb db init --db ${OTTO_DBPATH}  --documents ${OTTO_DOCPATH}
+$ go run ./cmd/ottoapp server serve --db :memory: --port 8181 &
+$ sleep 1 # let the database initialize
+$ curl http://127.0.0.1:8181/api/ping
+{"status":"ok","msg":"pong"}%
 ```
 
-#### Start the Go Web Server as a background process
+Set the shutdown timer flag stop the server after a short duration.
 
 ```bash
-go run ./cmd/ottosrv serve --db ${OTTO_DBPATH}```
+$ go run ./cmd/ottoapp server serve --db :memory: --shutdown-timer 1m &
+$ sleep 1 # let the database initialize
+$ curl http://127.0.0.1:8181/api/ping
+{"status":"ok","msg":"pong"}%
+$ sleep 60 # let the shutdown timer fire
+$ curl http://127.0.0.1:8181/api/ping
+curl: (7) Failed to connect to 127.0.0.1 port 8181 after 0 ms: Couldn't connect to server
 ```
 
-If you're running a quick test, add a flag to have the server shutdown automatically:
+Or set the key for the `/api/shutdown` route to stop the test instance on demand.
 
 ```bash
-go run ./cmd/ottosrv serve --db ${OTTO_DBPATH} --shutdown-timer 20s```
+$ go run ./cmd/ottoapp server serve --db :memory: --shutdown-key foo &
+$ sleep 1 # let the database initialize
+$ curl -H "Content-Type: application/json" -d '{"key": "foo"}' http://127.0.0.1:8181/api/shutdown
+{"status":"ok","msg":"shutdown initiated"}
+$ sleep 5 # let the shutdown complete
+$ curl http://127.0.0.1:8181/api/ping
+curl: (7) Failed to connect to 127.0.0.1 port 8181 after 0 ms: Couldn't connect to server
 ```
 
 #### 2. Start the Ember Frontend

@@ -33,7 +33,7 @@ func (db *DB) Close() error {
 //
 // Returns an error if the path is not a directory, or if the database does not exist.
 // Caller must call Close() when done.
-func Open(ctx context.Context, path string, checkVersion bool) (*DB, error) {
+func Open(ctx context.Context, path string, checkVersion, debug bool) (*DB, error) {
 	// it is an error if the path does not already exist and is not a directory.
 	if sb, err := os.Stat(path); err != nil {
 		log.Printf("[sqldb] %q: %s\n", path, err)
@@ -53,7 +53,9 @@ func Open(ctx context.Context, path string, checkVersion bool) (*DB, error) {
 		return nil, domains.ErrInvalidPath
 	}
 
-	log.Printf("[sqldb] opening %s\n", path)
+	if debug {
+		log.Printf("[sqldb] opening %s\n", path)
+	}
 
 	// Apply PRAGMA's per-connection via DSN so the pool always has them.
 	// modernc.org/sqlite supports repeated _pragma=... parameters.
@@ -80,14 +82,14 @@ func Open(ctx context.Context, path string, checkVersion bool) (*DB, error) {
 		return nil, fmt.Errorf("foreign_keys pragma not enabled (got %d)", fk)
 	}
 	if checkVersion {
-		var actualVersion int
-		if err := db.QueryRow(`SELECT max(version) FROM schema_version;`).Scan(&actualVersion); err != nil {
+		var actualVersion string
+		if err := db.QueryRow(`SELECT value FROM config WHERE key = 'schema.version';`).Scan(&actualVersion); err != nil {
 			_ = db.Close()
 			log.Printf("[sqldb] %q: check version %v\n", name, err)
 			return nil, errors.Join(fmt.Errorf("check version: failed"), err)
-		} else if actualVersion != schemaVersion {
+		} else if actualVersion != expectedSchemaVersion {
 			_ = db.Close()
-			log.Printf("[sqldb] %q: version mismatch: want %d: got %d\n", name, schemaVersion, actualVersion)
+			log.Printf("[sqldb] %q: version mismatch: want %q: got %q\n", name, expectedSchemaVersion, actualVersion)
 			return nil, domains.ErrSchemaVersionMismatch
 		}
 	}

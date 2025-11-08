@@ -11,29 +11,85 @@ import (
 
 const createDocument = `-- name: CreateDocument :one
 
-INSERT INTO documents (document_id, document_created_by, document_created_at, document_path)
-VALUES (?1, ?2, ?3, ?4)
+INSERT INTO documents (mime_type, contents_hash, content_length, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5)
 RETURNING document_id
 `
 
 type CreateDocumentParams struct {
-	DocumentID        string
-	DocumentCreatedBy int64
-	DocumentCreatedAt int64
-	DocumentPath      string
+	MimeType      string
+	ContentsHash  string
+	ContentLength int64
+	CreatedAt     int64
+	UpdatedAt     int64
 }
 
-//	Copyright (c) 2025 Michael D Henderson. All rights reserved.
-//
-// CreateDocument does
-func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) (string, error) {
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createDocument,
-		arg.DocumentID,
-		arg.DocumentCreatedBy,
-		arg.DocumentCreatedAt,
-		arg.DocumentPath,
+		arg.MimeType,
+		arg.ContentsHash,
+		arg.ContentLength,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
-	var document_id string
+	var document_id int64
 	err := row.Scan(&document_id)
 	return document_id, err
+}
+
+const createDocumentAcl = `-- name: CreateDocumentAcl :exec
+INSERT INTO document_acl(document_id, user_id, document_name, created_by, is_owner, can_read, can_write, can_delete, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+`
+
+type CreateDocumentAclParams struct {
+	DocumentID   int64
+	UserID       int64
+	DocumentName string
+	CreatedBy    int64
+	IsOwner      bool
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) CreateDocumentAcl(ctx context.Context, arg CreateDocumentAclParams) error {
+	_, err := q.db.ExecContext(ctx, createDocumentAcl,
+		arg.DocumentID,
+		arg.UserID,
+		arg.DocumentName,
+		arg.CreatedBy,
+		arg.IsOwner,
+		arg.CanRead,
+		arg.CanWrite,
+		arg.CanDelete,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const createDocumentContent = `-- name: CreateDocumentContent :exec
+INSERT INTO document_contents(document_id, contents, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+`
+
+type CreateDocumentContentParams struct {
+	DocumentID int64
+	Contents   []byte
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
+func (q *Queries) CreateDocumentContent(ctx context.Context, arg CreateDocumentContentParams) error {
+	_, err := q.db.ExecContext(ctx, createDocumentContent,
+		arg.DocumentID,
+		arg.Contents,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }

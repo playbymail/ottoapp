@@ -4,10 +4,6 @@
 
 package sqlc
 
-import (
-	"time"
-)
-
 type Clan struct {
 	ClanID      int64
 	GameID      string
@@ -15,32 +11,52 @@ type Clan struct {
 	Clan        int64
 	SetupTurnNo int64
 	IsActive    bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 type Config struct {
 	Key       string
 	Value     string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Document struct {
-	DocumentID        string
-	DocumentCreatedBy int64
-	DocumentCreatedAt int64
-	DocumentPath      string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	DocumentID    int64
+	MimeType      string
+	ContentsHash  string
+	ContentLength int64
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+type DocumentAcl struct {
+	DocumentID   int64
+	UserID       int64
+	DocumentName string
+	CreatedBy    int64
+	IsOwner      bool
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type DocumentContent struct {
+	DocumentID int64
+	Contents   []byte
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
 type Element struct {
 	ElementType   string
 	ElementSuffix string
 	Description   string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	CreatedAt     int64
+	UpdatedAt     int64
 }
 
 type Game struct {
@@ -50,28 +66,25 @@ type Game struct {
 	SetupTurnYear  int64
 	SetupTurnMonth int64
 	IsActive       bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	CreatedAt      int64
+	UpdatedAt      int64
 }
 
 type Role struct {
 	RoleID      string
 	IsActive    bool
 	Description string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 type SchemaMigration struct {
-	ID        int64
-	Name      string
-	AppliedAt time.Time
-}
-
-type SchemaVersion struct {
-	ID        int64
-	Version   int64
-	AppliedAt time.Time
+	ID          int64
+	MigrationID string
+	FileName    string
+	AppliedAt   int64
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 type Session struct {
@@ -79,27 +92,19 @@ type Session struct {
 	Csrf      string
 	UserID    int64
 	ExpiresAt int64
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type TurnReport struct {
 	TurnReportID int64
-	DocumentID   int64
 	GameID       int64
 	UserID       int64
+	DocumentID   int64
 	TurnNo       int64
-}
-
-type TurnReportAcl struct {
-	TurnReportID int64
-	UserID       int64
-	IsOwner      bool
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ClanID       int64
+	CreatedAt    int64
+	UpdatedAt    int64
 }
 
 type User struct {
@@ -107,21 +112,21 @@ type User struct {
 	Handle    string
 	Email     string
 	Timezone  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type UserRole struct {
 	UserID    int64
 	RoleID    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type UserSecret struct {
 	UserID         int64
 	HashedPassword string
 	LastLogin      int64
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	CreatedAt      int64
+	UpdatedAt      int64
 }

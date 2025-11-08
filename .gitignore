@@ -37,5 +37,6 @@ data/
 logs/
 node_modules/
 npm-debug.log*
+ottoapp.json
 tmp/
 web_modules/

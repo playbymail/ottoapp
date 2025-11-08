@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"embed"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -21,9 +22,88 @@ import (
 //go:embed migrations/**.sql
 var migrationsFS embed.FS
 
-func MigrateUp(ctx context.Context, path string, isInitializing bool) error {
+type MigrationStatus struct {
+	Id          int
+	IsCurrent   bool
+	MigrationId string
+	AppliedAt   time.Time
+	FileName    string
+}
+
+func (db *DB) GetDatabaseMigrationStatus() ([]*MigrationStatus, error) {
+	status := map[string]*MigrationStatus{}
+	// fetch the migrations applied and save their status
+	migrationsApplied, err := db.q.GetDatabaseMigrationsApplied(db.ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range migrationsApplied {
+		migration := &MigrationStatus{
+			Id:          int(row.ID),
+			MigrationId: row.MigrationID,
+			AppliedAt:   time.Unix(row.AppliedAt, 0).UTC(),
+		}
+		status[migration.MigrationId] = migration
+	}
+	// fetch the migration files and save their status
+	migrationFiles, err := listMigrationFiles(migrationsFS, false)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("list migrations"), err)
+	}
+	for _, fileName := range migrationFiles {
+		migrationId := fileName[:len("YYYYMMDD_HHMM")]
+		migration, ok := status[migrationId]
+		if !ok {
+			// migration file is missing!
+			migration = &MigrationStatus{
+				MigrationId: migrationId,
+			}
+			status[migrationId] = migration
+		}
+		migration.FileName = fileName
+	}
+	// fetch the current migration and save its status
+	currentId, err := db.q.GetDatabaseVersion(db.ctx)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("get version"), err)
+	}
+	migration, ok := status[currentId]
+	if !ok {
+		// current migration doesn't exist!
+		migration = &MigrationStatus{
+			MigrationId: currentId,
+		}
+		status[currentId] = migration
+	}
+	migration.IsCurrent = true
+	// convert the map to a list
+	var list []*MigrationStatus
+	for _, elem := range status {
+		list = append(list, elem)
+	}
+	// sort the list by applied then by id
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].AppliedAt.Before(list[j].AppliedAt) {
+			return true
+		} else if list[i].AppliedAt.After(list[j].AppliedAt) {
+			return false
+		} else if list[i].Id < list[j].Id {
+			return true
+		} else if list[i].Id > list[j].Id {
+			return false
+		}
+		return list[i].MigrationId < list[j].MigrationId
+	})
+	return list, nil
+}
+
+func (db *DB) GetDatabaseVersion() (string, error) {
+	return db.q.GetDatabaseVersion(db.ctx)
+}
+
+func MigrateUp(ctx context.Context, path string, isInitializing, debug bool) error {
 	started := time.Now()
-	wdb, err := Open(ctx, path, false)
+	wdb, err := Open(ctx, path, false, debug)
 	if err != nil {
 		return err
 	} else if wdb == nil || wdb.db == nil {
@@ -56,13 +136,18 @@ func migrateUp(ctx context.Context, db *sql.DB, migrationsFS fs.FS, isInitializi
 	}
 
 	// 2) List *.sql files that match TIMESTAMP_name.sql; sort by filename.
-	candidates, err := listMigrationFiles(migrationsFS)
+	candidates, err := listMigrationFiles(migrationsFS, false)
 	if err != nil {
 		return 0, fmt.Errorf("list migrations: %w", err)
 	}
 
 	appliedCount := 0
 	for _, fname := range candidates {
+		// the file name looks like "20251029_1540_init.sql".
+		// the migration ID is the timestamp part of that.
+		migrationId := fname[:len("YYYYMMDD_HHMM")]
+		log.Printf("[sqldb] migrations: %q %q\n", migrationId, fname)
+
 		if applied[fname] {
 			log.Printf("[sqldb] migrations: skipping %q\n", fname)
 			continue // already applied
@@ -89,10 +174,19 @@ func migrateUp(ctx context.Context, db *sql.DB, migrationsFS fs.FS, isInitializi
 			return appliedCount, fmt.Errorf("exec %s: %w", fname, err)
 		}
 
-		// Record success.
-		appliedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		// Record the migration.
+		appliedAt := time.Now().UTC().Unix()
+		log.Printf("[sqldb] migrations: %q %22d\n", migrationId, appliedAt)
+
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, fname, appliedAt,
+			`INSERT INTO schema_migrations (migration_id, file_name, created_at, applied_at, updated_at) VALUES (?, ?, ?, ?, ?)`, migrationId, fname, appliedAt, appliedAt, appliedAt,
+		); err != nil {
+			_ = tx.Rollback()
+			log.Printf("[sqldb] migrations: error %q: %v\n", fname, err)
+			return appliedCount, fmt.Errorf("record %s: %w", fname, err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE config SET value = ?, updated_at = ? WHERE key = 'schema.version'`, migrationId, appliedAt,
 		); err != nil {
 			_ = tx.Rollback()
 			log.Printf("[sqldb] migrations: error %q: %v\n", fname, err)
@@ -133,7 +227,7 @@ func fetchAppliedMigrations(ctx context.Context, db *sql.DB) (map[string]bool, e
 
 // listMigrationFiles returns the migration scripts in the root of the
 // filesystem in the order they should be applied.
-func listMigrationFiles(migrationsFS fs.FS) ([]string, error) {
+func listMigrationFiles(migrationsFS fs.FS, debug bool) ([]string, error) {
 	// timestamp looks like YYYYMMDD_HHMM
 	var migRe = regexp.MustCompile(`^\d{8}_\d{4}_.+\.sql$`)
 
@@ -143,7 +237,9 @@ func listMigrationFiles(migrationsFS fs.FS) ([]string, error) {
 	}
 	var files []string
 	for _, e := range entries {
-		log.Printf("[sqldb] lmf %-45s: %8v %q\n", e.Name(), e.IsDir(), path.Ext(e.Name()))
+		if debug {
+			log.Printf("[sqldb] lmf %-45s: %8v %q\n", e.Name(), e.IsDir(), path.Ext(e.Name()))
+		}
 		if e.IsDir() {
 			continue
 		} else if name := e.Name(); path.Ext(name) != ".sql" {

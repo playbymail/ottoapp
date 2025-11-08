@@ -1,8 +1,14 @@
 --  Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
--- CreateDocument does
---
 -- name: CreateDocument :one
-INSERT INTO documents (document_id, document_created_by, document_created_at, document_path)
-VALUES (:document_id, :document_created_by, :document_created_at, :document_path)
+INSERT INTO documents (mime_type, contents_hash, content_length, created_at, updated_at)
+VALUES (:mime_type, :contents_hash, :content_length, :created_at, :updated_at)
 RETURNING document_id;
+
+-- name: CreateDocumentContent :exec
+INSERT INTO document_contents(document_id, contents, created_at, updated_at)
+VALUES (:document_id, :contents, :created_at, :updated_at);
+
+-- name: CreateDocumentAcl :exec
+INSERT INTO document_acl(document_id, user_id, document_name, created_by, is_owner, can_read, can_write, can_delete, created_at, updated_at)
+VALUES (:document_id, :user_id, :document_name, :created_by, :is_owner, :can_read, :can_write, :can_delete, :created_at, :updated_at);

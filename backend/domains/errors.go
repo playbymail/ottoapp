@@ -14,6 +14,7 @@ const (
 	ErrMissingUserdataPath = Error("missing userdata path")
 	ErrNotDirectory        = Error("not a directory")
 	ErrNotExists           = Error("does not exist")
+	ErrNotFound            = Error("not found")
 	ErrNotImplemented      = Error("not implemented")
 	ErrOpenFailed          = Error("open failed")
 	ErrReadFailed          = Error("read failed")
