@@ -4,14 +4,14 @@ import Base from 'ember-simple-auth/authenticators/base';
 export default class ServerAuthenticator extends Base {
 
   async restore() {
-    console.log('esa', 'app/authenticators/server:restore');
+    // console.log('esa', 'app/authenticators/server:restore');
     const resp = await fetch('/api/session', { credentials: 'include' });
     if (!resp.ok) {
       throw 'not authenticated';
     }
     const json = await resp.json();
     // ESA will persist this whole object
-    console.log('esa', 'app/authenticators/server:restore', json);
+    // console.log('esa', 'app/authenticators/server:restore', json);
     return json;
   }
 

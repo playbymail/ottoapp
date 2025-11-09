@@ -3,5 +3,5 @@
 import Profile from 'frontend/components/profile';
 
 <template>
-  <Profile />
+  <Profile @model={{@model}} />
 </template>

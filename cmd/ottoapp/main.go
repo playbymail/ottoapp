@@ -248,6 +248,7 @@ var cmdApiServe = &cobra.Command{
 			log.Fatalf("[serve] sessionManager: %v\n", err)
 		}
 
+		options = append(options, rest.WithUsersService(usersSvc))
 		s, err := rest.New(sessionsSvc, options...)
 		if err != nil {
 			_ = db.Close()

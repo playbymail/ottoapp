@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/playbymail/ottoapp/backend/users"
 )
 
 type Option func(*Server) error
@@ -64,6 +66,13 @@ func WithTimer(d time.Duration) Option {
 			return fmt.Errorf("invalid shutdown timer")
 		}
 		s.channels.shutdownTimer = d
+		return nil
+	}
+}
+
+func WithUsersService(usersSvc *users.Service) Option {
+	return func(s *Server) error {
+		s.services.usersSvc = usersSvc
 		return nil
 	}
 }

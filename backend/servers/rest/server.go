@@ -14,12 +14,14 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/sessions"
+	"github.com/playbymail/ottoapp/backend/users"
 )
 
 type Server struct {
 	http.Server
 	services struct {
 		sessionsSvc *sessions.Service
+		usersSvc    *users.Service
 	}
 	csrfGuard bool
 	logRoutes bool
