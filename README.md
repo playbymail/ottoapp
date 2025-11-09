@@ -92,6 +92,39 @@ systemctl start ottoapp.service
 journalctl --no-page -u ottoapp
 ```
 
+3. Create a Caddyfile at /etc/caddy/Caddyfile
+
+```text
+ottomap.playbymailgames.com {
+	encode gzip
+
+	# CORS and preflight
+	header Access-Control-Allow-Origin "*"
+	header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+	header Access-Control-Allow-Headers "Content-Type, Authorization"
+
+	@options method OPTIONS
+	respond @options 200
+
+	# API reverse proxy
+	handle /api/* {
+		reverse_proxy http://localhost:8181
+	}
+
+	# Everything else is static, with SPA treatment for the frontend app
+	handle {
+		root * /var/www/dev/ottoapp/emberjs
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/prd-ottoapp.log
+		format json
+	}
+}
+```
+
 ## License
 
 The frontend is built with Tailwind. The styles, components, and javascript are not open source and are not licensed to be used outside of this applicatin.
