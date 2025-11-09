@@ -1,6 +1,6 @@
 # Ottoapp
 
-OttAapp implements the updated version of the OttoMap website.
+OttoApp implements the updated version of the OttoMap website.
 
 ## Project Overview
 
@@ -13,7 +13,7 @@ Ember v6.8 defaults to Vite + Embroider.
 | Layer                  | Technology                                                          | Notes                                                                                  |
 | ---------------------- |---------------------------------------------------------------------|----------------------------------------------------------------------------------------|
 | **Frontend**           | Ember.js (v6.8+)                                                    | Using Ember CLI, Ember Octane idioms, and Ember Simple Auth (ESA) for session handling. |
-| **Backend**            | Go (`net/http`)                                                     | Pure stdlib REST API with cookie-based auth and optional JWTs.                         |
+| **Backend**            | Go (`net/http`)                                                     | Pure stdlib REST API with cookie-based auth.                         |
 | **Web Server / Proxy** | Caddy                                                               | Handles HTTPS, static file serving, and reverse proxying for API requests.             |
 | **Auth**               | Cookie sessions                                                     | Default uses secure, HTTP-only cookies.                                                |
 | **Storage**            | SQLite                                                              | Via `modernc.org/sqlite` — single binary deployment.                                   |
@@ -51,6 +51,34 @@ We have Caddy serving `https://ottoapp.localhost:8443` and forwarding requests t
 Caddy is configured to forward `/api/` routes to the Go API server at `localhost:8181`.
 All other routes are forwarded to EmberJS at `localhost:4200`.
 
+See [CADDY.md](CADDY.md) for Caddy configuration details.
+
+### Development Instance
+
+- Development instance database: `data/alpha`
+- Test users: `penguin` and `catbird`
+- Setup commands and credentials are in `data/users` file
+- **Note:** `data/users` contains live email addresses; treat as private data
+
+### Non-Destructive Testing
+
+To run tests that might alter the database, work on a copy:
+
+```bash
+# Option 1: Use shell copy
+mkdir -p tmp/foo
+cp -r data/alpha/* tmp/foo/
+go run ./cmd/ottoapp -N --db tmp/foo [commands]
+
+# Option 2: Use backup command (creates timestamped backup)
+go run ./cmd/ottoapp --db data/alpha db backup
+mkdir -p tmp
+cp data/alpha/backup-*.db tmp/test.db
+go run ./cmd/ottoapp -N --db tmp [commands]
+```
+
+Note: The backup command will be enhanced to accept an optional output path.
+
 For testing the backend, we can create a new instance on a temporary port.
 We can start the server with a timeout to kill it after a delay.
 We can pass the server a flag to enable a shutdown route to stop the server.
@@ -64,7 +92,7 @@ We can pass the server a flag to enable a shutdown route to stop the server.
 
 ### Running Temporary Instances for Testing
 
-BUG: We can start the server using an in-memory database but we can't configure it yet. We have to implement the "app" commands to load users, reports, etc.
+IMPORTANT: Use the `-N` flag when testing to avoid accidentally picking up a configuration from an `ottoapp.json` file.
 
 Use `:memory:` as the database path to create an in-memory database for testing the server.
 
@@ -99,11 +127,18 @@ $ curl http://127.0.0.1:8181/api/ping
 curl: (7) Failed to connect to 127.0.0.1 port 8181 after 0 ms: Couldn't connect to server
 ```
 
-#### 2. Start the Ember Frontend
+### Start the Ember Frontend
+
+Run Tailwind watch (if it isn't already running)
 
 ```bash
-cd frontend
-npm start
+cd frontend && tailwindcss -i ./tailwind.css -o ./app/styles/app.css --watch
+```
+
+Start the development Ember server (if it isn't already running)
+
+```bash
+cd frontend && npm start
 ```
 
 ## Design Notes
@@ -114,5 +149,4 @@ npm start
 
     * Session cookies are `Secure`, `HttpOnly`, `SameSite=Strict`.
     * TLS always terminated by Caddy.
-    * Secrets configurable via `.env` or environment variables.
 

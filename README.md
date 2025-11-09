@@ -1,134 +1,62 @@
-# ottoapp
-Rewrite of the Ottomap web server for v2
+# OttoApp
 
-## CORS
+Rewrite of the OttoMap web server for v2
 
-Because Caddy fronts both Ember and the Go API at one origin, no CORS is needed and cookies flow automatically.
+## Quick Start
 
-## Build
+### Development
 
-Dev & prod usage with Caddy is simple.
-
-Run Ember in development and the Go server in separate terminals.
+Run the development environment (includes Ember with hot reload, Go with auto-rebuild via Air, and Tailwind watch):
 
 ```bash
-# dev
-ember serve            # :4200 (Caddy will reverse-proxy it)
-go run ./cmd/server    # :8181 (Caddy proxies /api)
-# Caddyfile.dev already set to serve https://ottoapp.localhost
+./tools/run-dev.sh
 ```
 
-Or, if you have `air` installed, use it to watch the Go folder and rebuild automatically.
+This starts:
+- Ember dev server at `:4200` (with hot module reload)
+- Go API server at `:8181` (uses Air for auto-rebuilds on file changes)
+- Tailwind CSS watch (auto-compiles on CSS changes)
 
-Production build creates files in the `frontend/dist/` directory.
+Note: the script assumes that `tailwind` is in your `~/bin`; update as needed.
+
+Access the app at `https://ottoapp.localhost:8443` (Caddy proxies both services).
+
+See [CADDY.md](CADDY.md) for Caddy configuration details.
+
+### Production Build
+
+Build a production distribution tarball:
 
 ```bash
-ember build --environment=production   # outputs to dist/
+./tools/build.sh
 ```
 
-Assuming that we deploy the entire `dist/` folder to `/var/www/ottoapp.mdhenderson.com/dist`, the Caddyfile should be configured to serve `dist/` at `/` and proxy `/api/` to Go.
+This creates a tarball in `dist/prod/ottoapp-{version}.tgz` containing:
+- Linux AMD64 binary
+- Ember production build
 
 ## Testing
 
-If the server's debug.autoLog flag is set,
-
-```curl
-curl https://ottoapp.localhost:8443/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"catbird","password":"secret"}'
-```
-
-If the password is `admin`, or `chief`, the session will be created with the same role.
-Otherwise, the role will be `guest`.
-
-## Deploying
-
-1. Create a systemd service file at `/etc/systemd/system/ottoapp.service`
-
-```text
-[Unit]
-Description=OttoApp dev server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=ottopb
-Group=ottopb
-WorkingDirectory=/var/www/dev/ottoapp/data
-ExecStart=/var/www/dev/ottoapp/ottoapp api serve --db .
-Restart=on-failure
-RestartSec=13
-TimeoutStopSec=30
-
-# Logging
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ottoapp
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/www/dev/ottoapp/data
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictRealtime=true
-RestrictNamespaces=true
-LockPersonality=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-2. Reload systemd, enable and start the service:
+Test the login endpoint:
 
 ```bash
-systemctl daemon-reload
-systemctl enable ottoapp.service
-systemctl start ottoapp.service
-journalctl --no-page -u ottoapp
+curl https://ottoapp.localhost:8443/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"penguin@ottoapp","password":"sardines-mmmmm"}'
 ```
 
-3. Create a Caddyfile at /etc/caddy/Caddyfile
+## Deployment
 
-```text
-ottomap.example.dev {
-	encode gzip
+See [DEPLOYING.md](DEPLOYING.md) for production deployment instructions.
 
-	# CORS and preflight
-	header Access-Control-Allow-Origin "*"
-	header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-	header Access-Control-Allow-Headers "Content-Type, Authorization"
+## Acknowledgements
 
-	@options method OPTIONS
-	respond @options 200
-
-	# API reverse proxy
-	handle /api/* {
-		reverse_proxy http://localhost:8181
-	}
-
-	# Everything else is static, with SPA treatment for the frontend app
-	handle {
-		root * /var/www/dev/ottoapp/emberjs
-		try_files {path} /index.html
-		file_server
-	}
-
-	log {
-		output file /var/log/caddy/prd-ottoapp.log
-		format json
-	}
-}
-```
+This project was developed with assistance from AI tools including Amp (by Sourcegraph) and ChatGPT, which were used throughout the design, implementation, testing, and documentation phases. While these tools provided valuable support, all final decisions, code review, and any errors or omissions remain the responsibility of the project authors.
 
 ## License
 
-The frontend is built with Tailwind. The styles, components, and javascript are not open source and are not licensed to be used outside of this applicatin.
+The frontend is built with Tailwind. The styles, components, and javascript are not open source and are not licensed to be used outside of this application.
 
 Proprietary License | https://tailwindcss.com/plus/license
 * tailwindplus/blocks
-* tailwindplus/elements 
+* tailwindplus/elements

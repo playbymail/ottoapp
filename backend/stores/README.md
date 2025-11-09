@@ -11,7 +11,7 @@ This repo is organized so that:
 - **`backend/<feature>`** (e.g. `auth`, `users`, `documents`, `sessions`) = business logic for that feature, built on top of the SQLite store and domain types
 - **`frontend/`** = EmberJS app
 
-That separation keeps the SQLite package from turning into a giant catch-all and makes “future me” happier when I have to change how auth works.
+That separation keeps the SQLite package from turning into a giant catch-all and makes "future me" happier when I have to change how auth works.
 
 ---
 
@@ -90,31 +90,31 @@ func (d *DB) Queries() *sqlc.Queries { return d.q }
 func (d *DB) Stdlib() *sql.DB        { return d.db }
 ```
 
-That’s intentionally small. Other packages should **take** this DB and do their work there.
+That's intentionally small. Other packages should **take** this DB and do their work there.
 
 ---
 
 ## Why Separate SQLite From Features?
 
-There were a bunch of feature-y files in here:
+Feature logic now lives in separate packages:
 
-* `auth.go`
-* `users.go`
-* `documents.go`
-* `sessions.go`
+* `backend/auth/service.go` - authentication logic
+* `backend/users/service.go` - user management logic
+* `backend/documents/service.go` - document management logic
+* `backend/sessions/service.go` - session management logic
 
-They were convenient to write on the DB type, but over time they make the package too big and too “search-unfriendly.” Splitting them out has a few advantages:
+This separation has several advantages:
 
 1. **You always know where to look.**
    Auth change? Go to `backend/auth`.
    Document change? Go to `backend/documents`.
-   No more “where did I hang this helper on the DB?”
+   No more "where did I hang this helper on the DB?"
 
 2. **SQLite stays infrastructure.**
-   This folder is now about “how we talk to SQLite,” not “how we do auth.”
+   This folder is now about "how we talk to SQLite," not "how we do auth."
 
 3. **Domains stay central.**
-   `backend/domains` gives all feature packages a shared vocabulary, so you don’t end up with slightly different `User` shapes all over the place.
+   `backend/domains` gives all feature packages a shared vocabulary, so you don't end up with slightly different `User` shapes all over the place.
 
 4. **Clean dependency direction.**
 
@@ -158,7 +158,7 @@ Each service returns or accepts types from `backend/domains`, so everything abov
 
 ## Example: Adding a New Feature
 
-Let’s say we want “notifications.”
+Let's say we want "notifications."
 
 1. **Add SQL** to `backend/stores/sqlite/sqlc/notifications.sql`:
 
@@ -236,44 +236,10 @@ That pattern (SQL → sqlc → domains → feature) is the whole point of this l
 
 ---
 
-## TODO: Refactor Checklist
-
-Use this while you’re in the IDE so you don’t have to jump back here.
-
-### Keep infra here
-
-* [x] Keep `db.go`, `open.go`, `init.go`, `config.go`, `migrations.go`, `backup.go`, `compact.go` in `backend/stores/sqlite/`
-* [x] Keep `sqlc/` and `sqlc.yaml` here
-* [x] Keep `migrations/` here
-
-### Move feature logic out of sqlite
-
-* [ ] Move `backend/stores/sqlite/auth.go` → `backend/auth/service.go`
-* [ ] Move `backend/stores/sqlite/users.go` → `backend/users/service.go`
-* [ ] Move `backend/stores/sqlite/documents.go` → `backend/documents/service.go`
-* [ ] Move `backend/stores/sqlite/sessions.go` → `backend/sessions/service.go`
-
-### Make them use domains
-
-* [ ] Ensure all moved services import `backend/domains` for shared structs and errors
-* [ ] Convert return types to domain types where appropriate (e.g. `*domains.User_t`)
-
-### Update constructors / wiring
-
-* [ ] Each new feature package: `func New(db *sqlite.DB) *Service`
-* [ ] Update your HTTP handlers / CLI commands to use these new services
-
-### Verify
-
-* [ ] `go test ./...`
-* [ ] `go build ./cmd/ottoapp`
-
----
-
 **Bottom line:**
 
 * `backend/domains` defines what the app *talks about*
 * `backend/stores/sqlite` defines how we *store* it
 * `backend/<feature>` defines what we *do* with it
 
-That’s why we’re doing it this way.
+That's why we're doing it this way.
