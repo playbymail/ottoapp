@@ -41,6 +41,57 @@ curl https://ottoapp.localhost:8443/api/login \
 If the password is `admin`, or `chief`, the session will be created with the same role.
 Otherwise, the role will be `guest`.
 
+## Deploying
+
+1. Create a systemd service file at `/etc/systemd/system/ottoapp.service`
+
+```text
+[Unit]
+Description=OttoApp dev server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ottopb
+Group=ottopb
+WorkingDirectory=/var/www/dev/ottoapp/data
+ExecStart=/var/www/dev/ottoapp/ottoapp api serve --db .
+Restart=on-failure
+RestartSec=13
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ottoapp
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/dev/ottoapp/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+2. Reload systemd, enable and start the service:
+
+```bash
+systemctl daemon-reload
+systemctl enable ottoapp.service
+systemctl start ottoapp.service
+journalctl --no-page -u ottoapp
+```
+
 ## License
 
 The frontend is built with Tailwind. The styles, components, and javascript are not open source and are not licensed to be used outside of this applicatin.

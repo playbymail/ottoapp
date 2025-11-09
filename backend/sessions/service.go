@@ -188,26 +188,26 @@ func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Email, body.Password)
+	//log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Email, body.Password)
 	userID, err := s.authSvc.AuthenticateWithEmailSecret(body.Email, body.Password)
 	if err != nil {
-		log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
+		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 	user, err := s.usersSvc.GetUserByID(userID)
 	if err != nil {
-		log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
+		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	user.Roles, err = s.authSvc.GetUserRoles(user.ID)
 	if err != nil {
-		log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
+		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("%s %s: user %q: roles %+v: authenticated\n", r.Method, r.URL.Path, user.Username, user.Roles)
+	//log.Printf("%s %s: user %q: roles %+v: authenticated\n", r.Method, r.URL.Path, user.Username, user.Roles)
 
 	sess, err := s.CreateSession(user, s.ttl)
 	if err != nil {
