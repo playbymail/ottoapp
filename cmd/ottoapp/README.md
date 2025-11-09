@@ -66,17 +66,38 @@ ottoapp db backup
 
 This creates a clean, single-file copy (e.g., `backup-20250109-150405.db`) with no WAL sidecars.
 
-**Using backups for testing:**
+**Backup to a specific directory:**
 
 ```bash
-# Create a backup and test against a copy
-ottoapp --db data/alpha db backup
-mkdir -p tmp
-cp data/alpha/backup-*.db tmp/test.db
-ottoapp -N --db tmp [test commands]
+ottoapp --db data/alpha db backup --output tmp
 ```
 
-Note: Future enhancement will support an optional output path.
+The output directory must exist (will not be created).
+
+### Clone
+
+Clone the database to a working copy for testing:
+
+```bash
+mkdir -p tmp/test
+ottoapp --db data/alpha db clone tmp/test
+```
+
+This creates `tmp/test/ottoapp.db` - a clean, single-file copy with no WAL sidecars.
+
+Safety features:
+- Output directory must exist (will not be created)
+- Refuses to overwrite if `ottoapp.db` already exists in output directory
+- Source and destination paths must be different
+
+**Using clones for testing:**
+
+```bash
+mkdir -p tmp/test
+ottoapp --db data/alpha db clone tmp/test
+ottoapp -N --db tmp/test [test commands]
+rm -rf tmp/test
+```
 
 ### Compact
 

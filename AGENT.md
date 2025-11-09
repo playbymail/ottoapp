@@ -65,19 +65,22 @@ See [CADDY.md](CADDY.md) for Caddy configuration details.
 To run tests that might alter the database, work on a copy:
 
 ```bash
-# Option 1: Use shell copy
+# Option 1: Use db clone command (recommended for testing)
+mkdir -p tmp/test
+go run ./cmd/ottoapp --db data/alpha db clone tmp/test
+go run ./cmd/ottoapp -N --db tmp/test [commands]
+rm -rf tmp/test
+
+# Option 2: Use shell copy
 mkdir -p tmp/foo
 cp -r data/alpha/* tmp/foo/
 go run ./cmd/ottoapp -N --db tmp/foo [commands]
 
-# Option 2: Use backup command (creates timestamped backup)
-go run ./cmd/ottoapp --db data/alpha db backup
+# Option 3: Use backup command (creates timestamped backup)
 mkdir -p tmp
-cp data/alpha/backup-*.db tmp/test.db
+go run ./cmd/ottoapp --db data/alpha db backup --output tmp
 go run ./cmd/ottoapp -N --db tmp [commands]
 ```
-
-Note: The backup command will be enhanced to accept an optional output path.
 
 For testing the backend, we can create a new instance on a temporary port.
 We can start the server with a timeout to kill it after a delay.

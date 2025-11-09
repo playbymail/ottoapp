@@ -2,6 +2,7 @@
 *.db
 *.db-shm
 *.db-wal
+*.exe
 *.gz
 *.lcov
 *.log
@@ -37,6 +38,7 @@ data/
 logs/
 node_modules/
 npm-debug.log*
+/ottoapp
 ottoapp.json
 tmp/
 web_modules/

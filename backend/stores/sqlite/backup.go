@@ -12,11 +12,14 @@ import (
 	"time"
 )
 
-// Backup creates a compact, consistent backup into the database path.
+// Backup creates a compact, consistent backup.
 // It uses VACUUM INTO, so the result is a single .db file with no sidecars.
 //
+// If outputPath is empty, the backup is created in the database path.
+// If outputPath is provided, it must exist (will not be created).
+//
 // It's safest if the server is not running during the backup.
-func Backup(ctx context.Context, path string, debug bool) (string, error) {
+func Backup(ctx context.Context, path string, outputPath string, debug bool) (string, error) {
 	started := time.Now()
 	wdb, err := Open(ctx, path, false, debug)
 	if err != nil {
@@ -40,8 +43,23 @@ func Backup(ctx context.Context, path string, debug bool) (string, error) {
 		}
 	}
 
+	// Determine output directory
+	backupDir := path
+	if outputPath != "" {
+		// Verify output path exists
+		if info, err := os.Stat(outputPath); err != nil {
+			if os.IsNotExist(err) {
+				return "", fmt.Errorf("backup: output path does not exist: %s", outputPath)
+			}
+			return "", fmt.Errorf("backup: cannot access output path: %w", err)
+		} else if !info.IsDir() {
+			return "", fmt.Errorf("backup: output path is not a directory: %s", outputPath)
+		}
+		backupDir = outputPath
+	}
+
 	ts := started.UTC().Format("20060102-150405")
-	bkup := filepath.Join(path, fmt.Sprintf("backup-%s.db", ts))
+	bkup := filepath.Join(backupDir, fmt.Sprintf("backup-%s.db", ts))
 	tmp := bkup + ".part"
 	_ = os.Remove(tmp) // best-effort cleanup
 

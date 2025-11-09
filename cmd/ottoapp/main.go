@@ -114,6 +114,8 @@ func main() {
 	}
 	cmdRoot.AddCommand(cmdDb)
 	cmdDb.AddCommand(cmdDbBackup)
+	cmdDbBackup.Flags().String("output", "", "path to directory for backup file (must exist)")
+	cmdDb.AddCommand(cmdDbClone)
 	cmdDb.AddCommand(cmdDbCompact)
 	cmdDb.AddCommand(cmdDbCreate)
 	cmdDb.AddCommand(cmdDbInit)
@@ -279,19 +281,47 @@ var cmdAppVersion = &cobra.Command{
 }
 
 var cmdDbBackup = &cobra.Command{
-	Use:   "backup",
-	Short: "Backup the database",
-	Long:  `Backup the database.`,
+	Use:          "backup",
+	Short:        "Backup the database",
+	Long:         `Backup the database.`,
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		name, err := sqlite.Backup(context.Background(), path, false)
+		outputPath, err := cmd.Flags().GetString("output")
 		if err != nil {
-			log.Fatalf("db: backup: %v\n", err)
+			return err
+		}
+
+		name, err := sqlite.Backup(context.Background(), path, outputPath, false)
+		if err != nil {
+			return fmt.Errorf("backup failed: %w", err)
 		}
 		log.Printf("db: %s: backup\n", name)
+		return nil
+	},
+}
+
+var cmdDbClone = &cobra.Command{
+	Use:          "clone <output-directory>",
+	Short:        "Clone the database for testing",
+	Long:         `Clone the database to a working copy for testing. Creates ottoapp.db in the output directory.`,
+	SilenceUsage: true,
+	Args:         cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		outputPath := args[0]
+
+		clonePath, err := sqlite.Clone(context.Background(), path, outputPath, false)
+		if err != nil {
+			return fmt.Errorf("clone failed: %w", err)
+		}
+		log.Printf("db: %s: cloned\n", clonePath)
 		return nil
 	},
 }
