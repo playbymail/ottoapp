@@ -1,6 +1,6 @@
 # Ottoapp
 
-Ottoapp implements the updated version of the Ottomap website (currently hosted at https://ottomap.mdhenderson.com).
+OttAapp implements the updated version of the OttoMap website.
 
 ## Project Overview
 
@@ -32,7 +32,7 @@ Ember v6.8 defaults to Vite + Embroider.
     3. Ember Simple Auth manages session state.
     4. Backend checks session cookie for all protected routes.
     5. `/api/session` lets ESA restore or validate the session.
-    6. `/api/logout` clears the session cookie.
+    6. POST `/api/logout` clears the session cookie.
 
 * **Caddy Integration:**
 
@@ -44,11 +44,6 @@ Ember v6.8 defaults to Vite + Embroider.
 
 * cmd/gentz - rebuild the IANA timezone database if needed
 * cmd/ottoapp - manage the database, start the server, and use the API to run commands
-* cmd/ottomap - parse and render files locally
-
-Use `cmd/ottoapp` for testing the database and the API service.
-
-Use `cmd/ottomap` for testing the parsing and rendering packages using inputs on the file system.
 
 ## Development Setup
 
@@ -69,10 +64,12 @@ We can pass the server a flag to enable a shutdown route to stop the server.
 
 ### Running Temporary Instances for Testing
 
+BUG: We can start the server using an in-memory database but we can't configure it yet. We have to implement the "app" commands to load users, reports, etc.
+
 Use `:memory:` as the database path to create an in-memory database for testing the server.
 
 ```bash
-$ go run ./cmd/ottoapp server serve --db :memory: --port 8181 &
+$ go run ./cmd/ottoapp -N api serve --db :memory: --port 8181 &
 $ sleep 1 # let the database initialize
 $ curl http://127.0.0.1:8181/api/ping
 {"status":"ok","msg":"pong"}%
@@ -81,7 +78,7 @@ $ curl http://127.0.0.1:8181/api/ping
 Set the shutdown timer flag stop the server after a short duration.
 
 ```bash
-$ go run ./cmd/ottoapp server serve --db :memory: --shutdown-timer 1m &
+$ go run ./cmd/ottoapp -N api serve --db :memory: --shutdown-timer 1m &
 $ sleep 1 # let the database initialize
 $ curl http://127.0.0.1:8181/api/ping
 {"status":"ok","msg":"pong"}%
@@ -93,7 +90,7 @@ curl: (7) Failed to connect to 127.0.0.1 port 8181 after 0 ms: Couldn't connect 
 Or set the key for the `/api/shutdown` route to stop the test instance on demand.
 
 ```bash
-$ go run ./cmd/ottoapp server serve --db :memory: --shutdown-key foo &
+$ go run ./cmd/ottoapp -N api serve --db :memory: --shutdown-key foo &
 $ sleep 1 # let the database initialize
 $ curl -H "Content-Type: application/json" -d '{"key": "foo"}' http://127.0.0.1:8181/api/shutdown
 {"status":"ok","msg":"shutdown initiated"}
