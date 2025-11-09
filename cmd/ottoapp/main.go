@@ -42,6 +42,10 @@ func main() {
 		Short: "OttoMap command runner",
 		Long:  `OttoApp runs commands for OttoMap.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			ignoreConfigFile, _ := cmd.Flags().GetBool("ignore-config-file")
+			if ignoreConfigFile {
+				return nil
+			}
 			debugConfig := false
 			if cmd.Flags().Changed("debug-config") {
 				debugConfig = true
@@ -77,6 +81,7 @@ func main() {
 	cmdRoot.PersistentFlags().Bool("debug-config", false, "show config binding sources")
 	cmdRoot.PersistentFlags().Bool("dump-config", false, "dump config after binding")
 	cmdRoot.PersistentFlags().Bool("dump-resolved-config", false, "dump resolved config after binding")
+	cmdRoot.PersistentFlags().BoolP("ignore-config-file", "N", false, "ignore ottoapp.json file")
 
 	var cmdApi = &cobra.Command{
 		Use:   "api",
