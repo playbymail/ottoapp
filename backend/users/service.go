@@ -158,6 +158,22 @@ func (s *Service) GetUserByHandle(handle string) (*domains.User_t, error) {
 	return user, nil
 }
 
+func (s *Service) GetUserIDByEmail(email string) (domains.ID, error) {
+	id, err := s.db.Queries().GetUserIDByEmail(s.db.Context(), email)
+	if err != nil {
+		return domains.InvalidID, err
+	}
+	return domains.ID(id), nil
+}
+
+func (s *Service) GetUserIDByHandle(handle string) (domains.ID, error) {
+	id, err := s.db.Queries().GetUserIDByHandle(s.db.Context(), handle)
+	if err != nil {
+		return domains.InvalidID, err
+	}
+	return domains.ID(id), nil
+}
+
 // GetUserByID returns the user data associated with the given ID.
 // If the user does not exist, it returns an error.
 func (s *Service) GetUserByID(userID domains.ID) (*domains.User_t, error) {

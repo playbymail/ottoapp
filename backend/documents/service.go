@@ -15,18 +15,20 @@ import (
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
+	"github.com/playbymail/ottoapp/backend/users"
 )
 
 // Service provides document management operations.
 type Service struct {
-	db *sqlite.DB
+	db       *sqlite.DB
+	usersSvc *users.Service
 }
 
-func New(db *sqlite.DB) *Service {
-	return &Service{db: db}
+func New(db *sqlite.DB, usersSvc *users.Service) *Service {
+	return &Service{db: db, usersSvc: usersSvc}
 }
 
-func (s *Service) CreateDocument(doc *domains.Document) (domains.ID, error) {
+func (s *Service) CreateDocument(doc *domains.Document, owner string) (domains.ID, error) {
 	ctx := s.db.Context()
 
 	// don't trust the caller on important metadata
@@ -36,15 +38,20 @@ func (s *Service) CreateDocument(doc *domains.Document) (domains.ID, error) {
 		return domains.InvalidID, errors.Join(domains.ErrHashFailed, err)
 	}
 
+	var userId, createdById domains.ID
+	if owner == "sysop" {
+		userId, createdById = 1, 1 // sysop
+	} else if userId, err = s.usersSvc.GetUserIDByHandle(owner); err != nil {
+		return domains.InvalidID, errors.Join(domains.ErrInvalidUserId, err)
+	}
+
 	// start transaction
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
-		return 0, err
+		return domains.InvalidID, err
 	}
 	// rollback if we return early; harmless after commit
 	defer tx.Rollback()
-
-	userId, createdById := int64(1), int64(1) // sysop
 
 	qtx := s.db.Queries().WithTx(tx)
 
@@ -71,9 +78,9 @@ func (s *Service) CreateDocument(doc *domains.Document) (domains.ID, error) {
 	}
 	err = qtx.CreateDocumentAcl(s.db.Context(), sqlc.CreateDocumentAclParams{
 		DocumentID:   id,
-		UserID:       userId,
+		UserID:       int64(userId),
 		DocumentName: doc.Path,
-		CreatedBy:    createdById,
+		CreatedBy:    int64(createdById),
 		IsOwner:      true,
 		CanRead:      true,
 		CanWrite:     true,
@@ -93,7 +100,7 @@ func (s *Service) CreateDocument(doc *domains.Document) (domains.ID, error) {
 }
 
 // LoadDocxFromFS loads the file, creates a Document, and returns the document ID.
-func (s *Service) LoadDocxFromFS(path string) (domains.ID, error) {
+func (s *Service) LoadDocxFromFS(path, name, owner string) (domains.ID, error) {
 	// Stat first so we can validate the path and get size/timestamps.
 	sb, err := os.Stat(path)
 	if err != nil {
@@ -110,13 +117,16 @@ func (s *Service) LoadDocxFromFS(path string) (domains.ID, error) {
 		return domains.InvalidID, errors.Join(domains.ErrReadFailed, err)
 	}
 
+	if name == "" {
+		name = path
+	}
 	doc := &domains.Document{
-		Path:     path, // not tainted since we trust our admin
+		Path:     name,
 		MimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		Contents: data,
 	}
 
-	return s.CreateDocument(doc)
+	return s.CreateDocument(doc, owner)
 }
 
 // LoadDocxFromRequest loads a document from an http.Request.

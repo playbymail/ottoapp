@@ -95,7 +95,7 @@ journalctl --no-page -u ottoapp
 3. Create a Caddyfile at /etc/caddy/Caddyfile
 
 ```text
-ottomap.playbymailgames.com {
+ottomap.example.dev {
 	encode gzip
 
 	# CORS and preflight

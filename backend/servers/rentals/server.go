@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/services/rentals"
+	"github.com/playbymail/ottoapp/backend/rentals"
 )
 
 func runServer() {

@@ -78,6 +78,22 @@ func main() {
 	cmdRoot.PersistentFlags().Bool("dump-config", false, "dump config after binding")
 	cmdRoot.PersistentFlags().Bool("dump-resolved-config", false, "dump resolved config after binding")
 
+	var cmdApi = &cobra.Command{
+		Use:   "api",
+		Short: "API server commands",
+	}
+	cmdRoot.AddCommand(cmdApi)
+	cmdApi.AddCommand(cmdApiServe)
+	cmdApiServe.Flags().Bool("csrf-guard", false, "enable csrf guards")
+	cmdApiServe.Flags().String("host", "localhost", "change the bind network")
+	cmdApiServe.Flags().Bool("log-routes", false, "enable route logging")
+	cmdApiServe.Flags().String("port", "8181", "change the bind port")
+	cmdApiServe.Flags().Duration("sessions-reap-interval", 15*time.Minute, "interval to remove expired sessions")
+	cmdApiServe.Flags().Duration("sessions-ttl", 24*time.Hour, "session duration")
+	cmdApiServe.Flags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
+	cmdApiServe.Flags().String("shutdown-key", "", "api key authorizing shutdown")
+	cmdApiServe.Flags().Duration("shutdown-timer", 0, "timer to shut server down")
+
 	var cmdApp = &cobra.Command{
 		Use:   "app",
 		Short: "application management commands",
@@ -108,23 +124,10 @@ func main() {
 		Short: "report management",
 	}
 	cmdRoot.AddCommand(cmdReport)
+	cmdReport.AddCommand(cmdReportParse)
 	cmdReport.AddCommand(cmdReportUpload)
-
-	var cmdApi = &cobra.Command{
-		Use:   "api",
-		Short: "API server commands",
-	}
-	cmdRoot.AddCommand(cmdApi)
-	cmdApi.AddCommand(cmdApiServe)
-	cmdApiServe.Flags().Bool("csrf-guard", false, "enable csrf guards")
-	cmdApiServe.Flags().String("host", "localhost", "change the bind network")
-	cmdApiServe.Flags().Bool("log-routes", false, "enable route logging")
-	cmdApiServe.Flags().String("port", "8181", "change the bind port")
-	cmdApiServe.Flags().Duration("sessions-reap-interval", 15*time.Minute, "interval to remove expired sessions")
-	cmdApiServe.Flags().Duration("sessions-ttl", 24*time.Hour, "session duration")
-	cmdApiServe.Flags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
-	cmdApiServe.Flags().String("shutdown-key", "", "api key authorizing shutdown")
-	cmdApiServe.Flags().Duration("shutdown-timer", 0, "timer to shut server down")
+	cmdReportUpload.Flags().String("name", "", "overwrite the file name after uploading")
+	cmdReportUpload.Flags().String("owner", "sysop", "user to assign ownership to")
 
 	var cmdUser = &cobra.Command{
 		Use:   "user",
@@ -162,6 +165,95 @@ func main() {
 	if err := cmdRoot.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+var cmdApiServe = &cobra.Command{
+	Use:   "serve",
+	Short: "start the API server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+
+		var options []rest.Option
+		if value, err := cmd.Flags().GetBool("csrf-guard"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithCsrfGuard(value))
+		}
+		if value, err := cmd.Flags().GetString("host"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithHost(value))
+		}
+		if value, err := cmd.Flags().GetBool("log-routes"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithRouteLogging(value))
+		}
+		if value, err := cmd.Flags().GetString("port"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithPort(value))
+		}
+		if value, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
+			return err
+		} else if value != 0 {
+			options = append(options, rest.WithGrace(value))
+		}
+		if cmd.Flags().Changed("shutdown-key") {
+			if value, err := cmd.Flags().GetString("shutdown-key"); err != nil {
+				return err
+			} else {
+				options = append(options, rest.WithShutdownKey(value))
+			}
+		}
+		if value, err := cmd.Flags().GetDuration("shutdown-timer"); err != nil {
+			return err
+		} else if value != 0 {
+			options = append(options, rest.WithTimer(value))
+		}
+
+		log.Printf("[serve] db %q\n", path)
+		ctx := context.Background()
+		var db *sqlite.DB
+		if path == ":memory:" {
+			// server has the ability to use a temporary database for testing.
+			db, err = sqlite.OpenTempDB(ctx)
+		} else {
+			db, err = sqlite.Open(ctx, path, true, false)
+		}
+		if err != nil {
+			log.Fatalf("[serve] db: open: %v\n", err)
+		}
+		defer func() {
+			log.Printf("[serve] db: close\n")
+			_ = db.Close()
+		}()
+
+		authSvc := auth.New(db)            // uses sqlite + domains
+		usersSvc := users.New(db, authSvc) // uses sqlite + domains
+
+		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
+		if err != nil {
+			_ = db.Close()
+			log.Fatalf("[serve] sessionManager: %v\n", err)
+		}
+
+		s, err := rest.New(sessionsSvc, options...)
+		if err != nil {
+			_ = db.Close()
+			log.Fatalf("[serve] rest: %v\n", err)
+		}
+		err = s.Run()
+		if err != nil {
+			_ = db.Close()
+			log.Fatalf("[serve] rest: %v\n", err)
+		}
+
+		return nil
+	},
 }
 
 var cmdAppVersion = &cobra.Command{
@@ -347,6 +439,13 @@ var cmdDbVersion = &cobra.Command{
 	},
 }
 
+var cmdReportParse = &cobra.Command{
+	Use:   "parse <documentID>",
+	Short: "Parse a turn report document",
+	Long:  `Parse a turn report that has been uploaded to the server.`,
+	Args:  cobra.ExactArgs(1), // require document id
+}
+
 var cmdReportUpload = &cobra.Command{
 	Use:   "upload <document>",
 	Short: "Upload a new turn report",
@@ -368,6 +467,18 @@ var cmdReportUpload = &cobra.Command{
 		if ext := filepath.Ext(path); strings.ToLower(ext) != ".docx" {
 			log.Fatalf("report: ext %q: not a DOCX file\n", path)
 		}
+		var name string
+		if cmd.Flags().Changed("name") {
+			if value, err := cmd.Flags().GetString("name"); err != nil {
+				return err
+			} else {
+				name = value
+			}
+		}
+		owner, err := cmd.Flags().GetString("owner")
+		if err != nil {
+			return err
+		}
 
 		ctx := context.Background()
 		db, err := sqlite.Open(ctx, dbPath, true, debug)
@@ -378,103 +489,24 @@ var cmdReportUpload = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		docSvc := documents.New(db)
-		docId, err := docSvc.LoadDocxFromFS(path)
+		if name == "" {
+			name = path
+		}
+		if owner == "" {
+			owner = "sysop"
+		}
+
+		authSvc := auth.New(db)
+		usersSvc := users.New(db, authSvc)
+		docSvc := documents.New(db, usersSvc)
+
+		docId, err := docSvc.LoadDocxFromFS(path, name, owner)
 		if err != nil {
 			log.Fatalf("%q: %v\n", path, err)
 		}
 
 		log.Printf("report: docId %d: upload: completed in %v\n", docId, time.Since(startedAt))
 		return domains.ErrNotImplemented
-	},
-}
-
-var cmdApiServe = &cobra.Command{
-	Use:   "serve",
-	Short: "start the API server",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := cmd.Flags().GetString("db")
-		if err != nil {
-			return err
-		}
-
-		var options []rest.Option
-		if value, err := cmd.Flags().GetBool("csrf-guard"); err != nil {
-			return err
-		} else {
-			options = append(options, rest.WithCsrfGuard(value))
-		}
-		if value, err := cmd.Flags().GetString("host"); err != nil {
-			return err
-		} else {
-			options = append(options, rest.WithHost(value))
-		}
-		if value, err := cmd.Flags().GetBool("log-routes"); err != nil {
-			return err
-		} else {
-			options = append(options, rest.WithRouteLogging(value))
-		}
-		if value, err := cmd.Flags().GetString("port"); err != nil {
-			return err
-		} else {
-			options = append(options, rest.WithPort(value))
-		}
-		if value, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
-			return err
-		} else if value != 0 {
-			options = append(options, rest.WithGrace(value))
-		}
-		if cmd.Flags().Changed("shutdown-key") {
-			if value, err := cmd.Flags().GetString("shutdown-key"); err != nil {
-				return err
-			} else {
-				options = append(options, rest.WithShutdownKey(value))
-			}
-		}
-		if value, err := cmd.Flags().GetDuration("shutdown-timer"); err != nil {
-			return err
-		} else if value != 0 {
-			options = append(options, rest.WithTimer(value))
-		}
-
-		log.Printf("[serve] db %q\n", path)
-		ctx := context.Background()
-		var db *sqlite.DB
-		if path == ":memory:" {
-			// server has the ability to use a temporary database for testing.
-			db, err = sqlite.OpenTempDB(ctx)
-		} else {
-			db, err = sqlite.Open(ctx, path, true, false)
-		}
-		if err != nil {
-			log.Fatalf("[serve] db: open: %v\n", err)
-		}
-		defer func() {
-			log.Printf("[serve] db: close\n")
-			_ = db.Close()
-		}()
-
-		authSvc := auth.New(db)            // uses sqlite + domains
-		usersSvc := users.New(db, authSvc) // uses sqlite + domains
-
-		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
-		if err != nil {
-			_ = db.Close()
-			log.Fatalf("[serve] sessionManager: %v\n", err)
-		}
-
-		s, err := rest.New(sessionsSvc, options...)
-		if err != nil {
-			_ = db.Close()
-			log.Fatalf("[serve] rest: %v\n", err)
-		}
-		err = s.Run()
-		if err != nil {
-			_ = db.Close()
-			log.Fatalf("[serve] rest: %v\n", err)
-		}
-
-		return nil
 	},
 }
 

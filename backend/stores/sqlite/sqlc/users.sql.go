@@ -129,6 +129,32 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 	return i, err
 }
 
+const getUserIDByEmail = `-- name: GetUserIDByEmail :one
+SELECT user_id
+FROM users
+WHERE email = ?1
+`
+
+func (q *Queries) GetUserIDByEmail(ctx context.Context, email string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getUserIDByEmail, email)
+	var user_id int64
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const getUserIDByHandle = `-- name: GetUserIDByHandle :one
+SELECT user_id
+FROM users
+WHERE handle = ?1
+`
+
+func (q *Queries) GetUserIDByHandle(ctx context.Context, handle string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getUserIDByHandle, handle)
+	var user_id int64
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const updateUser = `-- name: UpdateUser :exec
 UPDATE users
 SET email      = ?1,

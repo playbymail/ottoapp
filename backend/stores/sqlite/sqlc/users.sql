@@ -54,6 +54,16 @@ SELECT user_id,
 FROM users
 WHERE handle = :handle;
 
+-- name: GetUserIDByEmail :one
+SELECT user_id
+FROM users
+WHERE email = :email;
+
+-- name: GetUserIDByHandle :one
+SELECT user_id
+FROM users
+WHERE handle = :handle;
+
 -- UpdateUser updates the given user.
 --
 -- name: UpdateUser :exec
