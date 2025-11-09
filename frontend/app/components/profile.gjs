@@ -1,15 +1,19 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
-import { action } from "@ember/object";
-import { service } from "@ember/service";
-import { on } from "@ember/modifier";
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import { on } from '@ember/modifier';
+
+import TimezonePicker  from 'frontend/components/timezone-picker';
+
 
 export default class Profile extends Component {
   @service session;
 
   @tracked email = "";
+  @tracked timezone = "";
   @tracked isSaving = false;
   @tracked errorMessages = [];
   @tracked successMessage = "";
@@ -17,6 +21,7 @@ export default class Profile extends Component {
   constructor() {
     super(...arguments);
     this.email = this.args.model?.email || "";
+    this.timezone = this.args.model?.timezone || "";
   }
 
   get profile() {
@@ -24,7 +29,7 @@ export default class Profile extends Component {
   }
 
   get hasChanges() {
-    return this.email !== this.profile.email;
+    return this.email !== this.profile.email || this.timezone !== this.profile.timezone;
   }
 
   get username() {
@@ -34,6 +39,13 @@ export default class Profile extends Component {
   @action
   updateEmail(event) {
     this.email = event.target.value;
+    this.errorMessages = [];
+    this.successMessage = "";
+  }
+
+  @action
+  updateTimezone(label) {
+    this.timezone = label;
     this.errorMessages = [];
     this.successMessage = "";
   }
@@ -64,6 +76,7 @@ export default class Profile extends Component {
         credentials: 'same-origin',
         body: JSON.stringify({
           email: this.email,
+          timezone: this.timezone,
         }),
       });
 
@@ -79,6 +92,7 @@ export default class Profile extends Component {
       this.args.model.email = data.email;
       this.args.model.timezone = data.timezone;
       this.email = data.email;
+      this.timezone = data.timezone;
       this.successMessage = "Profile updated successfully";
 
       // Auto-dismiss success message after 3 seconds
@@ -95,6 +109,7 @@ export default class Profile extends Component {
   @action
   cancel() {
     this.email = this.profile.email;
+    this.timezone = this.profile.timezone;
     this.errorMessages = [];
     this.successMessage = "";
   }
@@ -104,7 +119,9 @@ export default class Profile extends Component {
       <div class="space-y-12 sm:space-y-16">
         <div>
           <h2 class="text-base/7 font-semibold text-gray-900">Profile</h2>
-          <p class="mt-1 max-w-2xl text-sm/6 text-gray-600">This information will be displayed publicly so be careful what you share.</p>
+          <p class="mt-1 max-w-2xl text-sm/6 text-gray-600">
+            The information in this section will be displayed publicly, so be careful what you share.
+          </p>
 
           <div class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
@@ -125,7 +142,10 @@ export default class Profile extends Component {
 
         <div>
           <h2 class="text-base/7 font-semibold text-gray-900">Personal Information</h2>
-          <p class="mt-1 max-w-2xl text-sm/6 text-gray-600">Use a permanent address where you can receive mail.</p>
+          <p class="mt-1 max-w-2xl text-sm/6 text-gray-600">
+            The information is this section is not shared.
+            Use a permanent address where you can receive mail.
+          </p>
 
           <div class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
@@ -146,13 +166,9 @@ export default class Profile extends Component {
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
               <label for="timezone" class="block text-sm/6 font-medium text-gray-900 sm:pt-1.5">Timezone</label>
               <div class="mt-2 sm:col-span-2 sm:mt-0">
-                <input
-                  id="timezone"
-                  type="text"
-                  name="timezone"
-                  value={{this.profile.timezone}}
-                  disabled
-                  class="block w-full rounded-md bg-gray-50 px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 sm:max-w-xs sm:text-sm/6"
+                <TimezonePicker
+                  @value={{this.timezone}}
+                  @onChange={{this.updateTimezone}}
                 />
               </div>
             </div>

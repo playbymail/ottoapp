@@ -240,7 +240,7 @@ var cmdApiServe = &cobra.Command{
 		}()
 
 		authSvc := auth.New(db) // uses sqlite + domains
-		tzSvc := iana.New(db)
+		tzSvc, err := iana.New(db)
 		usersSvc := users.New(db, authSvc, tzSvc) // uses sqlite + domains
 
 		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
@@ -535,7 +535,7 @@ var cmdReportUpload = &cobra.Command{
 		}
 
 		authSvc := auth.New(db)
-		tzSvc := iana.New(db)
+		tzSvc, err := iana.New(db)
 		usersSvc := users.New(db, authSvc, tzSvc)
 		docSvc := documents.New(db, usersSvc)
 
@@ -606,7 +606,7 @@ var cmdUserCreate = &cobra.Command{
 		}()
 
 		authSvc := auth.New(db)
-		tzSvc := iana.New(db)
+		tzSvc, err := iana.New(db)
 		usersSvc := users.New(db, authSvc, tzSvc)
 
 		_, err = usersSvc.CreateUser(userName, email, password, loc)
@@ -621,10 +621,11 @@ var cmdUserCreate = &cobra.Command{
 }
 
 var cmdUserUpdate = &cobra.Command{
-	Use:   "update <username>",
-	Short: "Update user record",
-	Long:  `Update fields for a specific user. At least one update flag must be provided.`,
-	Args:  cobra.ExactArgs(1), // require username
+	Use:          "update <username>",
+	Short:        "Update user record",
+	Long:         `Update fields for a specific user. At least one update flag must be provided.`,
+	Args:         cobra.ExactArgs(1), // require username
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
@@ -696,17 +697,20 @@ var cmdUserUpdate = &cobra.Command{
 		}()
 
 		authSvc := auth.New(db)
-		tzSvc := iana.New(db)
+		tzSvc, err := iana.New(db)
+		if err != nil {
+			return err
+		}
 		usersSvc := users.New(db, authSvc, tzSvc)
 
 		user, err := usersSvc.GetUserByUsername(userName)
 		if err != nil {
-			log.Fatalf("user: %q: update %v\n", userName, err)
+			return fmt.Errorf("user: %q: update %v\n", userName, err)
 		}
 
 		err = usersSvc.UpdateUser(user.ID, newUserName, newEmail, newTimeZone)
 		if err != nil {
-			log.Fatalf("user: %q: update %v\n", userName, err)
+			return fmt.Errorf("user: %q: update %v\n", userName, err)
 		} else {
 			if emailSet {
 				log.Printf("user %q: email %q: updated", userName, *newEmail)
@@ -719,7 +723,7 @@ var cmdUserUpdate = &cobra.Command{
 		if newPassword != nil {
 			err = authSvc.UpdateUserSecret(user.ID, *newPassword)
 			if err != nil {
-				log.Fatalf("user %q: password %q: update %v\n", userName, *newPassword, err)
+				return fmt.Errorf("user %q: password %q: update %v\n", userName, *newPassword, err)
 			}
 			log.Printf("user %q: password %q: updated", userName, *newPassword)
 		}
