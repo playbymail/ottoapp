@@ -6,7 +6,7 @@ import "time"
 
 const (
 	ErrInvalidEmail    = Error("invalid email")
-	ErrInvalidHandle   = Error("invalid handle")
+	ErrInvalidUsername = Error("invalid username")
 	ErrInvalidTimezone = Error("invalid timezone")
 	ErrInvalidUserId   = Error("invalid user id")
 )

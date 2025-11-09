@@ -6,12 +6,12 @@
 -- The password is stored as a bcrypt hash.
 --
 -- name: CreateUser :one
-INSERT INTO users (handle,
+INSERT INTO users (username,
                    email,
                    timezone,
                    created_at,
                    updated_at)
-VALUES (:handle,
+VALUES (:username,
         :email,
         :timezone,
         :created_at,
@@ -20,9 +20,9 @@ RETURNING user_id;
 
 -- GetUserByID returns the user with the given id.
 --
--- name: GetUser :one
+-- name: GetUserByID :one
 SELECT user_id,
-       handle,
+       username,
        email,
        timezone,
        created_at,
@@ -34,7 +34,7 @@ WHERE user_id = :user_id;
 --
 -- name: GetUserByEmail :one
 SELECT user_id,
-       handle,
+       username,
        email,
        timezone,
        created_at,
@@ -42,34 +42,34 @@ SELECT user_id,
 FROM users
 WHERE email = :email;
 
--- GetUserByHandle returns the user with the given handle.
+-- GetUserByUsername returns the user with the given username.
 --
--- name: GetUserByHandle :one
+-- name: GetUserByUsername :one
 SELECT user_id,
-       handle,
+       username,
        email,
        timezone,
        created_at,
        updated_at
 FROM users
-WHERE handle = :handle;
+WHERE username = :username;
 
 -- name: GetUserIDByEmail :one
 SELECT user_id
 FROM users
 WHERE email = :email;
 
--- name: GetUserIDByHandle :one
+-- name: GetUserIDByUsername :one
 SELECT user_id
 FROM users
-WHERE handle = :handle;
+WHERE username = :username;
 
 -- UpdateUser updates the given user.
 --
 -- name: UpdateUser :exec
 UPDATE users
 SET email      = :email,
-    handle     = :handle,
+    username   = :username,
     timezone   = :timezone,
     updated_at = :updated_at
 WHERE user_id = :user_id;
@@ -82,11 +82,11 @@ SET email      = :email,
     updated_at = :updated_at
 WHERE user_id = :user_id;
 
--- UpdateUserHandle updates the handle for the given user.
+-- UpdateUserName updates the name for the given user.
 --
--- name: UpdateUserHandle :exec
+-- name: UpdateUserName :exec
 UPDATE users
-SET handle     = :handle,
+SET username   = :username,
     updated_at = :updated_at
 WHERE user_id = :user_id;
 

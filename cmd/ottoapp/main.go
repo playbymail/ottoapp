@@ -239,8 +239,9 @@ var cmdApiServe = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db)            // uses sqlite + domains
-		usersSvc := users.New(db, authSvc) // uses sqlite + domains
+		authSvc := auth.New(db) // uses sqlite + domains
+		tzSvc := iana.New(db)
+		usersSvc := users.New(db, authSvc, tzSvc) // uses sqlite + domains
 
 		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
 		if err != nil {
@@ -248,6 +249,7 @@ var cmdApiServe = &cobra.Command{
 			log.Fatalf("[serve] sessionManager: %v\n", err)
 		}
 
+		options = append(options, rest.WithIanaService(tzSvc))
 		options = append(options, rest.WithUsersService(usersSvc))
 		s, err := rest.New(sessionsSvc, options...)
 		if err != nil {
@@ -533,7 +535,8 @@ var cmdReportUpload = &cobra.Command{
 		}
 
 		authSvc := auth.New(db)
-		usersSvc := users.New(db, authSvc)
+		tzSvc := iana.New(db)
+		usersSvc := users.New(db, authSvc, tzSvc)
 		docSvc := documents.New(db, usersSvc)
 
 		docId, err := docSvc.LoadDocxFromFS(path, name, owner)
@@ -547,20 +550,20 @@ var cmdReportUpload = &cobra.Command{
 }
 
 var cmdUserCreate = &cobra.Command{
-	Use:   "create <handle>",
+	Use:   "create <username>",
 	Short: "Create a new user",
-	Long:  `Create a new user with specified handle.`,
-	Args:  cobra.ExactArgs(1), // require handle
+	Long:  `Create a new user with specified name.`,
+	Args:  cobra.ExactArgs(1), // require username
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		handle := strings.ToLower(args[0])
-		if !users.ValidateHandle(handle) {
-			return domains.ErrInvalidHandle
+		userName := strings.ToLower(args[0])
+		if !users.ValidateUsername(userName) {
+			return domains.ErrInvalidUsername
 		}
-		emailSet, email := cmd.Flags().Changed("email"), handle+"@ottoapp"
+		emailSet, email := cmd.Flags().Changed("email"), userName+"@ottoapp"
 		if emailSet {
 			email, err = cmd.Flags().GetString("email")
 			if err != nil {
@@ -603,43 +606,44 @@ var cmdUserCreate = &cobra.Command{
 		}()
 
 		authSvc := auth.New(db)
-		usersSvc := users.New(db, authSvc)
+		tzSvc := iana.New(db)
+		usersSvc := users.New(db, authSvc, tzSvc)
 
-		_, err = usersSvc.CreateUser(handle, email, password, loc)
+		_, err = usersSvc.CreateUser(userName, email, password, loc)
 		if err != nil {
-			log.Fatalf("user %q: create: %v\n", handle, err)
+			log.Fatalf("user %q: create: %v\n", userName, err)
 		}
 
-		log.Printf("user %q: email %q: tz %q: password %q: created\n", handle, email, loc.String(), password)
+		log.Printf("user %q: email %q: tz %q: password %q: created\n", userName, email, loc.String(), password)
 
 		return nil
 	},
 }
 
 var cmdUserUpdate = &cobra.Command{
-	Use:   "update <handle>",
+	Use:   "update <username>",
 	Short: "Update user record",
 	Long:  `Update fields for a specific user. At least one update flag must be provided.`,
-	Args:  cobra.ExactArgs(1), // require handle
+	Args:  cobra.ExactArgs(1), // require username
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		handle := strings.ToLower(args[0])
-		if !users.ValidateHandle(handle) {
-			return domains.ErrInvalidHandle
+		userName := strings.ToLower(args[0])
+		if !users.ValidateUsername(userName) {
+			return domains.ErrInvalidUsername
 		}
-		var newHandle *string
-		handleSet := cmd.Flags().Changed("handle")
-		if handleSet {
-			value, err := cmd.Flags().GetString("handle")
+		var newUserName *string
+		userNameSet := cmd.Flags().Changed("username")
+		if userNameSet {
+			value, err := cmd.Flags().GetString("username")
 			if err != nil {
 				return err
-			} else if !users.ValidateHandle(value) {
-				return fmt.Errorf("invalid new handle")
+			} else if !users.ValidateUsername(value) {
+				return fmt.Errorf("invalid new username")
 			}
-			newHandle = &value
+			newUserName = &value
 		}
 		var newEmail *string
 		emailSet := cmd.Flags().Changed("email")
@@ -692,31 +696,32 @@ var cmdUserUpdate = &cobra.Command{
 		}()
 
 		authSvc := auth.New(db)
-		usersSvc := users.New(db, authSvc)
+		tzSvc := iana.New(db)
+		usersSvc := users.New(db, authSvc, tzSvc)
 
-		user, err := usersSvc.GetUserByHandle(handle)
+		user, err := usersSvc.GetUserByUsername(userName)
 		if err != nil {
-			log.Fatalf("user: %q: update %v\n", handle, err)
+			log.Fatalf("user: %q: update %v\n", userName, err)
 		}
 
-		err = usersSvc.UpdateUser(user.ID, newHandle, newEmail, newTimeZone)
+		err = usersSvc.UpdateUser(user.ID, newUserName, newEmail, newTimeZone)
 		if err != nil {
-			log.Fatalf("user: %q: update %v\n", handle, err)
+			log.Fatalf("user: %q: update %v\n", userName, err)
 		} else {
 			if emailSet {
-				log.Printf("user %q: email %q: updated", handle, *newEmail)
+				log.Printf("user %q: email %q: updated", userName, *newEmail)
 			}
 			if tzSet {
-				log.Printf("user %q: tz %q: updated", handle, newTimeZone.String())
+				log.Printf("user %q: tz %q: updated", userName, newTimeZone.String())
 			}
 		}
 
 		if newPassword != nil {
 			err = authSvc.UpdateUserSecret(user.ID, *newPassword)
 			if err != nil {
-				log.Fatalf("user %q: password %q: update %v\n", handle, *newPassword, err)
+				log.Fatalf("user %q: password %q: update %v\n", userName, *newPassword, err)
 			}
-			log.Printf("user %q: password %q: updated", handle, *newPassword)
+			log.Printf("user %q: password %q: updated", userName, *newPassword)
 		}
 
 		return nil

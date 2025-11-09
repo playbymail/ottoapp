@@ -25,12 +25,12 @@ func New(db *sqlite.DB) *Service {
 	return &Service{db: db}
 }
 
-// AuthenticateUser verifies the user's credentials (handle + password).
-func (s *Service) AuthenticateUser(handle, plainTextSecret string) (domains.ID, error) {
+// AuthenticateUser verifies the user's credentials (username + password).
+func (s *Service) AuthenticateUser(userName, plainTextSecret string) (domains.ID, error) {
 	q := s.db.Queries()
 	ctx := s.db.Context()
 
-	user, err := q.GetUserByHandle(ctx, handle)
+	user, err := q.GetUserByUsername(ctx, userName)
 	if err != nil {
 		// mitigate user-enum: compare against dummy
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(plainTextSecret))

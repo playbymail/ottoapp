@@ -10,6 +10,7 @@ sql:
     - "sqlc/migrations.sql"
     - "sqlc/sessions.sql"
     - "sqlc/users.sql"
+    - "sqlc/timezones.sql"
     gen:
       go:
         package: "sqlc"

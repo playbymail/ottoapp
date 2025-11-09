@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/users"
 )
 
@@ -66,6 +67,13 @@ func WithTimer(d time.Duration) Option {
 			return fmt.Errorf("invalid shutdown timer")
 		}
 		s.channels.shutdownTimer = d
+		return nil
+	}
+}
+
+func WithIanaService(ianaSvc *iana.Service) Option {
+	return func(s *Server) error {
+		s.services.ianaSvc = ianaSvc
 		return nil
 	}
 }

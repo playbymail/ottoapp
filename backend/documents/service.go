@@ -41,7 +41,7 @@ func (s *Service) CreateDocument(doc *domains.Document, owner string) (domains.I
 	var userId, createdById domains.ID
 	if owner == "sysop" {
 		userId, createdById = 1, 1 // sysop
-	} else if userId, err = s.usersSvc.GetUserIDByHandle(owner); err != nil {
+	} else if userId, err = s.usersSvc.GetUserIDByUsername(owner); err != nil {
 		return domains.InvalidID, errors.Join(domains.ErrInvalidUserId, err)
 	}
 

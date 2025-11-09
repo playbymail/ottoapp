@@ -109,7 +109,7 @@ type TurnReport struct {
 
 type User struct {
 	UserID    int64
-	Handle    string
+	Username  string
 	Email     string
 	Timezone  string
 	CreatedAt int64

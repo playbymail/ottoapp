@@ -51,7 +51,7 @@ import "time"
 
 type User_t struct {
     ID        ID
-    Handle    string
+    Username  string
     Email     string
     Timezone  string
     CreatedAt time.Time

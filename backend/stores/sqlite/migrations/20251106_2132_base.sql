@@ -7,7 +7,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE users
 (
     user_id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    handle     TEXT UNIQUE NOT NULL,
+    username   TEXT UNIQUE NOT NULL,
     email      TEXT UNIQUE NOT NULL,
     timezone   TEXT        NOT NULL, -- IANA zone name
 
@@ -17,7 +17,7 @@ CREATE TABLE users
 );
 
 -- The sysop is a required user for batch operations and system maintenance.
-insert into users (handle, email, timezone, created_at, updated_at)
+insert into users (username, email, timezone, created_at, updated_at)
 values ('sysop', 'sysop', 'America/Panama', 0, 0);
 
 -- The User_Secrets table stores credentials for authentication
@@ -95,7 +95,7 @@ from users
          cross join (select roles.role_id
                      from roles
                      where role_id in ('active', 'sysop'))
-where users.handle = 'sysop';
+where users.username = 'sysop';
 
 -- The Sessions table holds data for each session.
 CREATE TABLE sessions
