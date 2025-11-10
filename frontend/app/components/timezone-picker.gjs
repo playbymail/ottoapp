@@ -83,7 +83,7 @@ export default class TimezonePicker extends Component {
           />
 
           <div class="max-h-80 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-md">
-            {{#each this.filteredTimezones as |tz|}}
+            {{#each this.filteredTimezones key="id" as |tz|}}
               <button
                 type="button"
                 class="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50"
