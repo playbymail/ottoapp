@@ -7,6 +7,7 @@ package iana
 
 import (
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -51,6 +52,12 @@ func New(db *sqlite.DB) (*Service, error) {
 		}
 		s.canonicalNames[cn] = item
 		s.tzList = append(s.tzList, item)
+	}
+	sort.Slice(s.tzList, func(i, j int) bool {
+		return s.tzList[i].Label < s.tzList[j].Label
+	})
+	for i, n := range s.tzList {
+		n.ID = i + 1
 	}
 	return s, nil
 }
