@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/playbymail/ottoapp/backend/auth"
+	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/users"
@@ -22,8 +24,9 @@ import (
 type Server struct {
 	http.Server
 	services struct {
-		ianaSvc     *iana.Service
+		authSvc     *auth.Service
 		sessionsSvc *sessions.Service
+		tzSvc       *iana.Service
 		usersSvc    *users.Service
 	}
 	csrfGuard bool
@@ -44,7 +47,7 @@ type Server struct {
 	}
 }
 
-func New(sessionsSvc *sessions.Service, options ...Option) (*Server, error) {
+func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Service, usersSvc *users.Service, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -52,14 +55,34 @@ func New(sessionsSvc *sessions.Service, options ...Option) (*Server, error) {
 		},
 	}
 	s.network.scheme, s.network.host, s.network.port = "http", "localhost", "8181"
-	s.services.sessionsSvc = sessionsSvc
 	s.debug.debug = true
+	s.services.authSvc = authSvc
+	s.services.sessionsSvc = sessionsSvc
+	s.services.tzSvc = tzSvc
+	s.services.usersSvc = usersSvc
 
 	for _, opt := range options {
 		err := opt(s)
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if s.services.authSvc == nil {
+		log.Printf("[rest] authSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	}
+	if s.services.sessionsSvc == nil {
+		log.Printf("[rest] sessionsSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	}
+	if s.services.tzSvc == nil {
+		log.Printf("[rest] tzSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	}
+	if s.services.usersSvc == nil {
+		log.Printf("[rest] usersSvc not initialized")
+		return nil, domains.ErrInvalidArgument
 	}
 
 	log.Printf("[server] host %q: port %q\n", s.network.host, s.network.port)

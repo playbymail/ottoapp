@@ -88,7 +88,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 	// Convert timezone string to *time.Location if provided
 	var timezone *time.Location
 	if req.Timezone != nil && *req.Timezone != "" {
-		timezone, err = s.services.ianaSvc.Location(*req.Timezone)
+		timezone, err = s.services.tzSvc.Location(*req.Timezone)
 		if err != nil {
 			rsp.Errors = append(rsp.Errors, "Invalid timezone")
 		}

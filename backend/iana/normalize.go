@@ -9,6 +9,7 @@ func CanonicalName(name string) (string, bool) {
 	name, ok := canonicalNames[strings.ToLower(name)]
 	return name, ok
 }
+
 func Normalize(name string) (string, bool) {
 	return CanonicalName(name)
 }

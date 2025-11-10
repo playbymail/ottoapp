@@ -7,9 +7,7 @@ package iana
 
 import (
 	"log"
-	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
@@ -17,53 +15,65 @@ import (
 )
 
 type TimezoneItem struct {
-	ID    int
-	Label string
+	ID       int
+	Label    string
+	Location *time.Location
 }
 
 // Service provides timezone operations.
 type Service struct {
-	sync.Mutex
-	db      *sqlite.DB
-	names   []TimezoneItem
-	regions Zones
+	db *sqlite.DB
+	// canonicalNames is the map of canonical names that Go recognizes
+	canonicalNames map[string]*TimezoneItem
+	// tzList is the sorted list of canonical names that Go recognizes
+	tzList []*TimezoneItem
 }
 
 func New(db *sqlite.DB) (*Service, error) {
 	s := &Service{
-		db: db,
+		db:             db,
+		canonicalNames: map[string]*TimezoneItem{},
+		tzList:         []*TimezoneItem{},
 	}
-	var names []string
-	// be kind and sort the names
-	for _, name := range canonicalNames {
-		if strings.HasPrefix(name, "Etc/") {
+	for _, cn := range canonicalNames {
+		if strings.HasPrefix(cn, "Etc/") {
 			continue
 		}
-		names = append(names, name)
+		loc, err := time.LoadLocation(cn)
+		if err != nil {
+			log.Printf("[iana] tz %-55s: location not found\n", cn)
+			continue
+		}
+		item := &TimezoneItem{
+			ID:       len(s.tzList) + 1,
+			Label:    cn,
+			Location: loc,
+		}
+		s.canonicalNames[cn] = item
+		s.tzList = append(s.tzList, item)
 	}
-	slices.Sort(names)
-	for n, name := range names {
-		s.names = append(s.names, TimezoneItem{ID: n + 1, Label: name})
-	}
-	regions, err := loadZones(names)
-	if err != nil {
-		return nil, err
-	}
-	s.regions = regions
 	return s, nil
 }
 
-func (s *Service) Active() ([]TimezoneItem, error) {
-	// assumes that the query sorts the names
+func (s *Service) Active() ([]*TimezoneItem, error) {
 	names, err := s.db.Queries().GetActiveTimezones(s.db.Context())
 	if err != nil {
 		return nil, err
 	}
-	var list []TimezoneItem
-	for n, name := range names {
-		list = append(list, TimezoneItem{ID: n + 1, Label: name})
+	var list []*TimezoneItem
+	for _, name := range names {
+		cn, ok := Normalize(name)
+		if !ok {
+			log.Printf("[iana] tz %-55s: name not canonical\n", name)
+			continue
+		}
+		item, ok := s.canonicalNames[cn]
+		if !ok {
+			log.Printf("[iana] tz %-55s: location not canonical\n", cn)
+			continue
+		}
+		list = append(list, item)
 	}
-
 	return list, nil
 }
 
@@ -83,22 +93,6 @@ func (s *Service) Location(tz string) (*time.Location, error) {
 	return loc, nil
 }
 
-func (s *Service) Names() []TimezoneItem {
-	return s.names
-}
-
-func (s *Service) Regions() Zones {
-	return s.regions
-}
-
-func nNormalizeTimeZone(tz string) (loc *time.Location, ok bool) {
-	tz, ok = Normalize(tz)
-	if !ok {
-		return nil, false
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		log.Printf("[iana] internal error: tz %q: %v\n", tz, err)
-	}
-	return loc, true
+func (s *Service) Names() []*TimezoneItem {
+	return s.tzList
 }

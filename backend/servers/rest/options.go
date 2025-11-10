@@ -8,11 +8,20 @@ import (
 	"log"
 	"time"
 
+	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/users"
 )
 
 type Option func(*Server) error
+
+func WithAuthService(authSvc *auth.Service) Option {
+	return func(s *Server) error {
+		s.services.authSvc = authSvc
+		return nil
+	}
+}
 
 func WithCsrfGuard(csrfGuard bool) Option {
 	return func(s *Server) error {
@@ -52,6 +61,13 @@ func WithRouteLogging(logRoutes bool) Option {
 	}
 }
 
+func WithSessionsService(sessionsSvc *sessions.Service) Option {
+	return func(s *Server) error {
+		s.services.sessionsSvc = sessionsSvc
+		return nil
+	}
+}
+
 func WithShutdownKey(key string) Option {
 	log.Printf("option: withShutdownKey(%q)\n", key)
 	return func(s *Server) error {
@@ -71,9 +87,9 @@ func WithTimer(d time.Duration) Option {
 	}
 }
 
-func WithIanaService(ianaSvc *iana.Service) Option {
+func WithTimezoneService(tzSvc *iana.Service) Option {
 	return func(s *Server) error {
-		s.services.ianaSvc = ianaSvc
+		s.services.tzSvc = tzSvc
 		return nil
 	}
 }
