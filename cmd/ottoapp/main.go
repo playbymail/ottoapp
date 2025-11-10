@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -175,8 +176,9 @@ func main() {
 }
 
 var cmdApiServe = &cobra.Command{
-	Use:   "serve",
-	Short: "start the API server",
+	Use:          "serve",
+	Short:        "start the API server",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
@@ -232,34 +234,31 @@ var cmdApiServe = &cobra.Command{
 			db, err = sqlite.Open(ctx, path, true, false)
 		}
 		if err != nil {
-			log.Fatalf("[serve] db: open: %v\n", err)
+			return errors.Join(fmt.Errorf("db.open"), err)
 		}
 		defer func() {
 			log.Printf("[serve] db: close\n")
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db) // uses sqlite + domains
+		authSvc := auth.New(db)
 		tzSvc, err := iana.New(db)
+		if err != nil {
+			return errors.Join(fmt.Errorf("iana.new"), err)
+		}
 		usersSvc := users.New(db, authSvc, tzSvc) // uses sqlite + domains
-
 		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
 		if err != nil {
-			_ = db.Close()
-			log.Fatalf("[serve] sessionManager: %v\n", err)
+			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
 
-		options = append(options, rest.WithIanaService(tzSvc))
-		options = append(options, rest.WithUsersService(usersSvc))
-		s, err := rest.New(sessionsSvc, options...)
+		s, err := rest.New(authSvc, sessionsSvc, tzSvc, usersSvc, options...)
 		if err != nil {
-			_ = db.Close()
-			log.Fatalf("[serve] rest: %v\n", err)
+			return errors.Join(fmt.Errorf("rest.new"), err)
 		}
 		err = s.Run()
 		if err != nil {
-			_ = db.Close()
-			log.Fatalf("[serve] rest: %v\n", err)
+			return errors.Join(fmt.Errorf("rest.run"), err)
 		}
 
 		return nil
@@ -267,8 +266,9 @@ var cmdApiServe = &cobra.Command{
 }
 
 var cmdAppVersion = &cobra.Command{
-	Use:   "version",
-	Short: "display the application's version number",
+	Use:           "version",
+	Short:         "display the application's version number",
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		showBuildInfo, err := cmd.Flags().GetBool("show-build-info")
 		if err != nil {
@@ -277,7 +277,7 @@ var cmdAppVersion = &cobra.Command{
 		r := runners.New("http", "127.0.0.1", "8181")
 		err = r.GetVersion(showBuildInfo)
 		if err != nil {
-			log.Fatalf("%v\n", err)
+			return err
 		}
 		return nil
 	},

@@ -10,6 +10,7 @@ func (e Error) Error() string {
 
 const (
 	ErrHashFailed          = Error("hash failed")
+	ErrInvalidArgument     = Error("invalid argument")
 	ErrInvalidPath         = Error("invalid path")
 	ErrMissingUserdataPath = Error("missing userdata path")
 	ErrNotDirectory        = Error("not a directory")
