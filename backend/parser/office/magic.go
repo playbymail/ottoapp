@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-package docx
+package office
 
 import "bytes"
 

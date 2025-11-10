@@ -22,6 +22,7 @@ import (
 	"github.com/playbymail/ottoapp/backend/documents"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/parser/office"
 	"github.com/playbymail/ottoapp/backend/runners"
 	"github.com/playbymail/ottoapp/backend/servers/rest"
 	"github.com/playbymail/ottoapp/backend/sessions"
@@ -133,6 +134,7 @@ func main() {
 	}
 	cmdRoot.AddCommand(cmdReport)
 	cmdReport.AddCommand(cmdReportParse)
+	cmdReportParse.Flags().Bool("docxml-only", false, "parse to DocXML only")
 	cmdReport.AddCommand(cmdReportUpload)
 	cmdReportUpload.Flags().String("name", "", "overwrite the file name after uploading")
 	cmdReportUpload.Flags().String("owner", "sysop", "user to assign ownership to")
@@ -482,6 +484,26 @@ var cmdReportParse = &cobra.Command{
 	Short: "Parse a turn report document",
 	Long:  `Parse a turn report that has been uploaded to the server.`,
 	Args:  cobra.ExactArgs(1), // require document id
+	RunE: func(cmd *cobra.Command, args []string) error {
+		startedAt := time.Now()
+		toDocXmlOnly, err := cmd.Flags().GetBool("docxml-only")
+		if err != nil {
+			return err
+		}
+		path := args[0]
+		var p []byte
+		if toDocXmlOnly {
+			p, err = office.DocXMLPath(path)
+		} else {
+			p, err = office.ParsePath(path)
+		}
+		if err != nil {
+			return errors.Join(fmt.Errorf("parser: parse file"), err)
+		}
+		fmt.Printf("%s\n", string(p))
+		fmt.Printf("report: parse %q: completed in %v\n", path, time.Since(startedAt))
+		return nil
+	},
 }
 
 var cmdReportUpload = &cobra.Command{
