@@ -21,6 +21,7 @@ export default class Profile extends Component {
   constructor() {
     super(...arguments);
     this.email = this.args.model?.email || "";
+    this.permissions = this.args.model?.permissions || {};
     this.timezone = this.args.model?.timezone || "";
   }
 
@@ -30,6 +31,14 @@ export default class Profile extends Component {
 
   get hasChanges() {
     return this.email !== this.profile.email || this.timezone !== this.profile.timezone;
+  }
+
+  get dumpPermissions() {
+    console.log('permissions', this.session.permissions);
+    if (!this.permissions) {
+      return 'permissions are missing from session';
+    }
+    return JSON.stringify(this.permissions, null, 4);
   }
 
   get username() {
@@ -188,7 +197,8 @@ export default class Profile extends Component {
             class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
               <p>Roles: {{this.session.permissions}}</p>
-              <p>Permissions</p>
+              <p>Permissions:</p>
+              <code>{{this.dumpPermissions}}</code>
             </div>
           </div>
         </div>

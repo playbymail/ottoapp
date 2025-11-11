@@ -149,6 +149,7 @@ func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
+	log.Printf("%s %s: obsolete: use GET /api/users/me\n", r.Method, r.URL.Path)
 	sess, err := s.GetCurrentSession(r)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)

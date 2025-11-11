@@ -27,6 +27,7 @@ export default class Profile extends Component {
   constructor() {
     super(...arguments);
 
+    console.log('users.profile.args.model', this.args.model);
     // transfer incoming model data to local tracked variables
     this.email = this.args.model?.email || "";
     this.timezone = this.args.model?.timezone || "";

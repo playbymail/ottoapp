@@ -29,7 +29,6 @@ func Routes(s *Server) http.Handler {
 	mux.Handle("GET /api/documents", s.handleGetDocuments())
 	mux.HandleFunc("POST /api/login", s.services.sessionsSvc.HandlePostLogin)
 	mux.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
-	mux.HandleFunc("GET /api/me", s.services.sessionsSvc.HandleGetMe)
 	mux.HandleFunc("GET /api/profile", s.handleGetProfile)
 	mux.HandleFunc("POST /api/profile", s.handlePostProfile)
 	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession) // returns CSRF
@@ -37,9 +36,10 @@ func Routes(s *Server) http.Handler {
 	mux.HandleFunc("GET /api/timezones", s.handleGetTimezones)
 
 	// User management routes
-	mux.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
+	mux.HandleFunc("GET /api/me", s.services.sessionsSvc.HandleGetMe)
 	mux.HandleFunc("GET /api/users", s.services.usersSvc.HandleGetUsers)
 	mux.HandleFunc("POST /api/users", s.services.usersSvc.HandlePostUser)
+	mux.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
 	mux.HandleFunc("GET /api/users/{id}", s.services.usersSvc.HandleGetUser)
 	mux.HandleFunc("PATCH /api/users/{id}", s.services.usersSvc.HandlePatchUser)
 	mux.HandleFunc("PUT /api/users/{id}/password", s.services.usersSvc.HandlePutPassword)

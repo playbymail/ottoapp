@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import {service} from "@ember/service";
 import { on } from '@ember/modifier';
 import { action } from "@ember/object";
+import not from 'frontend/helpers/not';
 
 // https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 // Requires a TailwindCSS Plus license.
@@ -67,19 +68,21 @@ export default class ProfileDropdown extends Component {
         </span>
       </button>
       <el-menu anchor="bottom end" popover class="w-32 origin-top-right rounded-md bg-white py-2 shadow-lg outline-1 outline-gray-900/5 transition transition-discrete [--anchor-gap:--spacing(2.5)] data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10">
-        {{#if this.session.isAuthenticated}}
+        {{#if (not this.session.isAuthenticated) }}
+          <LinkTo @route="login" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
+            Sign in
+          </LinkTo>
+        {{else}}
           <LinkTo @route="user.profile" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
-            Your profile
+            My profile
           </LinkTo>
           <LinkTo @route="login" {{on 'click' this.logout}}
                   class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
             Sign out
           </LinkTo>
-        {{else}}
-          <LinkTo @route="login" class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">
-            Sign in
-          </LinkTo>
         {{/if}}
+        <a href="/api/cookies/delete"
+           class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Nuke cookies</a>
       </el-menu>
     </el-dropdown>
   </template>
