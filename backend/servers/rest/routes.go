@@ -35,6 +35,17 @@ func Routes(s *Server) http.Handler {
 	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession) // returns CSRF
 	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
 	mux.HandleFunc("GET /api/timezones", s.handleGetTimezones)
+
+	// User management routes
+	mux.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
+	mux.HandleFunc("GET /api/users", s.services.usersSvc.HandleGetUsers)
+	mux.HandleFunc("POST /api/users", s.services.usersSvc.HandlePostUser)
+	mux.HandleFunc("GET /api/users/{id}", s.services.usersSvc.HandleGetUser)
+	mux.HandleFunc("PATCH /api/users/{id}", s.services.usersSvc.HandlePatchUser)
+	mux.HandleFunc("PUT /api/users/{id}/password", s.services.usersSvc.HandlePutPassword)
+	mux.HandleFunc("POST /api/users/{id}/reset-password", s.services.usersSvc.HandlePostResetPassword)
+	mux.HandleFunc("PATCH /api/users/{id}/role", s.services.usersSvc.HandlePatchUserRole)
+
 	mux.HandleFunc("GET /api/version", s.getVersion)
 
 	// convert mux to handler before we add any global middlewares

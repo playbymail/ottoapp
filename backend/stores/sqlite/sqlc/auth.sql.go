@@ -9,6 +9,29 @@ import (
 	"context"
 )
 
+const assignUserRole = `-- name: AssignUserRole :exec
+INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+`
+
+type AssignUserRoleParams struct {
+	UserID    int64
+	RoleID    string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+// AssignUserRole assigns a role to a user.
+func (q *Queries) AssignUserRole(ctx context.Context, arg AssignUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, assignUserRole,
+		arg.UserID,
+		arg.RoleID,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createUserSecret = `-- name: CreateUserSecret :exec
 
 INSERT INTO user_secrets (user_id,
@@ -89,6 +112,22 @@ func (q *Queries) GetUserSecret(ctx context.Context, userID int64) (string, erro
 	var hashed_password string
 	err := row.Scan(&hashed_password)
 	return hashed_password, err
+}
+
+const removeUserRole = `-- name: RemoveUserRole :exec
+DELETE FROM user_roles
+WHERE user_id = ?1 AND role_id = ?2
+`
+
+type RemoveUserRoleParams struct {
+	UserID int64
+	RoleID string
+}
+
+// RemoveUserRole removes a role from a user.
+func (q *Queries) RemoveUserRole(ctx context.Context, arg RemoveUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, removeUserRole, arg.UserID, arg.RoleID)
+	return err
 }
 
 const updateUserSecret = `-- name: UpdateUserSecret :exec

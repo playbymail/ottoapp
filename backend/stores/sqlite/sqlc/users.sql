@@ -98,3 +98,15 @@ SET timezone   = :timezone,
     updated_at = :updated_at
 WHERE user_id = :user_id;
 
+-- GetAllUsers returns all users.
+--
+-- name: GetAllUsers :many
+SELECT user_id,
+       username,
+       email,
+       timezone,
+       created_at,
+       updated_at
+FROM users
+ORDER BY username;
+

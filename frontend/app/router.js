@@ -30,8 +30,19 @@ Router.map(function () {
     });
   });
 
+  // users routes (authenticated, requires "user" role)
+  this.route('users', function() {
+    this.route('profile');
+    this.route('password');
+  });
+
   // admin routes (authenticated + admin role)
   this.route('admin', function() {
     this.route('dashboard');
+    this.route('users', function() {
+      this.route('index', { path: '/' });
+      this.route('new');
+      this.route('edit', { path: '/:user_id' });
+    });
   });
 });

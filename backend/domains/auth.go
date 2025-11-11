@@ -16,6 +16,7 @@ const (
 const (
 	ErrInvalidCredentials = Error("invalid credentials")
 	ErrInvalidPassword    = Error("invalid password")
+	ErrInvalidRole        = Error("invalid role")
 	ErrNoRolesAssigned    = Error("no roles assigned")
 )
 

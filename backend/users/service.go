@@ -5,6 +5,7 @@ package users
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,11 +16,17 @@ import (
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 )
 
+// SessionService defines the interface for session operations needed by handlers
+type SessionService interface {
+	GetCurrentUserID(r *http.Request) (domains.ID, error)
+}
+
 // Service provides user operations.
 type Service struct {
-	db      *sqlite.DB
-	authSvc *auth.Service
-	tzSvc   *iana.Service
+	db          *sqlite.DB
+	authSvc     *auth.Service
+	tzSvc       *iana.Service
+	sessionsSvc SessionService
 }
 
 func New(db *sqlite.DB, authSvc *auth.Service, tzSvc *iana.Service) *Service {
@@ -28,6 +35,11 @@ func New(db *sqlite.DB, authSvc *auth.Service, tzSvc *iana.Service) *Service {
 		authSvc: authSvc,
 		tzSvc:   tzSvc,
 	}
+}
+
+// SetSessionService injects the session service (to avoid circular dependency)
+func (s *Service) SetSessionService(sessionsSvc SessionService) {
+	s.sessionsSvc = sessionsSvc
 }
 
 // ChangePassword verifies the user's current credentials and, if valid,
@@ -83,6 +95,27 @@ func (s *Service) CreateUser(userName, email, plainTextSecret string, timezone *
 	}
 
 	err = s.authSvc.CreateUserSecret(s.db.Context(), qtx, domains.ID(userId), plainTextSecret, now)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assign default roles for CLI-created users: "active" and "user"
+	err = qtx.AssignUserRole(s.db.Context(), sqlc.AssignUserRoleParams{
+		UserID:    userId,
+		RoleID:    "active",
+		CreatedAt: now.Unix(),
+		UpdatedAt: now.Unix(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = qtx.AssignUserRole(s.db.Context(), sqlc.AssignUserRoleParams{
+		UserID:    userId,
+		RoleID:    "user",
+		CreatedAt: now.Unix(),
+		UpdatedAt: now.Unix(),
+	})
 	if err != nil {
 		return nil, err
 	}

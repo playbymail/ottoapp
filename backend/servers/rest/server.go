@@ -61,6 +61,9 @@ func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Servi
 	s.services.tzSvc = tzSvc
 	s.services.usersSvc = usersSvc
 
+	// Inject session service into users service
+	usersSvc.SetSessionService(sessionsSvc)
+
 	for _, opt := range options {
 		err := opt(s)
 		if err != nil {

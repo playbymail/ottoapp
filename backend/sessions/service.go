@@ -135,6 +135,15 @@ func (s *Service) GetCurrentSession(r *http.Request) (*domains.Session, error) {
 	return sess, nil
 }
 
+// GetCurrentUserID returns the user ID from the current session.
+func (s *Service) GetCurrentUserID(r *http.Request) (domains.ID, error) {
+	sess, err := s.GetCurrentSession(r)
+	if err != nil {
+		return domains.InvalidID, err
+	}
+	return sess.User.ID, nil
+}
+
 func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
