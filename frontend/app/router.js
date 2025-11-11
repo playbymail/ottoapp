@@ -7,20 +7,31 @@ export default class Router extends EmberRouter {
 }
 
 Router.map(function () {
+  // public routes
   this.route('about');
-  this.route('calendar');
-  this.route('dashboard');
   this.route('login');
-  this.route('maps');
-  this.route('my');
-  this.route('profile');
-  this.route('projects');
-  this.route('reports');
-  this.route('secure');
-  this.route('settings');
-  this.route('team');
-  this.route('teams');
-  this.route('teams/heroicons');
-  this.route('teams/tailwindlabs');
-  this.route('teams/workcation');
+
+  // user routes (authenticated)
+  this.route('user', function() {
+    this.route('calendar'); // obsolete route to be removed in a future sprint
+    this.route('dashboard');
+    this.route('maps');
+    this.route('my');
+    this.route('profile');
+    this.route('projects'); // obsolete route to be removed in a future sprint
+    this.route('reports');
+    this.route('secure'); // obsolete route to be removed in a future sprint
+    this.route('settings');
+    this.route('team'); // obsolete route to be removed in a future sprint
+    this.route('teams', function() {
+      this.route('heroicons'); // obsolete route to be removed in a future sprint
+      this.route('tailwindlabs'); // obsolete route to be removed in a future sprint
+      this.route('workcation'); // obsolete route to be removed in a future sprint
+    });
+  });
+
+  // admin routes (authenticated + admin role)
+  this.route('admin', function() {
+    this.route('dashboard');
+  });
 });

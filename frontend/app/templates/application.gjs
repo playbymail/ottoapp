@@ -1,21 +1,8 @@
-import { service } from '@ember/service';
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-// https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
-// Requires a TailwindCSS Plus license.
-
-import Sidebar from 'frontend/components/sidebar';
-import StickyHeader from 'frontend/components/sticky-header';
+// Public application shell
+// Renders nested route templates (login, about, user/*, etc.)
 
 <template>
-  <Sidebar />
-
-  <div class="lg:pl-72">
-    <StickyHeader />
-
-    <main class="py-10">
-      <div class="px-4 sm:px-6 lg:px-8">
-        {{outlet}}
-      </div>
-    </main>
-  </div>
+  {{outlet}}
 </template>

@@ -37,7 +37,7 @@ export default class LoginForm extends Component {
         email: this.email, password: this.password,
       });
       console.log('login-form', 'submit', this.session.isAuthenticated);
-      this.router.transitionTo('dashboard');
+      this.router.transitionTo('user.dashboard');
     } catch {
       this.error = 'Invalid credentials.';
     }

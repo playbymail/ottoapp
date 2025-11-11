@@ -1,9 +1,6 @@
-import AuthenticatedRoute from './authenticated';
-import { service } from '@ember/service';
+import Route from '@ember/routing/route';
 
-export default class ProfileRoute extends AuthenticatedRoute {
-  @service store;
-
+export default class UserProfileRoute extends Route {
   async model() {
     // Fetch profile data from /api/profile
     const response = await fetch('/api/profile', {
