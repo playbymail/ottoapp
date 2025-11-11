@@ -5,6 +5,7 @@ package auth
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -23,6 +24,16 @@ type Service struct {
 
 func New(db *sqlite.DB) *Service {
 	return &Service{db: db}
+}
+
+// GetActor extracts the authenticated user ID from the request context.
+// This is a convenience helper that assumes sessionMiddleware has run.
+func (s *Service) GetActor(r *http.Request) (domains.ID, error) {
+	userID, ok := r.Context().Value(domains.ContextKeyUserID).(domains.ID)
+	if !ok || userID == domains.InvalidID {
+		return domains.InvalidID, domains.ErrNotAuthenticated
+	}
+	return userID, nil
 }
 
 // AuthenticateUser verifies the user's credentials (username + password).
@@ -312,4 +323,54 @@ func (s *Service) CanResetPassword(actorID, targetID domains.ID) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// CanCreateUser checks if actor can create new users.
+// Only admins can create users.
+func (s *Service) CanCreateUser(actorID domains.ID) (bool, error) {
+	return s.IsAdmin(actorID)
+}
+
+// CanListUsers checks if actor can list all users.
+// Only admins can list users.
+func (s *Service) CanListUsers(actorID domains.ID) (bool, error) {
+	return s.IsAdmin(actorID)
+}
+
+// CanManageRoles checks if actor can modify target user's roles.
+// Only admins can manage roles, and they cannot modify sysop or admin roles.
+func (s *Service) CanManageRoles(actorID, targetID domains.ID) (bool, error) {
+	isAdmin, err := s.IsAdmin(actorID)
+	if err != nil {
+		return false, err
+	}
+	if !isAdmin {
+		return false, nil
+	}
+
+	// Cannot modify sysop roles
+	targetIsSysop, err := s.IsSysop(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsSysop {
+		return false, nil
+	}
+
+	// Cannot modify admin roles
+	targetIsAdmin, err := s.IsAdmin(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsAdmin {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// CanChangeOwnPassword checks if actor can change their own password.
+// Users can only change their own password (not others').
+func (s *Service) CanChangeOwnPassword(actorID, targetID domains.ID) (bool, error) {
+	return actorID == targetID, nil
 }

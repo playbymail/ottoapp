@@ -13,11 +13,20 @@ const (
 	InvalidID ID = 0
 )
 
+// contextKey is the type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// ContextKeyUserID is the context key for the authenticated user ID
+	ContextKeyUserID contextKey = "userID"
+)
+
 const (
 	ErrInvalidCredentials = Error("invalid credentials")
 	ErrInvalidPassword    = Error("invalid password")
 	ErrInvalidRole        = Error("invalid role")
 	ErrNoRolesAssigned    = Error("no roles assigned")
+	ErrNotAuthenticated   = Error("not authenticated")
 )
 
 type Role string

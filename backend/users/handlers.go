@@ -29,12 +29,7 @@ type UserResponse struct {
 // HandleGetMe returns the current user's profile
 // GET /api/users/me
 func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session (stored by session middleware)
-	userID, err := s.sessionsSvc.GetCurrentUserID(r)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	userID, _ := s.authSvc.GetActor(r)
 
 	user, err := s.GetUserByID(userID)
 	if err != nil {
@@ -59,21 +54,15 @@ func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 // HandleGetUsers returns a list of all non-admin, non-sysop users (admin only)
 // GET /api/users
 func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
-	// Check if actor is admin
-	isAdmin, err := s.authSvc.IsAdmin(actorID)
+	canList, err := s.authSvc.CanListUsers(actorID)
 	if err != nil {
-		log.Printf("GET /api/users: check admin: %v", err)
+		log.Printf("GET /api/users: check access: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if !isAdmin {
+	if !canList {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -137,12 +126,7 @@ func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
 // HandleGetUser returns a specific user's profile (with RBAC)
 // GET /api/users/:id
 func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
 	// Parse target user ID from path
 	idStr := r.PathValue("id")
@@ -187,12 +171,7 @@ func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 // HandlePatchUser updates a user's profile (with RBAC)
 // PATCH /api/users/:id
 func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
 	// Parse target user ID from path
 	idStr := r.PathValue("id")
@@ -282,12 +261,7 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 // HandlePutPassword updates the current user's password
 // PUT /api/users/:id/password
 func (s *Service) HandlePutPassword(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
 	// Parse target user ID from path
 	idStr := r.PathValue("id")
@@ -298,8 +272,8 @@ func (s *Service) HandlePutPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	targetID := domains.ID(targetIDInt)
 
-	// Users can only change their own password via this endpoint
-	if actorID != targetID {
+	canChange, _ := s.authSvc.CanChangeOwnPassword(actorID, targetID)
+	if !canChange {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -343,12 +317,7 @@ func (s *Service) HandlePutPassword(w http.ResponseWriter, r *http.Request) {
 // HandlePostResetPassword resets a user's password (admin only)
 // POST /api/users/:id/reset-password
 func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
 	// Parse target user ID from path
 	idStr := r.PathValue("id")
@@ -393,21 +362,15 @@ func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request
 // HandlePostUser creates a new user (admin only)
 // POST /api/users
 func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
-	// Check if actor is admin
-	isAdmin, err := s.authSvc.IsAdmin(actorID)
+	canCreate, err := s.authSvc.CanCreateUser(actorID)
 	if err != nil {
-		log.Printf("POST /api/users: check admin: %v", err)
+		log.Printf("POST /api/users: check access: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	if !isAdmin {
+	if !canCreate {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -495,24 +458,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 // HandlePatchUserRole updates a user's role (admin only)
 // PATCH /api/users/:id/role
 func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
-	// Get current user ID from session
-	actorID, ok := r.Context().Value("userID").(domains.ID)
-	if !ok || actorID == domains.InvalidID {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	// Check if actor is admin
-	isAdmin, err := s.authSvc.IsAdmin(actorID)
-	if err != nil {
-		log.Printf("PATCH /api/users/:id/role: check admin: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	if !isAdmin {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+	actorID, _ := s.authSvc.GetActor(r)
 
 	// Parse target user ID from path
 	idStr := r.PathValue("id")
@@ -523,11 +469,14 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 	targetID := domains.ID(targetIDInt)
 
-	// Cannot modify sysop or admin roles
-	isSysop, _ := s.authSvc.IsSysop(targetID)
-	isTargetAdmin, _ := s.authSvc.IsAdmin(targetID)
-	if isSysop || isTargetAdmin {
-		http.Error(w, "Forbidden: cannot modify sysop or admin roles", http.StatusForbidden)
+	canManage, err := s.authSvc.CanManageRoles(actorID, targetID)
+	if err != nil {
+		log.Printf("PATCH /api/users/%d/role: check access: %v", targetID, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !canManage {
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 

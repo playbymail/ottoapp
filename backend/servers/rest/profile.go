@@ -18,15 +18,10 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 		Errors   []string `json:"errors,omitempty"`
 	}
 
-	// Get the current session to identify the user
-	sess, err := s.services.sessionsSvc.GetCurrentSession(r)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
+	userID, _ := s.services.authSvc.GetActor(r)
 
 	// Fetch user data from the users service
-	user, err := s.services.usersSvc.GetUserByID(sess.User.ID)
+	user, err := s.services.usersSvc.GetUserByID(userID)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -58,12 +53,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 		Errors   []string `json:"errors,omitempty"`
 	}
 
-	// Get the current session to identify the user
-	sess, err := s.services.sessionsSvc.GetCurrentSession(r)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
+	userID, _ := s.services.authSvc.GetActor(r)
 
 	// Parse the request body
 	var req request
@@ -87,6 +77,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Convert timezone string to *time.Location if provided
 	var timezone *time.Location
+	var err error
 	if req.Timezone != nil && *req.Timezone != "" {
 		timezone, err = s.services.tzSvc.Location(*req.Timezone)
 		if err != nil {
@@ -103,7 +94,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the user (userName is nil since users can't change their username)
-	err = s.services.usersSvc.UpdateUser(sess.User.ID, nil, req.Email, timezone)
+	err = s.services.usersSvc.UpdateUser(userID, nil, req.Email, timezone)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -113,7 +104,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch and return the updated profile
-	user, err := s.services.usersSvc.GetUserByID(sess.User.ID)
+	user, err := s.services.usersSvc.GetUserByID(userID)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return

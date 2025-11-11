@@ -3,9 +3,12 @@
 package rest
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/playbymail/ottoapp/backend/domains"
 )
 
 /*** middleware & helpers ***/
@@ -33,14 +36,30 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// sessionMiddleware injects the authenticated user ID into the request context.
+// It runs on all routes and sets InvalidID if no valid session exists.
+func (s *Server) sessionMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var userID domains.ID = domains.InvalidID
+
+		sess, err := s.services.sessionsSvc.GetCurrentSession(r)
+		if err == nil {
+			userID = sess.User.ID
+		}
+
+		ctx := context.WithValue(r.Context(), domains.ContextKeyUserID, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// authOnly ensures a valid authenticated user exists in the request context.
 func authOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s: authOnly: entered\n", r.Method, r.URL.Path)
-		//if _, ok := currentSession(r); !ok {
-		//	log.Printf("%s %s: authOnly: currentSession: false\n", r.Method, r.URL.Path)
-		//	http.Error(w, "unauthorized", http.StatusUnauthorized)
-		//	return
-		//}
+		userID, ok := r.Context().Value(domains.ContextKeyUserID).(domains.ID)
+		if !ok || userID == domains.InvalidID {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

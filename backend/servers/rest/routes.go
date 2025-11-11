@@ -19,34 +19,37 @@ Sessions:what are the 4 routes for?
 func Routes(s *Server) http.Handler {
 	mux := http.NewServeMux()
 
+	// Public routes (no authentication required)
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","msg":"pong"}`))
 	})
-
-	mux.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
-	mux.Handle("GET /api/documents", s.handleGetDocuments())
 	mux.HandleFunc("POST /api/login", s.services.sessionsSvc.HandlePostLogin)
-	mux.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
-	mux.HandleFunc("GET /api/profile", s.handleGetProfile)
-	mux.HandleFunc("POST /api/profile", s.handlePostProfile)
-	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession) // returns CSRF
-	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
+	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession)
 	mux.HandleFunc("GET /api/timezones", s.handleGetTimezones)
-
-	// User management routes
-	mux.HandleFunc("GET /api/me", s.services.sessionsSvc.HandleGetMe)
-	mux.HandleFunc("GET /api/users", s.services.usersSvc.HandleGetUsers)
-	mux.HandleFunc("POST /api/users", s.services.usersSvc.HandlePostUser)
-	mux.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
-	mux.HandleFunc("GET /api/users/{id}", s.services.usersSvc.HandleGetUser)
-	mux.HandleFunc("PATCH /api/users/{id}", s.services.usersSvc.HandlePatchUser)
-	mux.HandleFunc("PUT /api/users/{id}/password", s.services.usersSvc.HandlePutPassword)
-	mux.HandleFunc("POST /api/users/{id}/reset-password", s.services.usersSvc.HandlePostResetPassword)
-	mux.HandleFunc("PATCH /api/users/{id}/role", s.services.usersSvc.HandlePatchUserRole)
-
 	mux.HandleFunc("GET /api/version", s.getVersion)
+	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
+
+	// Protected routes (authentication required)
+	protected := http.NewServeMux()
+	protected.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
+	protected.Handle("GET /api/documents", s.handleGetDocuments())
+	protected.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
+	protected.HandleFunc("GET /api/profile", s.handleGetProfile)
+	protected.HandleFunc("POST /api/profile", s.handlePostProfile)
+	protected.HandleFunc("GET /api/me", s.services.sessionsSvc.HandleGetMe)
+	protected.HandleFunc("GET /api/users", s.services.usersSvc.HandleGetUsers)
+	protected.HandleFunc("POST /api/users", s.services.usersSvc.HandlePostUser)
+	protected.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
+	protected.HandleFunc("GET /api/users/{id}", s.services.usersSvc.HandleGetUser)
+	protected.HandleFunc("PATCH /api/users/{id}", s.services.usersSvc.HandlePatchUser)
+	protected.HandleFunc("PUT /api/users/{id}/password", s.services.usersSvc.HandlePutPassword)
+	protected.HandleFunc("POST /api/users/{id}/reset-password", s.services.usersSvc.HandlePostResetPassword)
+	protected.HandleFunc("PATCH /api/users/{id}/role", s.services.usersSvc.HandlePatchUserRole)
+
+	// Apply auth middleware to protected routes
+	mux.Handle("/api/", authOnly(protected))
 
 	// convert mux to handler before we add any global middlewares
 	var h http.Handler = mux
@@ -55,6 +58,9 @@ func Routes(s *Server) http.Handler {
 	if s.csrfGuard {
 		h = csrfOnly(h)
 	}
+
+	// Add session middleware (runs on all routes)
+	h = s.sessionMiddleware(h)
 
 	// Add logging middleware
 	h = s.loggingMiddleware(h)
