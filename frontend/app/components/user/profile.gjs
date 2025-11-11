@@ -1,12 +1,12 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { service } from '@ember/service';
-import { on } from '@ember/modifier';
+import {tracked} from '@glimmer/tracking';
+import {action} from '@ember/object';
+import {service} from '@ember/service';
+import {on} from '@ember/modifier';
 
-import TimezonePicker  from 'frontend/components/timezone-picker';
+import TimezonePicker from 'frontend/components/timezone-picker';
 
 
 export default class Profile extends Component {
@@ -123,7 +123,8 @@ export default class Profile extends Component {
             The information in this section will be displayed publicly, so be careful what you share.
           </p>
 
-          <div class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
+          <div
+            class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
               <label for="username" class="block text-sm/6 font-medium text-gray-900 sm:pt-1.5">Username</label>
               <div class="mt-2 sm:col-span-2 sm:mt-0">
@@ -147,7 +148,8 @@ export default class Profile extends Component {
             Use a permanent address where you can receive mail.
           </p>
 
-          <div class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
+          <div
+            class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
               <label for="email" class="block text-sm/6 font-medium text-gray-900 sm:pt-1.5">Email address</label>
               <div class="mt-2 sm:col-span-2 sm:mt-0">
@@ -174,14 +176,33 @@ export default class Profile extends Component {
             </div>
           </div>
         </div>
+
+        <div>
+          <h2 class="text-base/7 font-semibold text-gray-900">OttoMap Permissions</h2>
+          <p class="mt-1 max-w-2xl text-sm/6 text-gray-600">
+            The information is this section is not shared.
+            Only administrators may make updates.
+          </p>
+
+          <div
+            class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
+            <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
+              <p>Roles: {{this.session.permissions}}</p>
+              <p>Permissions</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {{#if this.successMessage}}
         <div class="mt-6 rounded-md bg-green-50 p-4">
           <div class="flex">
             <div class="shrink-0">
-              <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-5 text-green-400">
-                <path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" fill-rule="evenodd" />
+              <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true"
+                   class="size-5 text-green-400">
+                <path
+                  d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+                  clip-rule="evenodd" fill-rule="evenodd" />
               </svg>
             </div>
             <div class="ml-3">
@@ -189,10 +210,12 @@ export default class Profile extends Component {
             </div>
             <div class="ml-auto pl-3">
               <div class="-mx-1.5 -my-1.5">
-                <button type="button" {{on "click" this.dismissSuccess}} class="inline-flex rounded-md bg-green-50 p-1.5 text-green-500 hover:bg-green-100 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 focus-visible:ring-offset-green-50 focus-visible:outline-hidden">
+                <button type="button" {{on "click" this.dismissSuccess}}
+                        class="inline-flex rounded-md bg-green-50 p-1.5 text-green-500 hover:bg-green-100 focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 focus-visible:ring-offset-green-50 focus-visible:outline-hidden">
                   <span class="sr-only">Dismiss</span>
                   <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-5">
-                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                    <path
+                      d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
                   </svg>
                 </button>
               </div>
@@ -205,8 +228,11 @@ export default class Profile extends Component {
         <div class="mt-6 rounded-md bg-red-50 p-4">
           <div class="flex">
             <div class="shrink-0">
-              <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="size-5 text-red-400">
-                <path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clip-rule="evenodd" fill-rule="evenodd" />
+              <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true"
+                   class="size-5 text-red-400">
+                <path
+                  d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z"
+                  clip-rule="evenodd" fill-rule="evenodd" />
               </svg>
             </div>
             <div class="ml-3">

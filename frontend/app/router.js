@@ -10,9 +10,20 @@ Router.map(function () {
   // public routes
   this.route('about');
   this.route('login');
+  this.route('privacy');
 
-  // user routes (authenticated)
-  this.route('user', function() {
+  // admin routes (authenticated, requires "admin" role)
+  this.route('admin', function () {
+    this.route('dashboard');
+    this.route('users', function () {
+      this.route('index', { path: '/' });
+      this.route('new');
+      this.route('edit', { path: '/:user_id' });
+    });
+  });
+
+  // users routes (authenticated, requires "user" role)
+  this.route('user', function () {
     this.route('calendar'); // obsolete route to be removed in a future sprint
     this.route('dashboard');
     this.route('maps');
@@ -23,7 +34,7 @@ Router.map(function () {
     this.route('secure'); // obsolete route to be removed in a future sprint
     this.route('settings');
     this.route('team'); // obsolete route to be removed in a future sprint
-    this.route('teams', function() {
+    this.route('teams', function () {
       this.route('heroicons'); // obsolete route to be removed in a future sprint
       this.route('tailwindlabs'); // obsolete route to be removed in a future sprint
       this.route('workcation'); // obsolete route to be removed in a future sprint
@@ -31,18 +42,8 @@ Router.map(function () {
   });
 
   // users routes (authenticated, requires "user" role)
-  this.route('users', function() {
+  this.route('users', function () {
     this.route('profile');
     this.route('password');
-  });
-
-  // admin routes (authenticated + admin role)
-  this.route('admin', function() {
-    this.route('dashboard');
-    this.route('users', function() {
-      this.route('index', { path: '/' });
-      this.route('new');
-      this.route('edit', { path: '/:user_id' });
-    });
   });
 });
