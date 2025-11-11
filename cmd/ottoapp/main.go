@@ -108,6 +108,11 @@ func main() {
 	cmdRoot.AddCommand(cmdApp)
 	cmdApp.AddCommand(cmdAppVersion)
 	cmdAppVersion.Flags().Bool("show-build-info", false, "show build information")
+	cmdApp.AddCommand(cmdAppTestUserProfile)
+	cmdAppTestUserProfile.Flags().String("host", "localhost", "API server host")
+	cmdAppTestUserProfile.Flags().String("port", "8181", "API server port")
+	cmdAppTestUserProfile.Flags().String("email", "skeener917@gmail.com", "email for authentication")
+	cmdAppTestUserProfile.Flags().String("password", "", "password for authentication (required)")
 
 	var cmdDb = &cobra.Command{
 		Use:   "db",
@@ -285,6 +290,38 @@ var cmdAppVersion = &cobra.Command{
 			return err
 		}
 		return nil
+	},
+}
+
+var cmdAppTestUserProfile = &cobra.Command{
+	Use:           "test-user-profile",
+	Short:         "Test the GET /api/users/me endpoint",
+	Long:          `Test the GET /api/users/me endpoint by logging in and fetching the user profile.`,
+	SilenceErrors: true,
+	SilenceUsage:  true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		host, err := cmd.Flags().GetString("host")
+		if err != nil {
+			return err
+		}
+		port, err := cmd.Flags().GetString("port")
+		if err != nil {
+			return err
+		}
+		email, err := cmd.Flags().GetString("email")
+		if err != nil {
+			return err
+		}
+		password, err := cmd.Flags().GetString("password")
+		if err != nil {
+			return err
+		}
+		if password == "" {
+			return fmt.Errorf("password is required")
+		}
+
+		r := runners.New("http", host, port)
+		return r.GetUserProfile(email, password)
 	},
 }
 
