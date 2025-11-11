@@ -38,7 +38,6 @@ func Routes(s *Server) http.Handler {
 	protected.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
 	protected.HandleFunc("GET /api/profile", s.handleGetProfile)
 	protected.HandleFunc("POST /api/profile", s.handlePostProfile)
-	protected.HandleFunc("GET /api/me", s.services.sessionsSvc.HandleGetMe)
 	protected.HandleFunc("GET /api/users", s.services.usersSvc.HandleGetUsers)
 	protected.HandleFunc("POST /api/users", s.services.usersSvc.HandlePostUser)
 	protected.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
