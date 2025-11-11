@@ -38,14 +38,7 @@ func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := s.authSvc.GetUserRoles(userID)
-	if err != nil {
-		log.Printf("GET /api/users/me: roles: user %d: %v", userID, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := s.buildUserResponse(user, roles, userID)
+	response := s.buildUserResponse(user, userID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -116,7 +109,7 @@ func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
 			Updated: time.Unix(row.UpdatedAt, 0).UTC(),
 		}
 
-		users = append(users, s.buildUserResponse(user, roles, actorID))
+		users = append(users, s.buildUserResponse(user, actorID))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -155,14 +148,7 @@ func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := s.authSvc.GetUserRoles(targetID)
-	if err != nil {
-		log.Printf("GET /api/users/%d: roles: %v", targetID, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := s.buildUserResponse(user, roles, actorID)
+	response := s.buildUserResponse(user, actorID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -245,14 +231,7 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := s.authSvc.GetUserRoles(targetID)
-	if err != nil {
-		log.Printf("PATCH /api/users/%d: roles: %v", targetID, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := s.buildUserResponse(user, roles, actorID)
+	response := s.buildUserResponse(user, actorID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -441,14 +420,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	roles, err := s.authSvc.GetUserRoles(user.ID)
-	if err != nil {
-		log.Printf("POST /api/users: roles: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := s.buildUserResponse(user, roles, actorID)
+	response := s.buildUserResponse(user, actorID)
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
@@ -517,45 +489,24 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := s.authSvc.GetUserRoles(targetID)
-	if err != nil {
-		log.Printf("PATCH /api/users/%d/role: roles: %v", targetID, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	response := s.buildUserResponse(user, roles, actorID)
+	response := s.buildUserResponse(user, actorID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
 // buildUserResponse constructs a UserResponse with permissions based on actor's privileges
-func (s *Service) buildUserResponse(user *domains.User_t, roles domains.Roles, actorID domains.ID) UserResponse {
-	// Convert roles map to slice
-	roleSlice := make([]string, 0, len(roles))
-	for role := range roles {
-		roleSlice = append(roleSlice, string(role))
-	}
-
-	// Determine permissions based on actor's relationship to this user
-	canEditProfile, _ := s.authSvc.CanEditUser(actorID, user.ID)
-	canEditUsername, _ := s.authSvc.CanEditUsername(actorID, user.ID)
-	canResetPassword, _ := s.authSvc.CanResetPassword(actorID, user.ID)
+func (s *Service) buildUserResponse(user *domains.User_t, actorID domains.ID) UserResponse {
+	auth, _ := s.authSvc.BuildActorAuth(actorID, user.ID)
 
 	return UserResponse{
-		ID:       int64(user.ID),
-		Username: user.Username,
-		Email:    user.Email,
-		Timezone: user.Locale.Timezone.Location.String(),
-		Roles:    roleSlice,
-		Permissions: map[string]bool{
-			"canEditProfile":    canEditProfile,
-			"canEditUsername":   canEditUsername,
-			"canResetPassword":  canResetPassword,
-			"canChangePassword": actorID == user.ID, // Only own password
-		},
-		Created: user.Created.Format(time.RFC3339),
-		Updated: user.Updated.Format(time.RFC3339),
+		ID:          int64(user.ID),
+		Username:    user.Username,
+		Email:       user.Email,
+		Timezone:    user.Locale.Timezone.Location.String(),
+		Roles:       auth.Roles,
+		Permissions: auth.Permissions,
+		Created:     user.Created.Format(time.RFC3339),
+		Updated:     user.Updated.Format(time.RFC3339),
 	}
 }

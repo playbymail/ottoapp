@@ -31,3 +31,10 @@ const (
 
 type Role string
 type Roles map[Role]bool
+
+// ActorAuthorizations represents the roles and permissions an actor has
+// for a target user. Used to build API responses for frontend authorization.
+type ActorAuthorizations struct {
+	Roles       []string        `json:"roles"`
+	Permissions map[string]bool `json:"permissions"`
+}

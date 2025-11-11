@@ -374,3 +374,35 @@ func (s *Service) CanManageRoles(actorID, targetID domains.ID) (bool, error) {
 func (s *Service) CanChangeOwnPassword(actorID, targetID domains.ID) (bool, error) {
 	return actorID == targetID, nil
 }
+
+// BuildActorAuth returns the actor's authorizations for the target user.
+// Includes roles and permissions that the frontend needs for UI decisions.
+func (s *Service) BuildActorAuth(actorID, targetID domains.ID) (*domains.ActorAuthorizations, error) {
+	// Get target user's roles
+	roles, err := s.GetUserRoles(targetID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert roles map to slice
+	roleSlice := make([]string, 0, len(roles))
+	for role := range roles {
+		roleSlice = append(roleSlice, string(role))
+	}
+
+	// Determine what actor can do to target
+	canEditProfile, _ := s.CanEditUser(actorID, targetID)
+	canEditUsername, _ := s.CanEditUsername(actorID, targetID)
+	canResetPassword, _ := s.CanResetPassword(actorID, targetID)
+	canChangePassword, _ := s.CanChangeOwnPassword(actorID, targetID)
+
+	return &domains.ActorAuthorizations{
+		Roles: roleSlice,
+		Permissions: map[string]bool{
+			"canEditProfile":    canEditProfile,
+			"canEditUsername":   canEditUsername,
+			"canResetPassword":  canResetPassword,
+			"canChangePassword": canChangePassword,
+		},
+	}, nil
+}
