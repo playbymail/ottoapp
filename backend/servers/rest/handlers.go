@@ -39,7 +39,7 @@ func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) postShutdown(key []byte) http.HandlerFunc {
+func (s *Server) handlePostShutdown(key []byte) http.HandlerFunc {
 	if len(key) == 0 {
 		return func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
