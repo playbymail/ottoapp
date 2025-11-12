@@ -135,21 +135,13 @@ func (s *Service) GetCurrentSession(r *http.Request) (*domains.Session, error) {
 	return sess, nil
 }
 
-func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
+// GetCurrentUserID returns the user ID from the current session.
+func (s *Service) GetCurrentUserID(r *http.Request) (domains.ID, error) {
 	sess, err := s.GetCurrentSession(r)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
+		return domains.InvalidID, err
 	}
-	// Ember Simple Auth requires an HTTP 200 response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(toPayload(sess.Csrf, &sess.User).User)
-	return
+	return sess.User.ID, nil
 }
 
 func (s *Service) HandleGetSession(w http.ResponseWriter, r *http.Request) {

@@ -1,7 +1,12 @@
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
-
-import Profile from 'frontend/components/profile';
+// app/templates/user/profile.gjs
+import Profile from 'frontend/components/user/profile';
 
 <template>
-  <Profile @model={{@model}} />
+  <Profile
+    @model={{@model}}
+    @onSave={{@controller.updateProfile}}
+    @isSaving={{@controller.isSaving}}
+    @errorMessage={{@controller.errorMessage}}
+    @successMessage={{@controller.successMessage}}
+  />
 </template>

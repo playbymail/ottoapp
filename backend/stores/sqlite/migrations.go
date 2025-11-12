@@ -208,7 +208,7 @@ func migrateUp(ctx context.Context, db *sql.DB, migrationsFS fs.FS, isInitializi
 // fetchAppliedMigrations returns the list of migration scripts that have already
 // been applied to the database.
 func fetchAppliedMigrations(ctx context.Context, db *sql.DB) (map[string]bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT name FROM schema_migrations`)
+	rows, err := db.QueryContext(ctx, `SELECT file_name FROM schema_migrations`)
 	if err != nil {
 		return nil, err
 	}

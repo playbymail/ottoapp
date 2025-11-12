@@ -5,6 +5,7 @@ package auth
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -23,6 +24,16 @@ type Service struct {
 
 func New(db *sqlite.DB) *Service {
 	return &Service{db: db}
+}
+
+// GetActor extracts the authenticated user ID from the request context.
+// This is a convenience helper that assumes sessionMiddleware has run.
+func (s *Service) GetActor(r *http.Request) (domains.ID, error) {
+	userID, ok := r.Context().Value(domains.ContextKeyUserID).(domains.ID)
+	if !ok || userID == domains.InvalidID {
+		return domains.InvalidID, domains.ErrNotAuthenticated
+	}
+	return userID, nil
 }
 
 // AuthenticateUser verifies the user's credentials (username + password).
@@ -157,5 +168,241 @@ func ValidatePassword(plainTextPassword string) bool {
 }
 
 func ValidateRole(role string) bool {
-	return containsWord(role, "guest", "chief", "admin")
+	return containsWord(role, "active", "sysop", "admin", "player", "guest", "user", "tn3", "tn3.1")
+}
+
+// AssignRole assigns a role to a user.
+func (s *Service) AssignRole(userID domains.ID, roleID string) error {
+	if !ValidateRole(roleID) {
+		return domains.ErrInvalidRole
+	}
+
+	q := s.db.Queries()
+	ctx := s.db.Context()
+	now := time.Now().UTC()
+
+	return q.AssignUserRole(ctx, sqlc.AssignUserRoleParams{
+		UserID:    int64(userID),
+		RoleID:    roleID,
+		CreatedAt: now.Unix(),
+		UpdatedAt: now.Unix(),
+	})
+}
+
+// RemoveRole removes a role from a user.
+func (s *Service) RemoveRole(userID domains.ID, roleID string) error {
+	if !ValidateRole(roleID) {
+		return domains.ErrInvalidRole
+	}
+
+	q := s.db.Queries()
+	ctx := s.db.Context()
+
+	return q.RemoveUserRole(ctx, sqlc.RemoveUserRoleParams{
+		UserID: int64(userID),
+		RoleID: roleID,
+	})
+}
+
+// HasRole checks if a user has a specific role.
+func (s *Service) HasRole(userID domains.ID, roleID string) (bool, error) {
+	roles, err := s.GetUserRoles(userID)
+	if err != nil {
+		return false, err
+	}
+	return roles[domains.Role(roleID)], nil
+}
+
+// IsAdmin checks if a user has the admin role.
+func (s *Service) IsAdmin(userID domains.ID) (bool, error) {
+	return s.HasRole(userID, "admin")
+}
+
+// IsSysop checks if a user has the sysop role.
+func (s *Service) IsSysop(userID domains.ID) (bool, error) {
+	return s.HasRole(userID, "sysop")
+}
+
+// CanEditUser checks if actor can edit target user's profile.
+// Rules: user can edit self, admin can edit non-admins (excluding sysop).
+func (s *Service) CanEditUser(actorID, targetID domains.ID) (bool, error) {
+	// User can edit themselves
+	if actorID == targetID {
+		return true, nil
+	}
+
+	// Check if actor is admin
+	isAdmin, err := s.IsAdmin(actorID)
+	if err != nil {
+		return false, err
+	}
+	if !isAdmin {
+		return false, nil
+	}
+
+	// Admin cannot edit sysop
+	targetIsSysop, err := s.IsSysop(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsSysop {
+		return false, nil
+	}
+
+	// Admin cannot edit other admins
+	targetIsAdmin, err := s.IsAdmin(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsAdmin {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// CanEditUsername checks if actor can edit target user's username.
+// Only admins can edit usernames.
+func (s *Service) CanEditUsername(actorID, targetID domains.ID) (bool, error) {
+	isAdmin, err := s.IsAdmin(actorID)
+	if err != nil {
+		return false, err
+	}
+	if !isAdmin {
+		return false, nil
+	}
+
+	// Admin cannot edit sysop
+	targetIsSysop, err := s.IsSysop(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsSysop {
+		return false, nil
+	}
+
+	// Admin cannot edit other admins
+	targetIsAdmin, err := s.IsAdmin(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsAdmin {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// CanResetPassword checks if actor can reset target user's password.
+// Only admins can reset passwords for non-admins.
+func (s *Service) CanResetPassword(actorID, targetID domains.ID) (bool, error) {
+	isAdmin, err := s.IsAdmin(actorID)
+	if err != nil {
+		return false, err
+	}
+	if !isAdmin {
+		return false, nil
+	}
+
+	// Admin cannot reset sysop password (sysop has no password)
+	targetIsSysop, err := s.IsSysop(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsSysop {
+		return false, nil
+	}
+
+	// Admin cannot reset other admin passwords
+	targetIsAdmin, err := s.IsAdmin(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsAdmin {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// CanCreateUser checks if actor can create new users.
+// Only admins can create users.
+func (s *Service) CanCreateUser(actorID domains.ID) (bool, error) {
+	return s.IsAdmin(actorID)
+}
+
+// CanListUsers checks if actor can list all users.
+// Only admins can list users.
+func (s *Service) CanListUsers(actorID domains.ID) (bool, error) {
+	return s.IsAdmin(actorID)
+}
+
+// CanManageRoles checks if actor can modify target user's roles.
+// Only admins can manage roles, and they cannot modify sysop or admin roles.
+func (s *Service) CanManageRoles(actorID, targetID domains.ID) (bool, error) {
+	isAdmin, err := s.IsAdmin(actorID)
+	if err != nil {
+		return false, err
+	}
+	if !isAdmin {
+		return false, nil
+	}
+
+	// Cannot modify sysop roles
+	targetIsSysop, err := s.IsSysop(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsSysop {
+		return false, nil
+	}
+
+	// Cannot modify admin roles
+	targetIsAdmin, err := s.IsAdmin(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsAdmin {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// CanChangeOwnPassword checks if actor can change their own password.
+// Users can only change their own password (not others').
+func (s *Service) CanChangeOwnPassword(actorID, targetID domains.ID) (bool, error) {
+	return actorID == targetID, nil
+}
+
+// BuildActorAuth returns the actor's authorizations for the target user.
+// Includes roles and permissions that the frontend needs for UI decisions.
+func (s *Service) BuildActorAuth(actorID, targetID domains.ID) (*domains.ActorAuthorizations, error) {
+	// Get target user's roles
+	roles, err := s.GetUserRoles(targetID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert roles map to slice
+	roleSlice := make([]string, 0, len(roles))
+	for role := range roles {
+		roleSlice = append(roleSlice, string(role))
+	}
+
+	// Determine what actor can do to target
+	canEditProfile, _ := s.CanEditUser(actorID, targetID)
+	canEditUsername, _ := s.CanEditUsername(actorID, targetID)
+	canResetPassword, _ := s.CanResetPassword(actorID, targetID)
+	canChangePassword, _ := s.CanChangeOwnPassword(actorID, targetID)
+
+	return &domains.ActorAuthorizations{
+		Roles: roleSlice,
+		Permissions: map[string]bool{
+			"canEditProfile":    canEditProfile,
+			"canEditUsername":   canEditUsername,
+			"canResetPassword":  canResetPassword,
+			"canChangePassword": canChangePassword,
+		},
+	}, nil
 }

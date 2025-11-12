@@ -8,9 +8,9 @@ export default class AdminRoute extends Route {
   beforeModel(transition) {
     this.session.requireAuthentication(transition, 'login');
 
-    // TODO: Add admin role check when user roles are implemented
-    // if (!this.session.currentUser.isAdmin) {
-    //   this.router.transitionTo('user.dashboard');
-    // }
+    // Check if user has the "admin" role
+    if (!this.session.canAccessAdminRoutes) {
+      this.router.transitionTo('user.dashboard');
+    }
   }
 }

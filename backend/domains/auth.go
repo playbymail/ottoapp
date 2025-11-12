@@ -13,11 +13,28 @@ const (
 	InvalidID ID = 0
 )
 
+// contextKey is the type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// ContextKeyUserID is the context key for the authenticated user ID
+	ContextKeyUserID contextKey = "userID"
+)
+
 const (
 	ErrInvalidCredentials = Error("invalid credentials")
 	ErrInvalidPassword    = Error("invalid password")
+	ErrInvalidRole        = Error("invalid role")
 	ErrNoRolesAssigned    = Error("no roles assigned")
+	ErrNotAuthenticated   = Error("not authenticated")
 )
 
 type Role string
 type Roles map[Role]bool
+
+// ActorAuthorizations represents the roles and permissions an actor has
+// for a target user. Used to build API responses for frontend authorization.
+type ActorAuthorizations struct {
+	Roles       []string        `json:"roles"`
+	Permissions map[string]bool `json:"permissions"`
+}

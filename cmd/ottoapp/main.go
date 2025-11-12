@@ -108,6 +108,11 @@ func main() {
 	cmdRoot.AddCommand(cmdApp)
 	cmdApp.AddCommand(cmdAppVersion)
 	cmdAppVersion.Flags().Bool("show-build-info", false, "show build information")
+	cmdApp.AddCommand(cmdAppTestUserProfile)
+	cmdAppTestUserProfile.Flags().String("host", "localhost", "API server host")
+	cmdAppTestUserProfile.Flags().String("port", "8181", "API server port")
+	cmdAppTestUserProfile.Flags().String("email", "skeener917@gmail.com", "email for authentication")
+	cmdAppTestUserProfile.Flags().String("password", "", "password for authentication (required)")
 
 	var cmdDb = &cobra.Command{
 		Use:   "db",
@@ -154,6 +159,9 @@ func main() {
 	cmdUserUpdate.Flags().String("email", "", "email address for user")
 	cmdUserUpdate.Flags().String("password", "", "password for user (generates random if \":\")")
 	cmdUserUpdate.Flags().String("tz", "", "IANA timezone for user")
+	cmdUser.AddCommand(cmdUserRole)
+	cmdUserRole.Flags().StringSlice("add", []string{}, "roles to add (comma-separated: user,admin,player)")
+	cmdUserRole.Flags().StringSlice("remove", []string{}, "roles to remove (comma-separated: user,admin,player)")
 
 	var cmdVersion = &cobra.Command{
 		Use:   "version",
@@ -282,6 +290,38 @@ var cmdAppVersion = &cobra.Command{
 			return err
 		}
 		return nil
+	},
+}
+
+var cmdAppTestUserProfile = &cobra.Command{
+	Use:           "test-user-profile",
+	Short:         "Test the GET /api/users/me endpoint",
+	Long:          `Test the GET /api/users/me endpoint by logging in and fetching the user profile.`,
+	SilenceErrors: true,
+	SilenceUsage:  true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		host, err := cmd.Flags().GetString("host")
+		if err != nil {
+			return err
+		}
+		port, err := cmd.Flags().GetString("port")
+		if err != nil {
+			return err
+		}
+		email, err := cmd.Flags().GetString("email")
+		if err != nil {
+			return err
+		}
+		password, err := cmd.Flags().GetString("password")
+		if err != nil {
+			return err
+		}
+		if password == "" {
+			return fmt.Errorf("password is required")
+		}
+
+		r := runners.New("http", host, port)
+		return r.GetUserProfile(email, password)
 	},
 }
 
@@ -748,6 +788,80 @@ var cmdUserUpdate = &cobra.Command{
 				return fmt.Errorf("user %q: password %q: update %v\n", userName, *newPassword, err)
 			}
 			log.Printf("user %q: password %q: updated", userName, *newPassword)
+		}
+
+		return nil
+	},
+}
+
+var cmdUserRole = &cobra.Command{
+	Use:          "role <username>",
+	Short:        "Manage user roles",
+	Long:         `Add or remove roles for a specific user. At least one --add or --remove flag must be provided.`,
+	Args:         cobra.ExactArgs(1), // require username
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dbPath, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		userName := strings.ToLower(args[0])
+		if !users.ValidateUsername(userName) {
+			return domains.ErrInvalidUsername
+		}
+
+		rolesToAdd, err := cmd.Flags().GetStringSlice("add")
+		if err != nil {
+			return err
+		}
+		rolesToRemove, err := cmd.Flags().GetStringSlice("remove")
+		if err != nil {
+			return err
+		}
+
+		if len(rolesToAdd) == 0 && len(rolesToRemove) == 0 {
+			return fmt.Errorf("must specify at least one role to add or remove")
+		}
+
+		ctx := context.Background()
+		db, err := sqlite.Open(ctx, dbPath, true, false)
+		if err != nil {
+			log.Fatalf("db: open: %v\n", err)
+		}
+		defer func() {
+			_ = db.Close()
+		}()
+
+		authSvc := auth.New(db)
+		tzSvc, err := iana.New(db)
+		if err != nil {
+			return err
+		}
+		usersSvc := users.New(db, authSvc, tzSvc)
+
+		user, err := usersSvc.GetUserByUsername(userName)
+		if err != nil {
+			return fmt.Errorf("user: %q: not found: %v", userName, err)
+		}
+
+		// Add roles
+		for _, roleID := range rolesToAdd {
+			err = authSvc.AssignRole(user.ID, roleID)
+			if err != nil {
+				log.Printf("user %q: role %q: failed to add: %v", userName, roleID, err)
+			} else {
+				log.Printf("user %q: role %q: added", userName, roleID)
+			}
+		}
+
+		// Remove roles
+		for _, roleID := range rolesToRemove {
+			err = authSvc.RemoveRole(user.ID, roleID)
+			if err != nil {
+				log.Printf("user %q: role %q: failed to remove: %v", userName, roleID, err)
+			} else {
+				log.Printf("user %q: role %q: removed", userName, roleID)
+			}
 		}
 
 		return nil

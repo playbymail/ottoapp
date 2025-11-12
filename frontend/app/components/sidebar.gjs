@@ -10,9 +10,9 @@ import SidebarRelative from 'frontend/components/sidebar/relative';
 
 export default class Sidebar extends Component {
   <template>
-    <!-- dynamic sidebar for smaller displays -->
+    {{!-- dynamic sidebar for smaller displays --}}
     <SidebarRelative />
-    <!-- static sidebar for desktops -->
+    {{!-- static sidebar for desktops --}}
     <SidebarFlex />
   </template>
 }

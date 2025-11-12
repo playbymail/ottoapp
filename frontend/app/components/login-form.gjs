@@ -93,7 +93,7 @@ export default class LoginForm extends Component {
 
             <p class="mt-10 text-center text-sm/6 text-gray-500">
               Need an account?
-              <a href="https://discord.gg/xR9HVYGFXs" target="_blank" class="font-semibold text-indigo-600 hover:text-indigo-500">Request one here.</a>
+              <a href="https://discord.gg/xR9HVYGFXs" target="_blank" class="font-semibold text-indigo-600 hover:text-indigo-500" rel="noopener noreferrer">Request one here.</a>
             </p>
           </div>
         </div>
