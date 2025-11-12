@@ -85,4 +85,16 @@ export default class ApiService extends Service {
       remove: rolesToRemove,
     });
   }
+
+  async getProfile() {
+    return this.get('/api/profile');
+  }
+
+  async updateProfile(data) {
+    return this.post('/api/profile', data);
+  }
+
+  async getTimezones() {
+    return this.get('/api/timezones');
+  }
 }
