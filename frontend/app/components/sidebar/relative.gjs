@@ -24,7 +24,7 @@ export default class SidebarRelative extends Component {
               </button>
             </div>
 
-            <!-- Sidebar component, swap this element with another sidebar if you like -->
+            {{!-- Sidebar component, swap this element with another sidebar if you like --}}
             <div class="relative flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-4 dark:bg-gray-900 dark:ring dark:ring-white/10 dark:before:pointer-events-none dark:before:absolute dark:before:inset-0 dark:before:bg-black/10">
               <div class="relative flex h-16 shrink-0 items-center">
                 <img src="/img/logo-light.svg" alt="OttoApp" class="h-8 w-auto dark:hidden" />

@@ -1,3 +1,4 @@
+// app/services/api.js
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -12,11 +13,36 @@ export default class ApiService extends Service {
     return this.csrf;
   }
 
+  // small helper to pull message from JSON error bodies
+  async _errorFromResponse(res, fallback) {
+    try {
+      const data = await res.json();
+      return new Error(data.message || fallback);
+    } catch (_) {
+      return new Error(fallback);
+    }
+  }
+
+  // implement HTTP request method helpers
   async get(url) {
     return fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // NEW: get but always return JSON or throw
+  async getAsJSON(url) {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin', // match what your route had
+    });
+    if (!res.ok) {
+      // you can make a better error object here
+      throw new Error(`GET ${url} failed with ${res.status}`);
+    }
+    return res.json();
   }
 
   async post(url, body) {
@@ -26,6 +52,25 @@ export default class ApiService extends Service {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
       body: JSON.stringify(body),
     });
+  }
+
+  // NEW: post but always return JSON or throw
+  async postAsJSON(url, body) {
+    const token = await this.ensureCsrf();
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': token,
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      // you can make a better error object here
+      throw await this._errorFromResponse(res, `POST ${url} failed`);
+    }
+    return res.json();
   }
 
   async patch(url, body) {
@@ -44,6 +89,25 @@ export default class ApiService extends Service {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
       body: JSON.stringify(body),
     });
+  }
+
+  // NEW: put but always return JSON or throw — this is what the controller wants
+  async putAsJSON(url, body) {
+    const token = await this.ensureCsrf();
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': token,
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      // you can make a better error object here
+      throw await this._errorFromResponse(res, `PUT ${url} failed`);
+    }
+    return res.json();
   }
 
   // User Management API Methods
@@ -87,11 +151,13 @@ export default class ApiService extends Service {
   }
 
   async getProfile() {
-    return this.get('/api/profile');
+    console.log('app/services/api', 'getProfile');
+    return this.getAsJSON('/api/profile');
   }
 
   async updateProfile(data) {
-    return this.post('/api/profile', data);
+    console.log('app/services/api', 'change updateProfile to PUT not POST');
+    return this.postAsJSON('/api/profile', data);
   }
 
   async getTimezones() {

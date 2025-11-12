@@ -17,7 +17,7 @@ export default class StickyHeader extends Component {
         </svg>
       </button>
 
-      <!-- Separator -->
+      {{!-- Separator --}}
       <div aria-hidden="true" class="h-6 w-px bg-gray-200 lg:hidden dark:bg-white/10"></div>
 
       <div class="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
@@ -35,7 +35,7 @@ export default class StickyHeader extends Component {
             </svg>
           </button>
 
-          <!-- Separator -->
+          {{!-- Separator --}}
           <div aria-hidden="true" class="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200 dark:lg:bg-white/10"></div>
 
           <ProfileDropdown />

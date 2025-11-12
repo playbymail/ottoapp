@@ -35,7 +35,7 @@ export default class NavList extends Component {
       <li>
         <ul role="list" class="-mx-2 space-y-1">
           <li>
-            <!-- Current: "bg-gray-50 dark:bg-white/5 text-indigo-600 dark:text-white", Default: "text-gray-700 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5" -->
+            {{!-- Current: "bg-gray-50 dark:bg-white/5 text-indigo-600 dark:text-white", Default: "text-gray-700 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5" --}}
             <LinkTo @route="user.dashboard" class={{this.linkClass "user.dashboard" "group flex gap-x-3 rounded-md"}}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.dashboard" "size-6 shrink-0"}}>
                 <path d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" stroke-linecap="round" stroke-linejoin="round" />
@@ -114,7 +114,7 @@ export default class NavList extends Component {
           <div class="text-xs/6 font-semibold text-gray-400">User</div>
           <ul role="list" class="-mx-2 mt-2 space-y-1">
             <li>
-              <LinkTo @route="users.profile" class={{this.linkClass "users.profile" "group flex gap-x-3 rounded-md"}}>
+              <LinkTo @route="user.profile" class={{this.linkClass "user.profile" "group flex gap-x-3 rounded-md"}}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "users.profile" "size-6 shrink-0"}}>
                   <path d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
@@ -122,7 +122,7 @@ export default class NavList extends Component {
               </LinkTo>
             </li>
             <li>
-              <LinkTo @route="users.password" class={{this.linkClass "users.password" "group flex gap-x-3 rounded-md"}}>
+              <LinkTo @route="user.profile" class={{this.linkClass "user.profile" "group flex gap-x-3 rounded-md"}}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "users.password" "size-6 shrink-0"}}>
                   <path d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>

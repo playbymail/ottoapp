@@ -15,7 +15,7 @@ export default class Footer extends Component {
           <LinkTo @route="privacy" class="text-gray-600 hover:text-gray-900">Privacy</LinkTo>
         </nav>
         <div class="mt-16 flex justify-center gap-x-10">
-          <a href="https://github.com/playbymail/ottoapp" target="_blank" class="text-gray-600 hover:text-gray-800">
+          <a href="https://github.com/playbymail/ottoapp" target="_blank" class="text-gray-600 hover:text-gray-800" rel="noopener noreferrer">
             <span class="sr-only">GitHub</span>
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="size-6">
               <path

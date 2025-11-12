@@ -24,13 +24,13 @@ export default class SiteShell extends Component {
       <Header />
       <main class="isolate">
         {{outlet}}
-        <!-- Hero / -->
-        <!-- Content / -->
-        <!-- Image / -->
-        <!-- Feature / -->
-        <!-- LogoCloud / -->
-        <!-- Team / -->
-        <!-- Blog / -->
+        {{!-- Hero / --}}
+        {{!-- Content / --}}
+        {{!-- Image / --}}
+        {{!-- Feature / --}}
+        {{!-- LogoCloud / --}}
+        {{!-- Team / --}}
+        {{!-- Blog / --}}
       </main>
       <Footer />
     </div>

@@ -40,10 +40,4 @@ Router.map(function () {
       this.route('workcation'); // obsolete route to be removed in a future sprint
     });
   });
-
-  // users routes (authenticated, requires "user" role)
-  this.route('users', function () {
-    this.route('profile');
-    this.route('password');
-  });
 });

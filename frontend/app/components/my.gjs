@@ -14,12 +14,12 @@ export default class MyComponent extends Component {
       {{/link-to}}
 
       {{#if this.session.isAuthenticated}}
-        <button {{on "click" this.logout}}>Logout</button>
+        <button type="button" {{on "click" this.logout}}>Logout</button>
         {{#if this.currentUser.user}}
           <p>Signed in as {{this.currentUser.user.name}}</p>
         {{/if}}
       {{else}}
-        <button {{on "click" this.login}}>Login</button>
+        <button type="button" {{on "click" this.login}}>Login</button>
       {{/if}}
     </nav>
   </template>
