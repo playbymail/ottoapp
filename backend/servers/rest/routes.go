@@ -36,6 +36,7 @@ func Routes(s *Server) http.Handler {
 	protected.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
 	protected.Handle("GET /api/documents", s.handleGetDocuments())
 	protected.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
+	protected.HandleFunc("GET /api/my/profile", s.services.usersSvc.HandleGetMyProfile)
 	protected.HandleFunc("GET /api/profile", s.handleGetProfile)
 	protected.HandleFunc("POST /api/profile", s.handlePostProfile)
 	protected.HandleFunc("GET /api/users", s.services.usersSvc.HandleGetUsers)
@@ -43,7 +44,7 @@ func Routes(s *Server) http.Handler {
 	protected.HandleFunc("GET /api/users/me", s.services.usersSvc.HandleGetMe)
 	protected.HandleFunc("GET /api/users/{id}", s.services.usersSvc.HandleGetUser)
 	protected.HandleFunc("PATCH /api/users/{id}", s.services.usersSvc.HandlePatchUser)
-	protected.HandleFunc("PUT /api/users/{id}/password", s.services.usersSvc.HandlePutPassword)
+	protected.HandleFunc("PATCH /api/users/{id}/password", s.services.usersSvc.HandlePatchPassword)
 	protected.HandleFunc("POST /api/users/{id}/reset-password", s.services.usersSvc.HandlePostResetPassword)
 	protected.HandleFunc("PATCH /api/users/{id}/role", s.services.usersSvc.HandlePatchUserRole)
 
