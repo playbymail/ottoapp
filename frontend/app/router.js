@@ -1,3 +1,4 @@
+// app/router.js
 import EmberRouter from '@embroider/router';
 import config from 'frontend/config/environment';
 
@@ -9,17 +10,19 @@ export default class Router extends EmberRouter {
 Router.map(function () {
   // public routes
   this.route('about');
+  this.route('docs');
   this.route('login');
   this.route('privacy');
 
   // admin routes (authenticated, requires "admin" role)
   this.route('admin', function () {
-    this.route('dashboard');
+    this.route('dashboard', { path: '/'});
     this.route('users', function () {
       this.route('index', { path: '/' });
       this.route('new');
       this.route('edit', { path: '/:user_id' });
     });
+    this.route('park');
   });
 
   // users routes (authenticated, requires "user" role)

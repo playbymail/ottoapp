@@ -1,9 +1,8 @@
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
-import Component from '@glimmer/component';
-
-// https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
+// app/components/site/image.gjs
 // Requires a TailwindCSS Plus license.
+// https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 
+import Component from '@glimmer/component';
 import {LinkTo} from '@ember/routing';
 
 export default class Image extends Component {

@@ -162,6 +162,7 @@ func main() {
 	cmdUser.AddCommand(cmdUserRole)
 	cmdUserRole.Flags().StringSlice("add", []string{}, "roles to add (comma-separated: user,admin,player)")
 	cmdUserRole.Flags().StringSlice("remove", []string{}, "roles to remove (comma-separated: user,admin,player)")
+	cmdUser.AddCommand(cmdUserImport)
 
 	var cmdVersion = &cobra.Command{
 		Use:   "version",
