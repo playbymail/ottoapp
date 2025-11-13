@@ -30,7 +30,6 @@ export default class Profile extends Component {
     return Array.isArray(e) ? e : [e];
   }
 
-
   get profile() {
     return this.args.model ?? {};
   }
@@ -54,31 +53,17 @@ export default class Profile extends Component {
   }
 
   @action async save(e) {
-    // console.log('app/components/user/profile', 'onSave', this.args.onSave);
-    // console.log('app/components/user/profile', 'save', this.hasChanges);
-    // console.log('component onSave type:', typeof this.args.onSave);
-
     // cancel the browser submit (which does GET with ?email=…)
     e?.preventDefault();
     e?.stopPropagation(); // optional, but nice
-    // console.log('profile/save', { hasChanges: this.hasChanges, type: e?.type });
-    // console.log(e.type, e.defaultPrevented); // "submit", true
 
     if (!this.hasChanges) return;
 
-    // DDAU: bubble up as a POJO; controller/service handles network & mutation
-    // console.log(typeof this.args.onSave)
-    await this.args.onSave?.({
-      email: this.email,
-      timezone: this.timezone,
-    });
+    // Push values into the model
+    this.args.model.email = this.email;
+    this.args.model.timezone = this.timezone;
 
-    // console.log('app/components/user/profile', 'save', 'after await', this.args.model);
-
-    // after a successful save the controller mutates model;
-    // sync local inputs with mutated model after controller saves
-    this.email = this.args.model?.email ?? this.email;
-    this.timezone = this.args.model?.timezone ?? this.timezone;
+    await this.args.onSave?.();
   }
 
   @action cancel() {

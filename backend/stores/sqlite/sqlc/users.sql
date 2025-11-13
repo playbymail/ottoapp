@@ -110,3 +110,15 @@ SELECT user_id,
 FROM users
 ORDER BY username;
 
+-- name: ListUsersVisibleToActor :many
+SELECT user_id,
+       username,
+       email,
+       timezone,
+       created_at,
+       updated_at
+FROM users
+WHERE :actor_id = 1
+  AND :page_size = 1
+  AND :page_num = 1
+ORDER BY username;

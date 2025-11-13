@@ -223,6 +223,36 @@ func (s *Service) IsSysop(userID domains.ID) (bool, error) {
 	return s.HasRole(userID, "sysop")
 }
 
+// CanViewUser returns true if actor can view target user's profile.
+// Rules: user can view self, admin can view all (excluding sysop)
+func (s *Service) CanViewUser(actorID, targetID domains.ID) (bool, error) {
+	// User can view themselves
+	if actorID == targetID {
+		return true, nil
+	}
+
+	// Check if actor is admin
+	isAdmin, err := s.IsAdmin(actorID)
+	if err != nil {
+		return false, err
+	}
+	if !isAdmin {
+		return false, nil
+	}
+
+	// Admin cannot view sysop
+	targetIsSysop, err := s.IsSysop(targetID)
+	if err != nil {
+		return false, err
+	}
+	if targetIsSysop {
+		return false, nil
+	}
+
+	// Admin can all other users, including other admins
+	return true, nil
+}
+
 // CanEditUser checks if actor can edit target user's profile.
 // Rules: user can edit self, admin can edit non-admins (excluding sysop).
 func (s *Service) CanEditUser(actorID, targetID domains.ID) (bool, error) {

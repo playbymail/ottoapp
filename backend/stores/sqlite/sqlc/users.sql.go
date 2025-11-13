@@ -197,6 +197,56 @@ func (q *Queries) GetUserIDByUsername(ctx context.Context, username string) (int
 	return user_id, err
 }
 
+const listUsersVisibleToActor = `-- name: ListUsersVisibleToActor :many
+SELECT user_id,
+       username,
+       email,
+       timezone,
+       created_at,
+       updated_at
+FROM users
+WHERE ?1 = 1
+  AND ?2 = 1
+  AND ?3 = 1
+ORDER BY username
+`
+
+type ListUsersVisibleToActorParams struct {
+	ActorID  interface{}
+	PageSize interface{}
+	PageNum  interface{}
+}
+
+func (q *Queries) ListUsersVisibleToActor(ctx context.Context, arg ListUsersVisibleToActorParams) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersVisibleToActor, arg.ActorID, arg.PageSize, arg.PageNum)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Email,
+			&i.Timezone,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateUser = `-- name: UpdateUser :exec
 UPDATE users
 SET email      = ?1,
