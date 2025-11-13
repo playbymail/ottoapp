@@ -1,14 +1,11 @@
+// app/routes/admin/users/edit.js
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 
 export default class AdminUsersEditRoute extends Route {
-  @service api;
+  @service store;
 
   async model(params) {
-    const response = await this.api.getUser(params.user_id);
-    if (response.ok) {
-      return response.json();
-    }
-    throw new Error('Failed to load user');
+    return this.store.findRecord('user', params.user_id);
   }
 }

@@ -2,6 +2,8 @@
 
 package users
 
+//go:generate go run ../../cmd/godel -input handlers.go -struct UserView -output ../../frontend/app/models/user.js
+
 import (
 	"errors"
 	"fmt"

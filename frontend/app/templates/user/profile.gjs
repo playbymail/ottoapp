@@ -1,10 +1,11 @@
 // app/templates/user/profile.gjs
-import Profile from 'frontend/components/user/profile';
+import UserForm from 'frontend/components/user/form';
 
 <template>
-  <Profile
+  <UserForm
     @model={{@model}}
     @onSave={{@controller.updateProfile}}
+    @onCancel={{@controller.cancel}}
     @isSaving={{@controller.isSaving}}
     @errorMessage={{@controller.errorMessage}}
     @successMessage={{@controller.successMessage}}

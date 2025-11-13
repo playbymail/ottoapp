@@ -1,12 +1,15 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
 import Component from "@glimmer/component";
+import {service} from "@ember/service";
 import {tracked} from "@glimmer/tracking";
 import {action} from "@ember/object";
 import {on} from "@ember/modifier";
 import {fn} from "@ember/helper";
 
 export default class TimezonePicker extends Component {
+  @service store;
+
   @tracked showingAll = false;
   @tracked allTimezones = null;
   @tracked searchTerm = "";
@@ -16,7 +19,7 @@ export default class TimezonePicker extends Component {
     let q = this.searchTerm.trim().toLowerCase();
     if (!q) return this.allTimezones;
     return this.allTimezones.filter((tz) =>
-      tz.label.toLowerCase().includes(q)
+      tz.canonicalName.toLowerCase().includes(q)
     );
   }
 
@@ -27,8 +30,7 @@ export default class TimezonePicker extends Component {
   @action async showAll() {
     this.showingAll = true;
     if (!this.allTimezones) {
-      let res = await fetch("/api/timezones");
-      this.allTimezones = await res.json();
+      this.allTimezones = await this.store.findAll('timezone');
     }
   }
 
@@ -87,10 +89,10 @@ export default class TimezonePicker extends Component {
               <button
                 type="button"
                 class="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50"
-                {{on "click" (fn this.selectTimezone tz.label)}}
+                {{on "click" (fn this.selectTimezone tz.canonicalName)}}
               >
-                <span class="text-sm">{{tz.label}}</span>
-                {{#if (this.isSelected tz.label)}}
+                <span class="text-sm">{{tz.canonicalName}}</span>
+                {{#if (this.isSelected tz.canonicalName)}}
                   <span class="text-indigo-600 text-xs font-semibold">Selected</span>
                 {{/if}}
               </button>

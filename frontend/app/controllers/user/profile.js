@@ -18,7 +18,6 @@ export default class UserProfileController extends Controller {
     this.isSaving = true;
 
     try {
-      console.log('updateProfile: before update', 'dirty', this.model.hasDirtyAttributes);
       if (!this.model.hasDirtyAttributes) {
         return;
       }

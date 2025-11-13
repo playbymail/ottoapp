@@ -1,5 +1,14 @@
-import New from 'frontend/components/admin/users/new';
+// app/templates/admin/users/new.gjs
+import UserForm from 'frontend/components/user/form';
 
 <template>
-  <New></New>
+  <UserForm
+    @model={{@model}}
+    @canEditUsername={{true}}
+    @onSave={{@controller.createUser}}
+    @onCancel={{@controller.cancel}}
+    @isSaving={{@controller.isSaving}}
+    @errorMessage={{@controller.errorMessage}}
+    @successMessage={{@controller.successMessage}}
+  />
 </template>

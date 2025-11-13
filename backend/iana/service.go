@@ -5,6 +5,8 @@
 // The `gentz` command should be used to update the list of timezones in the `normalize.go` file.
 package iana
 
+//go:generate go run ../../cmd/godel -input handlers.go -struct TimezoneView -output ../../frontend/app/models/timezone.js
+
 import (
 	"log"
 	"sort"

@@ -4,38 +4,21 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
 export default class AdminUsersNewController extends Controller {
-  @service api;
   @service router;
 
   @tracked errorMessage = null;
   @tracked isSaving = false;
 
   @action
-  async createUser(event) {
-    event.preventDefault();
+  async createUser() {
     this.errorMessage = null;
     this.isSaving = true;
 
-    const formData = new FormData(event.target);
-    const userData = {
-      username: formData.get('username'),
-      email: formData.get('email'),
-      password: formData.get('password'),
-      timezone: formData.get('timezone'),
-      roles: formData.getAll('roles'),
-    };
-
     try {
-      const response = await this.api.createUser(userData);
-
-      if (response.ok) {
-        this.router.transitionTo('admin.users.index');
-      } else {
-        const error = await response.json();
-        this.errorMessage = error.message || 'Failed to create user';
-      }
-    } catch (error) {
-      this.errorMessage = 'An error occurred while creating the user';
+      await this.model.save();
+      this.router.transitionTo('admin.users.index');
+    } catch (err) {
+      this.errorMessage = err?.message || 'An error occurred while creating the user';
     } finally {
       this.isSaving = false;
     }
@@ -43,6 +26,7 @@ export default class AdminUsersNewController extends Controller {
 
   @action
   cancel() {
+    this.model.rollbackAttributes();
     this.router.transitionTo('admin.users.index');
   }
 }
