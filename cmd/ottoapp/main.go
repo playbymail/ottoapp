@@ -263,6 +263,13 @@ var cmdApiServe = &cobra.Command{
 			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
 
+		// Import test users for in-memory database
+		if path == ":memory:" {
+			if err := importUsersFromCSVData(db, authSvc, usersSvc, memdbPlayersCsvData); err != nil {
+				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
+			}
+		}
+
 		s, err := rest.New(authSvc, sessionsSvc, tzSvc, usersSvc, options...)
 		if err != nil {
 			return errors.Join(fmt.Errorf("rest.new"), err)
@@ -672,7 +679,8 @@ var cmdUserCreate = &cobra.Command{
 		tzSvc, err := iana.New(db)
 		usersSvc := users.New(db, authSvc, tzSvc)
 
-		_, err = usersSvc.CreateUser(userName, email, password, loc)
+		// For the user create command, use userName as the handle
+		_, err = usersSvc.CreateUser(userName, email, userName, password, loc)
 		if err != nil {
 			log.Fatalf("user %q: create: %v\n", userName, err)
 		}

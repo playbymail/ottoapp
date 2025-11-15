@@ -111,6 +111,7 @@ type User struct {
 	UserID    int64
 	Username  string
 	Email     string
+	Handle    string
 	Timezone  string
 	CreatedAt int64
 	UpdatedAt int64

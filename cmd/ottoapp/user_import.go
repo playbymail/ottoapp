@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -15,13 +16,16 @@ import (
 
 	"github.com/mdhender/phrases/v2"
 	"github.com/playbymail/ottoapp/backend/auth"
-	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
+	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 )
+
+//go:embed testdata/memdb-players.csv
+var memdbPlayersCsvData []byte
 
 var cmdUserImport = &cobra.Command{
 	Use:          "import <csv-file>",
@@ -57,13 +61,18 @@ var cmdUserImport = &cobra.Command{
 		}()
 
 		authSvc := auth.New(db)
+		tzSvc, err := iana.New(db)
+		if err != nil {
+			return errors.Join(fmt.Errorf("iana.new"), err)
+		}
+		usersSvc := users.New(db, authSvc, tzSvc)
 
 		// Track generated passwords
 		passwordUpdates := make(map[int]string) // map of row index to generated password
 
 		// Process each record
 		for i, record := range records {
-			generatedPassword, err := importUser(db, authSvc, record)
+			generatedPassword, err := importUser(db, authSvc, usersSvc, record)
 			if err != nil {
 				log.Printf("row %d: email %q: failed: %v\n", i+2, record.Email, err)
 			} else {
@@ -90,6 +99,7 @@ var cmdUserImport = &cobra.Command{
 
 type userRecord struct {
 	Clan     string
+	Handle   string
 	Username string
 	Email    string
 	Roles    map[string]bool
@@ -110,13 +120,28 @@ func readAndValidateCSV(path string) ([]userRecord, error) {
 		return nil, fmt.Errorf("read csv: %w", err)
 	}
 
+	return parseAndValidateCSVRows(rows)
+}
+
+func readAndValidateCSVData(data []byte) ([]userRecord, error) {
+	reader := csv.NewReader(strings.NewReader(string(data)))
+	rows, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("read csv: %w", err)
+	}
+
+	return parseAndValidateCSVRows(rows)
+}
+
+func parseAndValidateCSVRows(rows [][]string) ([]userRecord, error) {
+
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("csv is empty")
 	}
 
 	// Validate header
 	header := rows[0]
-	expectedHeaders := []string{"Clan", "User Name", "Email", "Roles", "Timezone", "Password"}
+	expectedHeaders := []string{"Clan", "Handle", "User Name", "Email", "Roles", "Timezone", "Password"}
 	if len(header) != len(expectedHeaders) {
 		return nil, fmt.Errorf("header has %d columns, expected %d", len(header), len(expectedHeaders))
 	}
@@ -134,19 +159,20 @@ func readAndValidateCSV(path string) ([]userRecord, error) {
 	for i, row := range rows[1:] {
 		lineNum := i + 2
 
-		if len(row) != 6 {
-			return nil, fmt.Errorf("row %d: has %d columns, expected 6", lineNum, len(row))
+		if len(row) != 7 {
+			return nil, fmt.Errorf("row %d: has %d columns, expected 7", lineNum, len(row))
 		}
 
 		var ur = userRecord{
 			Clan:     row[0],
-			Username: row[1],
-			Email:    strings.ToLower(row[2]),
+			Handle:   row[1],
+			Username: row[2],
+			Email:    strings.ToLower(row[3]),
 			Roles:    map[string]bool{"active": true, "user": true}, // all users should be active
-			Timezone: row[4],
-			Password: row[5],
+			Timezone: row[5],
+			Password: row[6],
 		}
-		for _, role := range strings.Split(row[3], "+") {
+		for _, role := range strings.Split(row[4], "+") {
 			role := strings.TrimSpace(role)
 			if role != "" {
 				ur.Roles[role] = true
@@ -185,7 +211,28 @@ func readAndValidateCSV(path string) ([]userRecord, error) {
 	return records, nil
 }
 
-func importUser(db *sqlite.DB, authSvc *auth.Service, record userRecord) (string, error) {
+func importUsersFromCSVData(db *sqlite.DB, authSvc *auth.Service, usersSvc *users.Service, csvData []byte) error {
+	records, err := readAndValidateCSVData(csvData)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("[memdb] importing %d test users\n", len(records))
+
+	for i, record := range records {
+		_, err := importUser(db, authSvc, usersSvc, record)
+		if err != nil {
+			log.Printf("[memdb] row %d: email %q: failed: %v\n", i+2, record.Email, err)
+			return fmt.Errorf("import user %q: %w", record.Email, err)
+		} else {
+			log.Printf("[memdb] imported user %q with email %q\n", record.Username, record.Email)
+		}
+	}
+
+	return nil
+}
+
+func importUser(db *sqlite.DB, authSvc *auth.Service, usersSvc *users.Service, record userRecord) (string, error) {
 	// Generate password if empty
 	password := record.Password
 	var generatedPassword string
@@ -195,14 +242,30 @@ func importUser(db *sqlite.DB, authSvc *auth.Service, record userRecord) (string
 		// log.Printf("  generated password: %q\n", password)
 	}
 
-	// Get canonical timezone
-	canonicalTZ, _ := iana.CanonicalName(record.Timezone)
-	_, err := time.LoadLocation(canonicalTZ)
+	// Get timezone location
+	loc, err := time.LoadLocation(record.Timezone)
 	if err != nil {
-		return "", fmt.Errorf("load timezone %q: %w", canonicalTZ, err)
+		return "", fmt.Errorf("load timezone %q: %w", record.Timezone, err)
 	}
 
-	// Start transaction
+	// Try to get existing user by email
+	_, err = usersSvc.GetUserByEmail(record.Email)
+
+	if err != nil {
+		// User doesn't exist, create new one via service
+		_, err = usersSvc.CreateUser(record.Username, record.Email, record.Handle, password, loc)
+		if err != nil {
+			return "", fmt.Errorf("create user: %w", err)
+		}
+		log.Printf("  created user %q\n", record.Username)
+	} else {
+		// User exists - for now just log it
+		// TODO: Implement update logic if needed
+		log.Printf("  user %q already exists, skipping\n", record.Username)
+	}
+
+	// Assign roles from CSV
+	// Start transaction for role assignment
 	tx, err := db.Stdlib().BeginTx(db.Context(), nil)
 	if err != nil {
 		return "", err
@@ -212,80 +275,10 @@ func importUser(db *sqlite.DB, authSvc *auth.Service, record userRecord) (string
 	qtx := db.Queries().WithTx(tx)
 	ctx := db.Context()
 
-	// Try to get existing user by email
-	existingUser, err := qtx.GetUserByEmail(ctx, record.Email)
-	now := time.Now().UTC()
-
-	var userID int64
+	// Get user ID
+	userID, err := qtx.GetUserIDByEmail(ctx, record.Email)
 	if err != nil {
-		// User doesn't exist, create new one
-		userID, err = qtx.CreateUser(ctx, sqlc.CreateUserParams{
-			Username:  record.Username,
-			Email:     record.Email,
-			Timezone:  canonicalTZ,
-			CreatedAt: now.Unix(),
-			UpdatedAt: now.Unix(),
-		})
-		if err != nil {
-			return "", fmt.Errorf("create user: %w", err)
-		}
-		log.Printf("  created user %q\n", record.Username)
-
-		// Create user secret
-		err = authSvc.CreateUserSecret(ctx, qtx, domains.ID(userID), password, now)
-		if err != nil {
-			return "", fmt.Errorf("create user secret: %w", err)
-		}
-	} else {
-		// User exists, update if needed
-		userID = existingUser.UserID
-		needsUpdate := false
-
-		if existingUser.Username != record.Username {
-			log.Printf("  updating username from %q to %q\n", existingUser.Username, record.Username)
-			needsUpdate = true
-		}
-		if existingUser.Timezone != canonicalTZ {
-			log.Printf("  updating timezone from %q to %q\n", existingUser.Timezone, canonicalTZ)
-			needsUpdate = true
-		}
-
-		if needsUpdate {
-			err = qtx.UpdateUser(ctx, sqlc.UpdateUserParams{
-				UserID:    userID,
-				Username:  record.Username,
-				Email:     record.Email,
-				Timezone:  canonicalTZ,
-				UpdatedAt: now.Unix(),
-			})
-			if err != nil {
-				return "", fmt.Errorf("update user: %w", err)
-			}
-		}
-
-		// Update password - check if secret exists first
-		_, err = qtx.GetUserSecret(ctx, userID)
-		if err != nil {
-			// Secret doesn't exist, create it
-			err = authSvc.CreateUserSecret(ctx, qtx, domains.ID(userID), password, now)
-			if err != nil {
-				return "", fmt.Errorf("create user secret: %w", err)
-			}
-		} else {
-			// Secret exists, update it
-			hashedPassword, err := hashPassword(password)
-			if err != nil {
-				return "", fmt.Errorf("hash password: %w", err)
-			}
-			err = qtx.UpdateUserSecret(ctx, sqlc.UpdateUserSecretParams{
-				UserID:         userID,
-				HashedPassword: hashedPassword,
-				UpdatedAt:      now.Unix(),
-			})
-			if err != nil {
-				return "", fmt.Errorf("update user secret: %w", err)
-			}
-		}
+		return "", fmt.Errorf("get user ID: %w", err)
 	}
 
 	// Get current roles
@@ -300,6 +293,7 @@ func importUser(db *sqlite.DB, authSvc *auth.Service, record userRecord) (string
 	}
 
 	// Ensure role from CSV exists
+	now := time.Now().UTC()
 	for role, required := range record.Roles {
 		if required && !roleMap[role] {
 			err = qtx.AssignUserRole(ctx, sqlc.AssignUserRoleParams{
@@ -309,7 +303,7 @@ func importUser(db *sqlite.DB, authSvc *auth.Service, record userRecord) (string
 				UpdatedAt: now.Unix(),
 			})
 			if err != nil {
-				return "", fmt.Errorf("assignrole %q: %w", role, err)
+				return "", fmt.Errorf("assign role %q: %w", role, err)
 			}
 			log.Printf("  assigned role %q\n", role)
 			roleMap[role] = true
@@ -339,12 +333,12 @@ func updateCSVWithPasswords(csvPath string, passwordUpdates map[int]string) erro
 		return fmt.Errorf("read csv: %w", err)
 	}
 
-	// Update the password column (index 5) for the specified rows
+	// Update the password column (index 6) for the specified rows
 	for rowIdx, password := range passwordUpdates {
 		// rowIdx is 0-based for data rows, but we need to account for the header
 		actualRow := rowIdx + 1 // +1 to skip header
-		if actualRow < len(rows) && len(rows[actualRow]) > 5 {
-			rows[actualRow][5] = password
+		if actualRow < len(rows) && len(rows[actualRow]) > 6 {
+			rows[actualRow][6] = password
 		}
 	}
 

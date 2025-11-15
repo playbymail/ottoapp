@@ -16,7 +16,7 @@ export default class UserForm extends Component {
     const emailChanged = this.email !== (this.args.model?.email ?? '');
     const timezoneChanged = this.timezone !== (this.args.model?.timezone ?? '');
     const usernameChanged = this.args.canEditUsername && this.username !== (this.args.model?.username ?? '');
-    
+
     return emailChanged || timezoneChanged || usernameChanged;
   }
 
@@ -88,27 +88,16 @@ export default class UserForm extends Component {
 
           <div class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
-              <label for="username" class="block text-sm/6 font-medium text-gray-900 sm:pt-1.5">Username</label>
+              <label for="handle" class="block text-sm/6 font-medium text-gray-900 sm:pt-1.5">Handle</label>
               <div class="mt-2 sm:col-span-2 sm:mt-0">
-                {{#if @canEditUsername}}
-                  <input
-                    id="username"
-                    type="text"
-                    name="username"
-                    value={{this.username}}
-                    {{on "input" this.updateUsername}}
-                    class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:max-w-md sm:text-sm/6"
-                  />
-                {{else}}
-                  <input
-                    id="username"
-                    type="text"
-                    name="username"
-                    value={{this.username}}
-                    disabled
-                    class="block w-full rounded-md bg-gray-50 px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 sm:max-w-md sm:text-sm/6"
-                  />
-                {{/if}}
+                <input
+                  id="handle"
+                  type="text"
+                  name="handle"
+                  value={{this.profile.handle}}
+                  disabled
+                  class="block w-full rounded-md bg-gray-50 px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 sm:max-w-md sm:text-sm/6"
+                />
               </div>
             </div>
           </div>
@@ -119,6 +108,31 @@ export default class UserForm extends Component {
           <p class="mt-1 max-w-2xl text-sm/6 text-gray-600">
             The information in this section is not shared.
           </p>
+
+          <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">
+            <label for="username" class="block text-sm/6 font-medium text-gray-900 sm:pt-1.5">Username</label>
+            <div class="mt-2 sm:col-span-2 sm:mt-0">
+              {{#if @canEditUsername}}
+                <input
+                  id="username"
+                  type="text"
+                  name="username"
+                  value={{this.username}}
+                  {{on "input" this.updateUsername}}
+                  class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:max-w-md sm:text-sm/6"
+                />
+              {{else}}
+                <input
+                  id="username"
+                  type="text"
+                  name="username"
+                  value={{this.username}}
+                  disabled
+                  class="block w-full rounded-md bg-gray-50 px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 sm:max-w-md sm:text-sm/6"
+                />
+              {{/if}}
+            </div>
+          </div>
 
           <div class="mt-10 space-y-8 border-b border-gray-900/10 pb-12 sm:space-y-0 sm:divide-y sm:divide-gray-900/10 sm:border-t sm:border-t-gray-900/10 sm:pb-0">
             <div class="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-6">

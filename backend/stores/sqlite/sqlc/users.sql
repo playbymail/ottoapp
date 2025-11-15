@@ -8,11 +8,13 @@
 -- name: CreateUser :one
 INSERT INTO users (username,
                    email,
+                   handle,
                    timezone,
                    created_at,
                    updated_at)
 VALUES (:username,
         :email,
+        :handle,
         :timezone,
         :created_at,
         :updated_at)
@@ -24,6 +26,7 @@ RETURNING user_id;
 SELECT user_id,
        username,
        email,
+       handle,
        timezone,
        created_at,
        updated_at
@@ -36,11 +39,25 @@ WHERE user_id = :user_id;
 SELECT user_id,
        username,
        email,
+       handle,
        timezone,
        created_at,
        updated_at
 FROM users
 WHERE email = :email;
+
+-- GetUserByHandle returns the user with the given handle.
+--
+-- name: GetUserByHandle :one
+SELECT user_id,
+       username,
+       email,
+       handle,
+       timezone,
+       created_at,
+       updated_at
+FROM users
+WHERE handle = :handle;
 
 -- GetUserByUsername returns the user with the given username.
 --
@@ -48,6 +65,7 @@ WHERE email = :email;
 SELECT user_id,
        username,
        email,
+       handle,
        timezone,
        created_at,
        updated_at
@@ -58,6 +76,11 @@ WHERE username = :username;
 SELECT user_id
 FROM users
 WHERE email = :email;
+
+-- name: GetUserIDByHandle :one
+SELECT user_id
+FROM users
+WHERE handle = :handle;
 
 -- name: GetUserIDByUsername :one
 SELECT user_id
@@ -70,6 +93,7 @@ WHERE username = :username;
 UPDATE users
 SET email      = :email,
     username   = :username,
+    handle     = :handle,
     timezone   = :timezone,
     updated_at = :updated_at
 WHERE user_id = :user_id;
@@ -104,6 +128,7 @@ WHERE user_id = :user_id;
 SELECT user_id,
        username,
        email,
+       handle,
        timezone,
        created_at,
        updated_at
@@ -114,6 +139,7 @@ ORDER BY username;
 SELECT user_id,
        username,
        email,
+       handle,
        timezone,
        created_at,
        updated_at

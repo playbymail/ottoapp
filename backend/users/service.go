@@ -57,14 +57,17 @@ func (s *Service) ChangePassword(email, oldPassword, newPassword string) error {
 	return s.authSvc.UpdateUserSecret(userID, newPassword)
 }
 
-func (s *Service) CreateUser(userName, email, plainTextSecret string, timezone *time.Location) (*domains.User_t, error) {
-	userName = strings.ToLower(userName)
-	if !s.ValidateHandle(userName) {
+func (s *Service) CreateUser(userName, email, handle, plainTextSecret string, timezone *time.Location) (*domains.User_t, error) {
+	if !s.ValidateUsername(userName) {
 		return nil, domains.ErrInvalidUsername
 	}
 	email = strings.ToLower(email)
 	if !s.ValidateEmail(email) {
 		return nil, domains.ErrInvalidEmail
+	}
+	handle = strings.ToLower(handle)
+	if !s.ValidateHandle(handle) {
+		return nil, domains.ErrInvalidHandle
 	}
 	if timezone == nil {
 		return nil, fmt.Errorf("timezone is required")
@@ -88,6 +91,7 @@ func (s *Service) CreateUser(userName, email, plainTextSecret string, timezone *
 	userId, err := qtx.CreateUser(s.db.Context(), sqlc.CreateUserParams{
 		Username:  userName,
 		Email:     email,
+		Handle:    handle,
 		Timezone:  timeZone,
 		CreatedAt: now.Unix(),
 		UpdatedAt: now.Unix(),
@@ -150,6 +154,7 @@ func (s *Service) GetUserByEmail(email string) (*domains.User_t, error) {
 		ID:       domains.ID(row.UserID),
 		Username: row.Username,
 		Email:    row.Email,
+		Handle:   row.Handle,
 		Locale: domains.UserLocale_t{
 			DateFormat: "2006-01-02",
 			Timezone: domains.UserTimezone_t{
@@ -182,6 +187,7 @@ func (s *Service) GetUserByUsername(userName string) (*domains.User_t, error) {
 		ID:       domains.ID(row.UserID),
 		Username: row.Username,
 		Email:    row.Email,
+		Handle:   row.Handle,
 		Locale: domains.UserLocale_t{
 			DateFormat: "2006-01-02",
 			Timezone: domains.UserTimezone_t{
@@ -230,6 +236,7 @@ func (s *Service) GetUserByID(userID domains.ID) (*domains.User_t, error) {
 		ID:       userID,
 		Username: row.Username,
 		Email:    row.Email,
+		Handle:   row.Handle,
 		Locale: domains.UserLocale_t{
 			DateFormat: "2006-01-02",
 			Timezone: domains.UserTimezone_t{
@@ -264,7 +271,7 @@ func (s *Service) UpdateUser(userId domains.ID, newUserName *string, newEmail *s
 	userName := user.Username
 	if newUserName != nil {
 		userName = strings.ToLower(*newUserName)
-		if !s.ValidateHandle(userName) {
+		if !s.ValidateUsername(userName) {
 			return errors.Join(fmt.Errorf("%q: invalid userName", userName), domains.ErrInvalidUsername)
 		}
 	}
@@ -284,6 +291,7 @@ func (s *Service) UpdateUser(userId domains.ID, newUserName *string, newEmail *s
 		UserID:    user.UserID,
 		Username:  userName,
 		Email:     email,
+		Handle:    user.Handle,
 		Timezone:  timeZone,
 		UpdatedAt: time.Now().UTC().Unix(),
 	})
@@ -297,7 +305,11 @@ func (s *Service) ValidateEmail(email string) bool {
 	return ValidateEmail(email)
 }
 
-func (s *Service) ValidateHandle(userName string) bool {
+func (s *Service) ValidateHandle(handle string) bool {
+	return ValidateHandle(handle)
+}
+
+func (s *Service) ValidateUsername(userName string) bool {
 	return ValidateUsername(userName)
 }
 
@@ -312,10 +324,32 @@ func ValidateEmail(email string) bool {
 	return true
 }
 
+func ValidateHandle(handle string) bool {
+	// Must not be empty
+	if len(handle) == 0 || len(handle) > 14 {
+		return false
+	}
+	// Must be lowercase (no uppercase allowed)
+	if handle != strings.ToLower(handle) {
+		return false
+	}
+	// Must start with a letter
+	if handle[0] < 'a' || handle[0] > 'z' {
+		return false
+	}
+	// All characters must be lowercase letters, digits, or underscores
+	for _, ch := range handle {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 func ValidateUsername(userName string) bool {
 	if userName != strings.TrimSpace(userName) {
 		return false
-	} else if !(3 <= len(userName) && len(userName) < 14) {
+	} else if !(3 <= len(userName) && len(userName) < 35) {
 		return false
 	} else if strings.Contains(userName, "@") {
 		return false
