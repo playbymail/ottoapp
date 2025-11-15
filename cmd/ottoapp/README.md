@@ -151,6 +151,44 @@ Create a new user:
 ottoapp user create penguin --tz America/New_York --email penguin@ottoapp --password happy-feet
 ```
 
+### Import
+
+Import users from a CSV file. Creates new users or updates existing ones based on email:
+
+```bash
+ottoapp user import data/inputs/players.csv
+```
+
+The CSV file must have these exact columns:
+- **Clan** - 4-digit number starting with 0 (e.g., "0500")
+- **User Name** - username for the user
+- **Email** - email address (used as unique identifier)
+- **Role** - "admin" or "user" (Penguin must have "admin", all others "user")
+- **Timezone** - IANA timezone name (e.g., "America/New_York")
+- **Password** - password or blank (blank passwords will be auto-generated)
+
+The import process:
+1. Validates all records before making any changes
+2. For each user:
+    - If email doesn't exist: creates a new user
+    - If email exists: updates username and timezone if different
+    - Generates passwords for blank entries using the phrases generator
+    - Updates or creates user_secrets record
+    - Ensures "active" role exists
+    - Ensures the role from CSV (admin/user) exists
+3. Updates the CSV file with any generated passwords
+
+**Example CSV:**
+
+```csv
+Clan,User Name,Email,Role,Timezone,Password
+0000,Penguin,penguin@ottoapp,admin,Antarctica/Palmer,joyous.pepper.frogs
+0123,Tom Tomtom,tomtom.tom@example.com,user,Europe/London,
+0987,Catbird,catbird@ottoapp,user,Europe/London,
+```
+
+After import, blank passwords will be filled in with generated values like `aroma.jump.rally.limb.chomp.crown`.
+
 ### Update
 
 Update user password:
