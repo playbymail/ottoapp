@@ -23,6 +23,7 @@ type UserView struct {
 	ID          string          `jsonapi:"primary,user"` // singular when sending a payload
 	Username    string          `jsonapi:"attr,username"`
 	Email       string          `jsonapi:"attr,email"`
+	Handle      string          `jsonapi:"attr,handle"`
 	Timezone    string          `jsonapi:"attr,timezone"`
 	Roles       []string        `jsonapi:"attr,roles,omitempty"`
 	Permissions map[string]bool `jsonapi:"attr,permissions,omitempty"`
@@ -720,7 +721,8 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user (this will assign "active" and "user" roles by default)
-	user, err := s.CreateUser(p.Username, p.Email, password, loc)
+	// TODO: Add handle field to payload; for now use username as handle
+	user, err := s.CreateUser(p.Username, p.Email, p.Username, password, loc)
 	if err != nil {
 		log.Printf("POST /api/users: create: %v", err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
@@ -856,6 +858,7 @@ func (s *Service) buildUserView(user *domains.User_t, actorID domains.ID) *UserV
 		ID:          fmt.Sprintf("%d", user.ID),
 		Username:    user.Username,
 		Email:       user.Email,
+		Handle:      user.Handle,
 		Timezone:    user.Locale.Timezone.Location.String(),
 		Roles:       auth.Roles,
 		Permissions: auth.Permissions,

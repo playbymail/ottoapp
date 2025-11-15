@@ -22,7 +22,7 @@ export default class ProfileDropdown extends Component {
   get currentUser() {
     if (!this.session.isAuthenticated) {
       return {
-        username: 'Guest',
+        handle: 'Guest',
       }
     }
     return this.session.data.authenticated.user;
@@ -57,7 +57,7 @@ export default class ProfileDropdown extends Component {
         <span class="hidden lg:flex lg:items-center">
           <span aria-hidden="true" class="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white">
             {{#if this.session.isAuthenticated}}
-              {{#if this.currentUser}}{{this.currentUser.username}}{{else}}👋{{/if}}
+              {{#if this.currentUser}}👋{{this.currentUser.handle}}👋{{else}}👋{{/if}}
             {{else}}
               Guest
             {{/if}}
