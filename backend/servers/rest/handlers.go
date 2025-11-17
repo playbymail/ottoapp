@@ -8,35 +8,54 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/playbymail/ottoapp"
+	"github.com/hashicorp/jsonapi"
+	"github.com/playbymail/ottoapp/backend/restapi"
+	"github.com/playbymail/ottoapp/backend/versions"
 )
 
-func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
+// GET /api/versions
+func (s *Server) getAllVersions() http.HandlerFunc {
+	view := s.services.versionsSvc.Version()
+	views := []*versions.VersionView{&view}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		restapi.WriteJsonApiData(w, http.StatusOK, views)
 	}
+}
 
-	var version string
-	showBuildInfo := r.URL.Query().Has("show-build-info")
-	if showBuildInfo {
-		version = ottoapp.Version().String()
-	} else {
-		version = ottoapp.Version().Core()
+// GET /api/versions/{id}
+func (s *Server) getVersions() http.HandlerFunc {
+	view := s.services.versionsSvc.Version()
+	views := map[string]*versions.VersionView{view.ID: &view}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		versionId := r.PathValue("id")
+		view, ok := views[versionId]
+		if !ok {
+			restapi.WriteJsonApiErrorObjects(w, http.StatusNotFound, &jsonapi.ErrorObject{
+				Status: strconv.Itoa(http.StatusNotFound),
+				Code:   "unknown_version_id",
+				Title:  "Unknown VersionID",
+				Detail: "Provide a valid VersionID.",
+				Source: &jsonapi.ErrorSource{
+					Parameter: "id",
+				},
+			})
+		}
+
+		restapi.WriteJsonApiData(w, http.StatusOK, view)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(struct {
-		Status  string `json:"status"`
-		Version string `json:"version"`
-	}{
-		Status:  "ok",
-		Version: version,
-	})
 }
 
 func (s *Server) handlePostShutdown(key []byte) http.HandlerFunc {

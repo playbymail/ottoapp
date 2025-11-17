@@ -4,6 +4,7 @@ import ActivityFeed from 'frontend/components/layouts/home-screens/sidebar/activ
 import Deployments from 'frontend/components/layouts/home-screens/sidebar/deployments';
 
 <template>
+  <!-- app/templates/admin/dashboard.gjs -->
   <main class="lg:pr-96">
     <Deployments />
   </main>

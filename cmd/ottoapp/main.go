@@ -31,6 +31,7 @@ import (
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/users"
+	"github.com/playbymail/ottoapp/backend/versions"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -288,6 +289,7 @@ var cmdApiServe = &cobra.Command{
 		if err != nil {
 			return errors.Join(fmt.Errorf("games.new"), err)
 		}
+		versionSvc := versions.New(ottoapp.Version())
 
 		// Import test users for in-memory database
 		if path == ":memory:" {
@@ -300,7 +302,7 @@ var cmdApiServe = &cobra.Command{
 			}
 		}
 
-		s, err := rest.New(authSvc, sessionsSvc, tzSvc, usersSvc, options...)
+		s, err := rest.New(authSvc, sessionsSvc, tzSvc, usersSvc, versionSvc, options...)
 		if err != nil {
 			return errors.Join(fmt.Errorf("rest.new"), err)
 		}

@@ -28,7 +28,8 @@ func Routes(s *Server) http.Handler {
 	mux.HandleFunc("POST /api/login", s.services.sessionsSvc.HandlePostLogin)
 	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession)
 	mux.HandleFunc("GET /api/timezones", s.services.tzSvc.HandleGetTimezones())
-	mux.HandleFunc("GET /api/version", s.getVersion)
+	mux.HandleFunc("GET /api/versions", s.getAllVersions())
+	mux.HandleFunc("GET /api/versions/{id}", s.getVersions())
 	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
 
 	// Protected routes (authentication required)

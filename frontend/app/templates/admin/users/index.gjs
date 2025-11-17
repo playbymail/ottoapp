@@ -1,8 +1,9 @@
 // app/templates/admin/users/index.gjs
-import AdminUsersIndex from 'frontend/components/admin/users';
+import AdminUsersIndex from 'frontend/components/admin/users/index';
 
 <template>
-  <main class="lg:pr-96">
+  <!-- app/templates/admin/users/index.gjs -->
+  <main>
     <AdminUsersIndex
       @model={{@model}}
     />

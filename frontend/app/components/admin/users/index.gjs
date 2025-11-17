@@ -5,6 +5,7 @@ import { LinkTo } from "@ember/routing";
 
 export default class AdminUsersIndex extends Component {
   <template>
+    <!-- app/components/admin/users/index.gjs -->
     <div>
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="sm:flex sm:items-center">

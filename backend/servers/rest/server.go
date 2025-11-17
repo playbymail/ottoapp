@@ -19,6 +19,7 @@ import (
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/users"
+	"github.com/playbymail/ottoapp/backend/versions"
 )
 
 type Server struct {
@@ -28,6 +29,7 @@ type Server struct {
 		sessionsSvc *sessions.Service
 		tzSvc       *iana.Service
 		usersSvc    *users.Service
+		versionsSvc *versions.Service
 	}
 	csrfGuard bool
 	logRoutes bool
@@ -47,7 +49,7 @@ type Server struct {
 	}
 }
 
-func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Service, usersSvc *users.Service, options ...Option) (*Server, error) {
+func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Service, usersSvc *users.Service, versionsSvc *versions.Service, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -60,6 +62,7 @@ func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Servi
 	s.services.sessionsSvc = sessionsSvc
 	s.services.tzSvc = tzSvc
 	s.services.usersSvc = usersSvc
+	s.services.versionsSvc = versionsSvc
 
 	// Inject session service into users service
 	usersSvc.SetSessionService(sessionsSvc)
@@ -85,6 +88,10 @@ func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Servi
 	}
 	if s.services.usersSvc == nil {
 		log.Printf("[rest] usersSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	}
+	if s.services.versionsSvc == nil {
+		log.Printf("[rest] versionsSvc not initialized")
 		return nil, domains.ErrInvalidArgument
 	}
 

@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import {service} from '@ember/service';
 import {LinkTo} from '@ember/routing';
 
-export default class SidbarNavItem extends Component {
+export default class SidebarNavItem extends Component {
   @service router;
 
   /**

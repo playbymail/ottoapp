@@ -11,6 +11,7 @@ import { LinkTo } from '@ember/routing';
 
 export default class Dashboard extends Component {
   <template>
+    <!-- app/components/admin/dashboard.gjs -->
     <div class="space-y-6">
       <div>
         <h2 class="text-base font-semibold leading-7 text-gray-900">Admin Dashboard</h2>
