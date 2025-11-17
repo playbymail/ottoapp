@@ -43,38 +43,24 @@ func New(db *sqlite.DB, authSvc *auth.Service, tzSvc *iana.Service) *Service {
 func (s *Service) SetSessionService(sessionsSvc SessionService) {
 	s.sessionsSvc = sessionsSvc
 }
-
-// ChangePassword verifies the user's current credentials and, if valid,
-// updates the password via the auth service.
-func (s *Service) ChangePassword(email, oldPassword, newPassword string) error {
-	userID, err := s.authSvc.AuthenticateWithEmailSecret(email, oldPassword)
-	if err != nil {
-		// could log as suspicious if this happens often
-		return domains.ErrInvalidCredentials
+func (s *Service) UpsertUser(handle, email, userName string, timezone *time.Location) (*domains.User_t, error) {
+	handle = strings.ToLower(handle)
+	if err := domains.ValidateHandle(handle); err != nil {
+		return nil, errors.Join(domains.ErrInvalidHandle, err)
 	}
-
-	// let auth enforce password policy
-	return s.authSvc.UpdateUserSecret(userID, newPassword)
-}
-
-func (s *Service) CreateUser(userName, email, handle, plainTextSecret string, timezone *time.Location) (*domains.User_t, error) {
-	if !s.ValidateUsername(userName) {
-		return nil, domains.ErrInvalidUsername
+	if err := domains.ValidateUsername(userName); err != nil {
+		return nil, errors.Join(domains.ErrInvalidUsername, err)
 	}
 	email = strings.ToLower(email)
-	if !s.ValidateEmail(email) {
-		return nil, domains.ErrInvalidEmail
-	}
-	handle = strings.ToLower(handle)
-	if !s.ValidateHandle(handle) {
-		return nil, domains.ErrInvalidHandle
+	if err := domains.ValidateEmail(email); err != nil {
+		return nil, errors.Join(domains.ErrInvalidEmail, err)
 	}
 	if timezone == nil {
-		return nil, fmt.Errorf("timezone is required")
+		return nil, errors.Join(domains.ErrInvalidTimezone, fmt.Errorf("timezone is required"))
 	}
 	timeZone, ok := iana.CanonicalName(timezone.String())
 	if !ok {
-		return nil, fmt.Errorf("%q: invalid timezone", timezone.String())
+		return nil, errors.Join(domains.ErrInvalidTimezone, domains.ErrBadInput, fmt.Errorf("%q: invalid timezone", timezone.String()))
 	}
 
 	// start transaction
@@ -88,37 +74,11 @@ func (s *Service) CreateUser(userName, email, handle, plainTextSecret string, ti
 	qtx := s.db.Queries().WithTx(tx)
 
 	now := time.Now().UTC()
-	userId, err := qtx.CreateUser(s.db.Context(), sqlc.CreateUserParams{
+	userId, err := qtx.UpsertUser(s.db.Context(), sqlc.UpsertUserParams{
+		Handle:    handle,
 		Username:  userName,
 		Email:     email,
-		Handle:    handle,
 		Timezone:  timeZone,
-		CreatedAt: now.Unix(),
-		UpdatedAt: now.Unix(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.authSvc.CreateUserSecret(s.db.Context(), qtx, domains.ID(userId), plainTextSecret, now)
-	if err != nil {
-		return nil, err
-	}
-
-	// Assign default roles for CLI-created users: "active" and "user"
-	err = qtx.AssignUserRole(s.db.Context(), sqlc.AssignUserRoleParams{
-		UserID:    userId,
-		RoleID:    "active",
-		CreatedAt: now.Unix(),
-		UpdatedAt: now.Unix(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = qtx.AssignUserRole(s.db.Context(), sqlc.AssignUserRoleParams{
-		UserID:    userId,
-		RoleID:    "user",
 		CreatedAt: now.Unix(),
 		UpdatedAt: now.Unix(),
 	})
@@ -133,6 +93,13 @@ func (s *Service) CreateUser(userName, email, handle, plainTextSecret string, ti
 
 	// safe to use the normal queries again after commit
 	return s.GetUserByID(domains.ID(userId))
+}
+
+func (s *Service) GetUser(actor *domains.Actor) (*domains.User_t, error) {
+	if !actor.IsValid() {
+		return nil, domains.ErrBadInput
+	}
+	return s.getUserByID(actor.ID)
 }
 
 // GetUserByEmail returns user data associated with the email.
@@ -168,13 +135,13 @@ func (s *Service) GetUserByEmail(email string) (*domains.User_t, error) {
 	return user, nil
 }
 
-// GetUserByUsername returns user data associated with the username.
+// GetUserByHandle returns user data associated with the handle.
 // Warning: callers expect this to return the same data that would be returned from GetUserByID!
-func (s *Service) GetUserByUsername(userName string) (*domains.User_t, error) {
+func (s *Service) GetUserByHandle(handle string) (*domains.User_t, error) {
 	q := s.db.Queries()
 	ctx := s.db.Context()
 
-	row, err := q.GetUserByUsername(ctx, userName)
+	row, err := q.GetUserByHandle(ctx, handle)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +167,6 @@ func (s *Service) GetUserByUsername(userName string) (*domains.User_t, error) {
 
 	return user, nil
 }
-
 func (s *Service) GetUserIDByEmail(email string) (domains.ID, error) {
 	id, err := s.db.Queries().GetUserIDByEmail(s.db.Context(), email)
 	if err != nil {
@@ -209,8 +175,8 @@ func (s *Service) GetUserIDByEmail(email string) (domains.ID, error) {
 	return domains.ID(id), nil
 }
 
-func (s *Service) GetUserIDByUsername(userName string) (domains.ID, error) {
-	id, err := s.db.Queries().GetUserIDByUsername(s.db.Context(), userName)
+func (s *Service) GetUserIDByHandle(handle string) (domains.ID, error) {
+	id, err := s.db.Queries().GetUserIDByHandle(s.db.Context(), handle)
 	if err != nil {
 		return domains.InvalidID, err
 	}
@@ -220,6 +186,38 @@ func (s *Service) GetUserIDByUsername(userName string) (domains.ID, error) {
 // GetUserByID returns the user data associated with the given ID.
 // If the user does not exist, it returns an error.
 func (s *Service) GetUserByID(userID domains.ID) (*domains.User_t, error) {
+	return s.getUserByID(userID)
+}
+
+func (s *Service) ListUsersVisibleToActor(actor *domains.Actor, pageNum, pageSize int) ([]*UserView, error) {
+	rows, err := s.db.Queries().ListUsersVisibleToActor(s.db.Context(), sqlc.ListUsersVisibleToActorParams{
+		ActorID:  actor.ID,
+		PageSize: pageSize,
+		PageNum:  (pageNum - 1) * pageSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var view []*UserView
+	for _, row := range rows {
+		view = append(view, &UserView{
+			ID:       fmt.Sprintf("%d", row.UserID),
+			Username: row.Username,
+			Email:    row.Email,
+			Timezone: row.Timezone,
+			//Roles:       row.Roles,       // if you prejoin/aggregate; otherwise compute once for the list
+			//Permissions: row.Permissions, // same note as above
+			CreatedAt: time.Unix(row.CreatedAt, 0).UTC(),
+			UpdatedAt: time.Unix(row.UpdatedAt, 0).UTC(),
+		})
+	}
+	// todo: paginate response
+	return view, nil
+}
+
+// getUserByID returns the user data associated with the given ID.
+// If the user does not exist, it returns an error.
+func (s *Service) getUserByID(userID domains.ID) (*domains.User_t, error) {
 	q := s.db.Queries()
 	ctx := s.db.Context()
 
@@ -248,111 +246,4 @@ func (s *Service) GetUserByID(userID domains.ID) (*domains.User_t, error) {
 	}
 
 	return user, nil
-}
-
-func (s *Service) UpdateUser(userId domains.ID, newUserName *string, newEmail *string, newTimeZone *time.Location) error {
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	// short circuit
-	if userId == domains.InvalidID {
-		return domains.ErrInvalidCredentials
-	} else if newUserName == nil && newEmail == nil && newTimeZone == nil {
-		return nil
-	}
-
-	// fetch the current user values
-	user, err := q.GetUserByID(ctx, int64(userId))
-	if err != nil {
-		return domains.ErrInvalidCredentials
-	}
-
-	// merge the updated values into the current values
-	userName := user.Username
-	if newUserName != nil {
-		userName = strings.ToLower(*newUserName)
-		if !s.ValidateUsername(userName) {
-			return errors.Join(fmt.Errorf("%q: invalid userName", userName), domains.ErrInvalidUsername)
-		}
-	}
-	email := user.Email
-	if newEmail != nil {
-		email = strings.ToLower(*newEmail)
-		if !s.ValidateEmail(email) {
-			return errors.Join(fmt.Errorf("%q: invalid email", email), domains.ErrInvalidEmail)
-		}
-	}
-	timeZone := user.Timezone
-	if newTimeZone != nil {
-		timeZone = newTimeZone.String()
-	}
-
-	err = q.UpdateUser(ctx, sqlc.UpdateUserParams{
-		UserID:    user.UserID,
-		Username:  userName,
-		Email:     email,
-		Handle:    user.Handle,
-		Timezone:  timeZone,
-		UpdatedAt: time.Now().UTC().Unix(),
-	})
-	if err != nil {
-		return errors.Join(fmt.Errorf("user %d: update failed", userId), err)
-	}
-	return nil
-}
-
-func (s *Service) ValidateEmail(email string) bool {
-	return ValidateEmail(email)
-}
-
-func (s *Service) ValidateHandle(handle string) bool {
-	return ValidateHandle(handle)
-}
-
-func (s *Service) ValidateUsername(userName string) bool {
-	return ValidateUsername(userName)
-}
-
-func ValidateEmail(email string) bool {
-	if email != strings.TrimSpace(email) {
-		return false
-	} else if !(4 < len(email) && len(email) < 48) {
-		return false
-	} else if !strings.Contains(email, "@") {
-		return false
-	}
-	return true
-}
-
-func ValidateHandle(handle string) bool {
-	// Must not be empty
-	if len(handle) == 0 || len(handle) > 14 {
-		return false
-	}
-	// Must be lowercase (no uppercase allowed)
-	if handle != strings.ToLower(handle) {
-		return false
-	}
-	// Must start with a letter
-	if handle[0] < 'a' || handle[0] > 'z' {
-		return false
-	}
-	// All characters must be lowercase letters, digits, or underscores
-	for _, ch := range handle {
-		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
-			return false
-		}
-	}
-	return true
-}
-
-func ValidateUsername(userName string) bool {
-	if userName != strings.TrimSpace(userName) {
-		return false
-	} else if !(3 <= len(userName) && len(userName) < 35) {
-		return false
-	} else if strings.Contains(userName, "@") {
-		return false
-	}
-	return true
 }

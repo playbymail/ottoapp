@@ -4,32 +4,35 @@
 PRAGMA foreign_keys = ON;
 
 -- The Users table stores user data.
+-- Handle and Email are expected to be lower-cased.
 CREATE TABLE users
 (
     user_id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    username   TEXT UNIQUE NOT NULL,
-    email      TEXT UNIQUE NOT NULL,
-    timezone   TEXT        NOT NULL, -- IANA zone name
+    handle     TEXT    NOT NULL UNIQUE,
+    username   TEXT    NOT NULL UNIQUE,
+    email      TEXT    NOT NULL UNIQUE,
+    timezone   TEXT    NOT NULL, -- IANA zone name
 
     -- audit (unix seconds, UTC)
-    created_at INTEGER     NOT NULL, -- set in app
-    updated_at INTEGER     NOT NULL  -- set in app
+    created_at INTEGER NOT NULL, -- set in app
+    updated_at INTEGER NOT NULL  -- set in app
 );
 
 -- The sysop is a required user for batch operations and system maintenance.
-insert into users (username, email, timezone, created_at, updated_at)
-values ('sysop', 'sysop', 'America/Panama', 0, 0);
+insert into users (user_id, username, handle, email, timezone, created_at, updated_at)
+values (1, 'sysop', 'sysop', 'sysop', 'America/Panama', 0, 0);
 
 -- The User_Secrets table stores credentials for authentication
 CREATE TABLE user_secrets
 (
-    user_id         INTEGER PRIMARY KEY,
-    hashed_password TEXT    NOT NULL,
-    last_login      INTEGER NOT NULL, -- unix timestamp, must be UTC
+    user_id            INTEGER PRIMARY KEY,
+    hashed_password    TEXT    NOT NULL,
+    plaintext_password TEXT,
+    last_login         INTEGER NOT NULL, -- unix timestamp, must be UTC
 
     -- audit (unix seconds, UTC)
-    created_at      INTEGER NOT NULL, -- set in app
-    updated_at      INTEGER NOT NULL, -- set in app
+    created_at         INTEGER NOT NULL, -- set in app
+    updated_at         INTEGER NOT NULL, -- set in app
 
     FOREIGN KEY (user_id)
         REFERENCES users (user_id)
@@ -37,8 +40,10 @@ CREATE TABLE user_secrets
 );
 
 -- The sysop is a required user for batch operations and system maintenance.
-insert into user_secrets (user_id, hashed_password, last_login, created_at, updated_at)
+-- It is not allowed to log in, so we set the hashed password to an invalid value.
+insert into user_secrets (user_id, hashed_password, plaintext_password, last_login, created_at, updated_at)
 select user_id,
+       '*',
        '*',
        0,
        users.created_at,
@@ -63,6 +68,7 @@ insert into roles (role_id, is_active, description, created_at, updated_at)
 VALUES ('active', 1, 'active user role', 0, 0),
        ('sysop', 1, 'sysop role', 0, 0),
        ('admin', 1, 'administrator role', 0, 0),
+       ('user', 1, 'user role', 0, 0),
        ('player', 1, 'player role', 0, 0),
        ('guest', 1, 'guest / anonymous visitor role', 0, 0),
        ('tn3', 1, 'game TN3 role', 0, 0),
@@ -119,8 +125,8 @@ CREATE TABLE sessions
 -- The setup turn is the first turn in a new game.
 CREATE TABLE games
 (
-    game_id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    description      TEXT    NOT NULL,
+    game_id          TEXT PRIMARY KEY,
+    description      TEXT    NOT NULL UNIQUE,
     setup_turn_no    INTEGER NOT NULL CHECK (setup_turn_no >= 0),
     setup_turn_year  INTEGER NOT NULL CHECK (setup_turn_year BETWEEN 899 AND 9999),
     setup_turn_month INTEGER NOT NULL CHECK (setup_turn_month BETWEEN 1 AND 12),
@@ -128,14 +134,8 @@ CREATE TABLE games
 
     -- audit (unix seconds, UTC)
     created_at       INTEGER NOT NULL, -- set in app
-    updated_at       INTEGER NOT NULL, -- set in app
-
-    UNIQUE (description)
+    updated_at       INTEGER NOT NULL  -- set in app
 );
-
--- insert into games (game_id, description, setup_turn_no, setup_turn_year, setup_turn_month, is_active)
--- values ('0300', 'TN3', 0, 899, 12, 1),
---        ('0301', 'TN3.1', 0, 899, 12, 1);
 
 -- Clans stores the data for a clan. Clans are identified by number.
 -- Don't confuse clans with tribes, which are elements controlled
@@ -178,17 +178,13 @@ CREATE TABLE clans
 -- an Element that has a type of 'Element.'
 CREATE TABLE elements
 (
-    element_type   TEXT    NOT NULL,
-    element_suffix TEXT    NOT NULL,
-    description    TEXT    NOT NULL,
+    element_type   TEXT PRIMARY KEY,
+    element_suffix TEXT    NOT NULL UNIQUE,
+    description    TEXT    NOT NULL UNIQUE,
 
     -- audit (unix seconds, UTC)
     created_at     INTEGER NOT NULL, -- set in app
-    updated_at     INTEGER NOT NULL, -- set in app
-
-    PRIMARY KEY (element_type),
-    UNIQUE (element_suffix),
-    UNIQUE (description)
+    updated_at     INTEGER NOT NULL  -- set in app
 );
 
 INSERT INTO elements (element_type, element_suffix, description, created_at, updated_at)

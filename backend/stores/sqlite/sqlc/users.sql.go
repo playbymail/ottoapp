@@ -9,52 +9,6 @@ import (
 	"context"
 )
 
-const createUser = `-- name: CreateUser :one
-
-INSERT INTO users (username,
-                   email,
-                   handle,
-                   timezone,
-                   created_at,
-                   updated_at)
-VALUES (?1,
-        ?2,
-        ?3,
-        ?4,
-        ?5,
-        ?6)
-RETURNING user_id
-`
-
-type CreateUserParams struct {
-	Username  string
-	Email     string
-	Handle    string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
-}
-
-//	Copyright (c) 2025 Michael D Henderson. All rights reserved.
-//
-// CreateUser creates a new user and returns its id.
-// The email must be lowercase and unique.
-// Timezone is the user's timezone. Use UTC if unknown.
-// The password is stored as a bcrypt hash.
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
-		arg.Username,
-		arg.Email,
-		arg.Handle,
-		arg.Timezone,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	var user_id int64
-	err := row.Scan(&user_id)
-	return user_id, err
-}
-
 const getAllUsers = `-- name: GetAllUsers :many
 SELECT user_id,
        username,
@@ -67,16 +21,26 @@ FROM users
 ORDER BY username
 `
 
+type GetAllUsersRow struct {
+	UserID    int64
+	Username  string
+	Email     string
+	Handle    string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 // GetAllUsers returns all users.
-func (q *Queries) GetAllUsers(ctx context.Context) ([]User, error) {
+func (q *Queries) GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error) {
 	rows, err := q.db.QueryContext(ctx, getAllUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []GetAllUsersRow
 	for rows.Next() {
-		var i User
+		var i GetAllUsersRow
 		if err := rows.Scan(
 			&i.UserID,
 			&i.Username,
@@ -111,10 +75,20 @@ FROM users
 WHERE email = ?1
 `
 
+type GetUserByEmailRow struct {
+	UserID    int64
+	Username  string
+	Email     string
+	Handle    string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 // GetUserByEmail returns the user with the given email address.
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
-	var i User
+	var i GetUserByEmailRow
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
@@ -139,10 +113,20 @@ FROM users
 WHERE handle = ?1
 `
 
+type GetUserByHandleRow struct {
+	UserID    int64
+	Username  string
+	Email     string
+	Handle    string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 // GetUserByHandle returns the user with the given handle.
-func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, error) {
+func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (GetUserByHandleRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByHandle, handle)
-	var i User
+	var i GetUserByHandleRow
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
@@ -167,10 +151,20 @@ FROM users
 WHERE user_id = ?1
 `
 
+type GetUserByIDRow struct {
+	UserID    int64
+	Username  string
+	Email     string
+	Handle    string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 // GetUserByID returns the user with the given id.
-func (q *Queries) GetUserByID(ctx context.Context, userID int64) (User, error) {
+func (q *Queries) GetUserByID(ctx context.Context, userID int64) (GetUserByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByID, userID)
-	var i User
+	var i GetUserByIDRow
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
@@ -195,10 +189,20 @@ FROM users
 WHERE username = ?1
 `
 
+type GetUserByUsernameRow struct {
+	UserID    int64
+	Username  string
+	Email     string
+	Handle    string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 // GetUserByUsername returns the user with the given username.
-func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByUsername, username)
-	var i User
+	var i GetUserByUsernameRow
 	err := row.Scan(
 		&i.UserID,
 		&i.Username,
@@ -271,15 +275,25 @@ type ListUsersVisibleToActorParams struct {
 	PageNum  interface{}
 }
 
-func (q *Queries) ListUsersVisibleToActor(ctx context.Context, arg ListUsersVisibleToActorParams) ([]User, error) {
+type ListUsersVisibleToActorRow struct {
+	UserID    int64
+	Username  string
+	Email     string
+	Handle    string
+	Timezone  string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+func (q *Queries) ListUsersVisibleToActor(ctx context.Context, arg ListUsersVisibleToActorParams) ([]ListUsersVisibleToActorRow, error) {
 	rows, err := q.db.QueryContext(ctx, listUsersVisibleToActor, arg.ActorID, arg.PageSize, arg.PageNum)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListUsersVisibleToActorRow
 	for rows.Next() {
-		var i User
+		var i ListUsersVisibleToActorRow
 		if err := rows.Scan(
 			&i.UserID,
 			&i.Username,
@@ -302,91 +316,53 @@ func (q *Queries) ListUsersVisibleToActor(ctx context.Context, arg ListUsersVisi
 	return items, nil
 }
 
-const updateUser = `-- name: UpdateUser :exec
-UPDATE users
-SET email      = ?1,
-    username   = ?2,
-    handle     = ?3,
-    timezone   = ?4,
-    updated_at = ?5
-WHERE user_id = ?6
+const upsertUser = `-- name: UpsertUser :one
+
+INSERT INTO users (handle,
+                   email,
+                   username,
+                   timezone,
+                   created_at,
+                   updated_at)
+VALUES (?1,
+        ?2,
+        ?3,
+        ?4,
+        ?5,
+        ?6)
+ON CONFLICT (handle) DO UPDATE
+    SET email      = excluded.email,
+        username   = excluded.username,
+        timezone   = excluded.timezone,
+        updated_at = excluded.updated_at
+RETURNING user_id
 `
 
-type UpdateUserParams struct {
+type UpsertUserParams struct {
+	Handle    string
 	Email     string
 	Username  string
-	Handle    string
 	Timezone  string
+	CreatedAt int64
 	UpdatedAt int64
-	UserID    int64
 }
 
-// UpdateUser updates the given user.
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
-	_, err := q.db.ExecContext(ctx, updateUser,
+//	Copyright (c) 2025 Michael D Henderson. All rights reserved.
+//
+// UpsertUser creates a new user and returns its id.
+// The email must be lowercase and unique.
+// Timezone is the user's timezone. Use UTC if unknown.
+// The password is stored as a bcrypt hash.
+func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertUser,
+		arg.Handle,
 		arg.Email,
 		arg.Username,
-		arg.Handle,
 		arg.Timezone,
+		arg.CreatedAt,
 		arg.UpdatedAt,
-		arg.UserID,
 	)
-	return err
-}
-
-const updateUserEmail = `-- name: UpdateUserEmail :exec
-UPDATE users
-SET email      = ?1,
-    updated_at = ?2
-WHERE user_id = ?3
-`
-
-type UpdateUserEmailParams struct {
-	Email     string
-	UpdatedAt int64
-	UserID    int64
-}
-
-// UpdateUserEmail updates the email for the given user.
-func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserEmail, arg.Email, arg.UpdatedAt, arg.UserID)
-	return err
-}
-
-const updateUserName = `-- name: UpdateUserName :exec
-UPDATE users
-SET username   = ?1,
-    updated_at = ?2
-WHERE user_id = ?3
-`
-
-type UpdateUserNameParams struct {
-	Username  string
-	UpdatedAt int64
-	UserID    int64
-}
-
-// UpdateUserName updates the name for the given user.
-func (q *Queries) UpdateUserName(ctx context.Context, arg UpdateUserNameParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserName, arg.Username, arg.UpdatedAt, arg.UserID)
-	return err
-}
-
-const updateUserTimezone = `-- name: UpdateUserTimezone :exec
-UPDATE users
-SET timezone   = ?1,
-    updated_at = ?2
-WHERE user_id = ?3
-`
-
-type UpdateUserTimezoneParams struct {
-	Timezone  string
-	UpdatedAt int64
-	UserID    int64
-}
-
-// UpdateUserTimezone updates the timezone for the given user.
-func (q *Queries) UpdateUserTimezone(ctx context.Context, arg UpdateUserTimezoneParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserTimezone, arg.Timezone, arg.UpdatedAt, arg.UserID)
-	return err
+	var user_id int64
+	err := row.Scan(&user_id)
+	return user_id, err
 }

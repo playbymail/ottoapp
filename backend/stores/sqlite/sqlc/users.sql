@@ -1,23 +1,28 @@
 --  Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
--- CreateUser creates a new user and returns its id.
+-- UpsertUser creates a new user and returns its id.
 -- The email must be lowercase and unique.
 -- Timezone is the user's timezone. Use UTC if unknown.
 -- The password is stored as a bcrypt hash.
 --
--- name: CreateUser :one
-INSERT INTO users (username,
+-- name: UpsertUser :one
+INSERT INTO users (handle,
                    email,
-                   handle,
+                   username,
                    timezone,
                    created_at,
                    updated_at)
-VALUES (:username,
+VALUES (:handle,
         :email,
-        :handle,
+        :username,
         :timezone,
         :created_at,
         :updated_at)
+ON CONFLICT (handle) DO UPDATE
+    SET email      = excluded.email,
+        username   = excluded.username,
+        timezone   = excluded.timezone,
+        updated_at = excluded.updated_at
 RETURNING user_id;
 
 -- GetUserByID returns the user with the given id.
@@ -86,41 +91,6 @@ WHERE handle = :handle;
 SELECT user_id
 FROM users
 WHERE username = :username;
-
--- UpdateUser updates the given user.
---
--- name: UpdateUser :exec
-UPDATE users
-SET email      = :email,
-    username   = :username,
-    handle     = :handle,
-    timezone   = :timezone,
-    updated_at = :updated_at
-WHERE user_id = :user_id;
-
--- UpdateUserEmail updates the email for the given user.
---
--- name: UpdateUserEmail :exec
-UPDATE users
-SET email      = :email,
-    updated_at = :updated_at
-WHERE user_id = :user_id;
-
--- UpdateUserName updates the name for the given user.
---
--- name: UpdateUserName :exec
-UPDATE users
-SET username   = :username,
-    updated_at = :updated_at
-WHERE user_id = :user_id;
-
--- UpdateUserTimezone updates the timezone for the given user.
---
--- name: UpdateUserTimezone :exec
-UPDATE users
-SET timezone   = :timezone,
-    updated_at = :updated_at
-WHERE user_id = :user_id;
 
 -- GetAllUsers returns all users.
 --

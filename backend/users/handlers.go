@@ -15,7 +15,6 @@ import (
 	"github.com/mdhender/phrases/v2"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/restapi"
-	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 )
 
 // UserView is the JSON:API view for a user
@@ -34,20 +33,25 @@ type UserView struct {
 // HandleGetMe returns the current user's profile.
 // For completeness; use 401 when no session, 404 if record missing.
 func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	actor, err := s.GetUserByID(actorID)
-	if err != nil || actor == nil {
-		log.Printf("GET /api/users/me: user %d not found: %v", actorID, err)
-		restapi.WriteJsonApiError(w, http.StatusNotFound, "user_not_found", "Not Found", "User not found.")
+	user, err := s.GetUserByID(actor.ID)
+	if err != nil {
+		log.Printf("GET /api/users/me: get me: %v", actor.ID, err)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+		return
+	}
+	if user == nil {
+		log.Printf("GET /api/users/me: get me: not found", actor.ID)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
 
-	view := s.buildUserView(actor, actorID)
+	view := s.buildUserView(user, actor, actor)
 
 	restapi.WriteJsonApiData(w, http.StatusOK, view)
 }
@@ -55,20 +59,25 @@ func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 // HandleGetMyProfile returns the current user's profile.
 // GET /api/my/profile
 func (s *Service) HandleGetMyProfile(w http.ResponseWriter, r *http.Request) {
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	target, err := s.GetUserByID(actorID)
-	if err != nil || target == nil {
-		log.Printf("GET /api/my/profile: user %d not found: %v", actorID, err)
-		restapi.WriteJsonApiError(w, http.StatusNotFound, "user_not_found", "Not Found", "User not found.")
+	user, err := s.GetUserByID(actor.ID)
+	if err != nil {
+		log.Printf("GET /api/my/profile: get me: %v", actor.ID, err)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+		return
+	}
+	if user == nil {
+		log.Printf("GET /api/my/profile: get me: not found", actor.ID)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
 
-	view := s.buildUserView(target, actorID)
+	view := s.buildUserView(user, actor, actor)
 
 	restapi.WriteJsonApiData(w, http.StatusOK, view)
 }
@@ -76,19 +85,13 @@ func (s *Service) HandleGetMyProfile(w http.ResponseWriter, r *http.Request) {
 // HandleGetUsers returns a list of all non-admin, non-sysop users (admin only)
 // GET /api/users
 func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	canList, err := s.authSvc.CanListUsers(actorID)
-	if err != nil {
-		log.Printf("GET /api/users: check access: %v", err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-		return
-	}
-	if !canList {
+	if !s.authSvc.CanListUsers(actor) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view user lists.")
 		return
 	}
@@ -106,32 +109,28 @@ func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
 
 	var view []*UserView
 	for _, row := range rows {
-		targetID := domains.ID(row.UserID)
-
-		// Check authorization
-		canView, err := s.authSvc.CanViewUser(actorID, targetID)
-		if err != nil {
-			log.Printf("GET /api/users/%d: check access: %v", targetID, err)
-			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-			return
+		target, err := s.authSvc.GetActorById(domains.ID(row.UserID))
+		if err != nil || !target.IsValid() {
+			continue
 		}
-		if !canView { // skip targets the actor is not allowed to view
+		if !s.authSvc.CanViewTarget(actor, target) {
+			// skip targets the actor is not allowed to view
 			continue
 		}
 
-		target, err := s.GetUserByID(targetID)
+		user, err := s.GetUserByID(target.ID)
 		if err != nil {
-			log.Printf("GET /api/users/%d: get target: %v", targetID, err)
+			log.Printf("GET /api/users/%d: get target: %v", target.ID, err)
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 			return
 		}
-		if target == nil {
-			log.Printf("GET /api/users/%d: get target: not found", targetID)
+		if user == nil {
+			log.Printf("GET /api/users/%d: get target: not found", target.ID)
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 			return
 		}
 
-		view = append(view, s.buildUserView(target, actorID))
+		view = append(view, s.buildUserView(user, actor, target))
 	}
 
 	restapi.WriteJsonApiData(w, http.StatusOK, view)
@@ -140,20 +139,13 @@ func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
 // HandleGetUsersWithPagination returns a user list with optional pagination support
 // GET /api/users?page[number]=1&page[size]=25
 func (s *Service) HandleGetUsersWithPagination(w http.ResponseWriter, r *http.Request) {
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	// Only admins/sysops may list users
-	canList, err := s.authSvc.CanListUsers(actorID)
-	if err != nil {
-		log.Printf("GET /api/users: check access: %v", err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-		return
-	}
-	if !canList {
+	if !s.authSvc.CanListUsers(actor) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view user lists.")
 		return
 	}
@@ -169,30 +161,16 @@ func (s *Service) HandleGetUsersWithPagination(w http.ResponseWriter, r *http.Re
 	// total := s.store.CountVisibleUsers(ctx, actorID)
 	// rows  := s.store.ListVisibleUsers(ctx, actorID, limit=pageSize, offset=(pageNum-1)*pageSize)
 	total := 12 // this is wrong
-	rows, err := s.db.Queries().ListUsersVisibleToActor(s.db.Context(), sqlc.ListUsersVisibleToActorParams{
-		ActorID:  actorID,
-		PageSize: pageSize,
-		PageNum:  (pageNum - 1) * pageSize,
-	})
+	users, err := s.ListUsersVisibleToActor(actor, pageNum, pageSize)
 	if err != nil {
 		log.Printf("GET /api/users?page[number]=%d&page[size]=%d: query: %v", pageNum, pageSize, err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
 
-	// Build views
-	views := make([]*UserView, 0, len(rows))
-	for _, row := range rows {
-		views = append(views, &UserView{
-			ID:       fmt.Sprintf("%d", row.UserID),
-			Username: row.Username,
-			Email:    row.Email,
-			Timezone: row.Timezone,
-			//Roles:       row.Roles,       // if you prejoin/aggregate; otherwise compute once for the list
-			//Permissions: row.Permissions, // same note as above
-			CreatedAt: time.Unix(row.CreatedAt, 0).UTC(),
-			UpdatedAt: time.Unix(row.UpdatedAt, 0).UTC(),
-		})
+	views := make([]*UserView, 0, len(users))
+	for _, user := range users {
+		views = append(views, user)
 	}
 
 	// Marshal JSON:API data array to a buffer
@@ -247,8 +225,8 @@ func parsePositiveInt(s string, def int) int {
 // HandleGetUser returns a specific user's profile (with RBAC).
 func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 	// Parse target user ID from path
-	targetIDInt, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || domains.ID(targetID) == domains.InvalidID {
 		restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusBadRequest),
 			Code:   "invalid_user_id",
@@ -260,37 +238,35 @@ func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	targetID := domains.ID(targetIDInt)
 
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-
-	// Check authorization
-	canView, err := s.authSvc.CanViewUser(actorID, targetID)
-	if err != nil {
-		log.Printf("GET /api/users/%d: check access: %v", targetID, err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-		return
-	}
-	if !canView {
+	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	if err != nil || !actor.IsValid() {
+		// don't leak valid or invalid id
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view this user.")
 		return
 	}
 
-	target, err := s.GetUserByID(targetID)
+	if !s.authSvc.CanViewTarget(actor, target) {
+		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view this user.")
+		return
+	}
+
+	user, err := s.GetUserByID(target.ID)
 	if err != nil {
 		log.Printf("GET /api/users/%d: get target: %v", targetID, err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
-	} else if target == nil {
+	} else if user == nil {
 		restapi.WriteJsonApiError(w, http.StatusNotFound, "user_not_found", "Not Found", "User not found.")
 		return
 	}
 
-	view := s.buildUserView(target, actorID)
+	view := s.buildUserView(user, actor, target)
 
 	restapi.WriteJsonApiData(w, http.StatusOK, view)
 }
@@ -299,11 +275,9 @@ func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 // Ember Data lies and sends the entire record up, not just the change set.
 // PATCH /api/users/:id
 func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%s %s: entered\n", r.Method, r.URL.Path)
 	// Parse target user ID from path
-	targetIDInt, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	targetID := domains.ID(targetIDInt)
-	if err != nil || targetID == domains.InvalidID {
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || domains.ID(targetID) == domains.InvalidID {
 		restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusBadRequest),
 			Code:   "invalid_user_id",
@@ -315,25 +289,20 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	log.Printf("%s %s: targetID %d\n", r.Method, r.URL.Path, targetID)
 
-	actorID, err := s.authSvc.GetActor(r)
-	log.Printf("%s %s: actorID %d, err %v\n", r.Method, r.URL.Path, actorID, err)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-
-	// Check authorization
-	canEdit, err := s.authSvc.CanEditUser(actorID, targetID)
-	log.Printf("%s %s: canEdit %v, err %v\n", r.Method, r.URL.Path, canEdit, err)
-	if err != nil {
-		log.Printf("PATCH /api/users/%d: check access: %v", targetID, err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	if err != nil || !target.IsValid() {
+		// don't leak valid or invalid id
+		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view this user.")
 		return
 	}
-	if !canEdit {
-		log.Printf("%s %s: canEdit false, returning 403\n", r.Method, r.URL.Path)
+
+	if !s.authSvc.CanEditTarget(actor, target) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update this user.")
 		return
 	}
@@ -352,13 +321,13 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s %s: unmarshal %+v\n", r.Method, r.URL.Path, p)
 
-	target, err := s.GetUserByID(targetID)
+	user, err := s.GetUserByID(target.ID)
 	if err != nil {
 		log.Printf("GET /api/users/%d: get target: %v", targetID, err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
-	if target == nil {
+	if user == nil {
 		log.Printf("GET /api/users/%d: get target: not found", targetID)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
@@ -367,8 +336,8 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 	// Calculate the change set and capture any validation errors
 	var validationErrors []*jsonapi.ErrorObject
 	changedUsername := false
-	if p.Username != target.Username {
-		if !ValidateUsername(p.Username) {
+	if p.Username != user.Username {
+		if err := domains.ValidateUsername(p.Username); err != nil {
 			validationErrors = append(validationErrors, &jsonapi.ErrorObject{
 				Status: strconv.Itoa(http.StatusUnprocessableEntity),
 				Code:   "invalid_username",
@@ -383,8 +352,8 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	changedEmail := false
-	if p.Email != target.Email {
-		if !ValidateEmail(p.Email) {
+	if p.Email != user.Email {
+		if err := domains.ValidateEmail(p.Email); err != nil {
 			validationErrors = append(validationErrors, &jsonapi.ErrorObject{
 				Status: strconv.Itoa(http.StatusUnprocessableEntity),
 				Code:   "invalid_email",
@@ -400,7 +369,7 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 	changedTimezone := false
 	var newTimezone *time.Location
-	if p.Timezone != target.Locale.Timezone.Location.String() {
+	if p.Timezone != user.Locale.Timezone.Location.String() {
 		if newTimezone, err = time.LoadLocation(p.Timezone); err != nil {
 			validationErrors = append(validationErrors, &jsonapi.ErrorObject{
 				Status: strconv.Itoa(http.StatusUnprocessableEntity),
@@ -425,28 +394,13 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if trying to edit username
-	if changedUsername {
-		canEditUsername, err := s.authSvc.CanEditUsername(actorID, targetID)
-		if err != nil {
-			log.Printf("PATCH /api/users/%d: check username edit: %v", targetID, err)
-			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-			return
-		}
-		if !canEditUsername {
-			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user names.")
-			return
-		}
+	if changedUsername && !s.authSvc.CanEditTargetUsername(actor, target) {
+		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user names.")
+		return
 	}
 
 	// Update user
-	var newUsername, newEmail *string
-	if changedUsername {
-		newUsername = &p.Username
-	}
-	if changedEmail {
-		newEmail = &p.Email
-	}
-	err = s.UpdateUser(targetID, newUsername, newEmail, newTimezone)
+	updatedUser, err := s.UpsertUser(user.Handle, p.Email, p.Username, newTimezone)
 	log.Printf("PATCH /api/users/%d: update user: %v", targetID, err)
 	if err != nil {
 		log.Printf("PATCH /api/users/%d: update: %v", targetID, err)
@@ -455,14 +409,8 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return updated user
-	user, err := s.GetUserByID(targetID)
 	log.Printf("PATCH /api/users/%d: get user by id: %v", targetID, err)
-	if err != nil {
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-		return
-	}
-
-	view := s.buildUserView(user, actorID)
+	view := s.buildUserView(updatedUser, actor, target)
 
 	restapi.WriteJsonApiData(w, http.StatusOK, view)
 }
@@ -477,13 +425,12 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 | **Validation or business rule fails** (password too short, missing field)                | Client error but not authorization     | **422 Unprocessable Entity** |
 */
 
-// HandlePatchPassword updates the current user's password
+// HandlePatchPassword updates the target's credentials
 // PATCH /api/users/:id/password
 func (s *Service) HandlePatchPassword(w http.ResponseWriter, r *http.Request) {
 	// Parse target user ID from path
-	targetIDInt, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	targetID := domains.ID(targetIDInt)
-	if err != nil || targetID == domains.InvalidID {
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || domains.ID(targetID) == domains.InvalidID {
 		restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusBadRequest),
 			Code:   "invalid_user_id",
@@ -506,47 +453,20 @@ func (s *Service) HandlePatchPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-	if actorID != targetID {
+	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	if err != nil || !target.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user passwords.")
 		return
 	}
 
-	canChange, _ := s.authSvc.CanChangeOwnPassword(actorID, targetID)
-	if !canChange {
+	err = s.authSvc.UpdateCredentials(actor, target, req.CurrentPassword, req.NewPassword)
+	if err != nil {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user passwords.")
-		return
-	}
-
-	// Get email for authentication
-	target, err := s.GetUserByID(targetID)
-	if err != nil {
-		restapi.WriteJsonApiError(w, http.StatusNotFound, "user_not_found", "Not Found", "User not found.")
-		return
-	}
-
-	// Verify current password
-	emailID, err := s.authSvc.AuthenticateWithEmailSecret(target.Email, req.CurrentPassword)
-	if err != nil {
-		restapi.WriteJsonApiError(w, http.StatusForbidden,
-			"invalid_current_password",
-			"Forbidden",
-			"You do not have permission to update the password with the provided credentials.")
-		return
-	} else if emailID != targetID {
-		log.Printf("PUT /api/users/%d/password: update: insanity %q -> %d", targetID, target.Email, emailID)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-	}
-
-	// Update password
-	err = s.authSvc.UpdateUserSecret(targetID, req.NewPassword)
-	if err != nil {
-		log.Printf("PUT /api/users/%d/password: update: %v", targetID, err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
 
@@ -557,9 +477,8 @@ func (s *Service) HandlePatchPassword(w http.ResponseWriter, r *http.Request) {
 // POST /api/users/:id/reset-password
 func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request) {
 	// Parse target user ID from path
-	targetIDInt, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	targetID := domains.ID(targetIDInt)
-	if err != nil || targetID == domains.InvalidID {
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || domains.ID(targetID) == domains.InvalidID {
 		restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusBadRequest),
 			Code:   "invalid_user_id",
@@ -572,32 +491,23 @@ func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-
-	// Check authorization
-	canReset, err := s.authSvc.CanResetPassword(actorID, targetID)
-	if err != nil {
-		log.Printf("POST /api/users/%d/reset-password: check access: %v", targetID, err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-		return
-	}
-	if !canReset {
+	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	if err != nil || !target.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to reset the user's password.")
 		return
 	}
 
 	// Generate temporary password reset link
 	magicLink := phrases.Generate(6)
-
-	// Update password
-	err = s.authSvc.UpdateUserSecret(targetID, magicLink)
+	err = s.authSvc.UpdateCredentials(actor, target, "", magicLink)
 	if err != nil {
-		log.Printf("POST /api/users/%d/reset-password: update: %v", targetID, err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+		log.Printf("POST /api/users/%d/reset-password: %d: %d: %v", actor.ID, target.ID, err)
+		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to reset the user's password.")
 		return
 	}
 
@@ -613,27 +523,22 @@ func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request
 // HandlePostUser creates a new user (admin only)
 // POST /api/users
 func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	canCreate, err := s.authSvc.CanCreateUser(actorID)
-	if err != nil {
-		log.Printf("POST /api/users: check access: %v", err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
-		return
-	}
-	if !canCreate {
+	if !s.authSvc.CanCreateTarget(actor) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to create users.")
 		return
 	}
 
 	type UserCreatePayload struct {
 		ID       string   `jsonapi:"primary,users"` // plural when receiving from Ember Data
-		Username string   `jsonapi:"attr,username,omitempty"`
+		Handle   string   `jsonapi:"attr,handle,omitempty"`
 		Email    string   `jsonapi:"attr,email,omitempty"`
+		Username string   `jsonapi:"attr,username,omitempty"`
 		Password string   `jsonapi:"attr,password,omitempty"`
 		Timezone string   `jsonapi:"attr,timezone,omitempty"`
 		Roles    []string `json:"attr,roles,omitempty"`
@@ -645,6 +550,27 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var validationErrors []*jsonapi.ErrorObject
+	if p.Handle == "" {
+		validationErrors = append(validationErrors, &jsonapi.ErrorObject{
+			Status: strconv.Itoa(http.StatusUnprocessableEntity),
+			Code:   "missing_handle",
+			Title:  "Missing handle",
+			Detail: "Provide a valid handle.",
+			Source: &jsonapi.ErrorSource{
+				Pointer: "/data/attributes/handle",
+			},
+		})
+	} else if err := domains.ValidateHandle(p.Handle); err != nil {
+		validationErrors = append(validationErrors, &jsonapi.ErrorObject{
+			Status: strconv.Itoa(http.StatusUnprocessableEntity),
+			Code:   "missing_handle",
+			Title:  "Missing handle",
+			Detail: "Provide a valid handle.",
+			Source: &jsonapi.ErrorSource{
+				Pointer: "/data/attributes/handle",
+			},
+		})
+	}
 	if p.Username == "" {
 		validationErrors = append(validationErrors, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusUnprocessableEntity),
@@ -655,7 +581,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 				Pointer: "/data/attributes/username",
 			},
 		})
-	} else if !ValidateUsername(p.Username) {
+	} else if err := domains.ValidateUsername(p.Username); err != nil {
 		validationErrors = append(validationErrors, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusUnprocessableEntity),
 			Code:   "invalid_username",
@@ -676,7 +602,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 				Pointer: "/data/attributes/email",
 			},
 		})
-	} else if !ValidateEmail(p.Email) {
+	} else if err := domains.ValidateEmail(p.Email); err != nil {
 		validationErrors = append(validationErrors, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusUnprocessableEntity),
 			Code:   "invalid_email",
@@ -722,9 +648,21 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 
 	// Create user (this will assign "active" and "user" roles by default)
 	// TODO: Add handle field to payload; for now use username as handle
-	user, err := s.CreateUser(p.Username, p.Email, p.Username, password, loc)
+	user, err := s.UpsertUser(p.Handle, p.Email, p.Username, loc)
 	if err != nil {
 		log.Printf("POST /api/users: create: %v", err)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+		return
+	}
+	target, err := s.authSvc.GetActorById(user.ID)
+	if err != nil {
+		log.Printf("POST /api/users: %d: %d: create: %v", actor.ID, user.ID, err)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+		return
+	}
+	err = s.authSvc.UpdateCredentials(actor, target, "", password)
+	if err != nil {
+		log.Printf("POST /api/users: %d: %d: create: %v", actor.ID, user.ID, err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
@@ -755,7 +693,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	view := s.buildUserView(user, actorID)
+	view := s.buildUserView(user, actor, target)
 
 	// set a Location key in the header to let the client know how to find the new user
 	w.Header().Set("Location", restapi.AbsURL(r, "/api/users/"+view.ID))
@@ -763,7 +701,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 	restapi.WriteJsonApiData(w, http.StatusCreated, view)
 }
 
-// Consider adding a route to make JSON:API happier
+// HandlePatchUserRelationshipRoles is a route to make JSON:API happier
 // PATCH /api/users/:id/relationships/roles
 //
 //	{
@@ -777,9 +715,8 @@ func (s *Service) HandlePatchUserRelationshipRoles(w http.ResponseWriter, r *htt
 // PATCH /api/users/:id/role
 func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 	// Parse target user ID from path
-	targetIDInt, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	targetID := domains.ID(targetIDInt)
-	if err != nil || targetID == domains.InvalidID {
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || domains.ID(targetID) == domains.InvalidID {
 		restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
 			Status: strconv.Itoa(http.StatusBadRequest),
 			Code:   "invalid_user_id",
@@ -802,28 +739,27 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID, err := s.authSvc.GetActor(r)
-	if err != nil || actorID == domains.InvalidID {
+	actor, err := s.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-
-	canManage, err := s.authSvc.CanManageRoles(actorID, targetID)
-	if err != nil {
-		log.Printf("PATCH /api/users/%d/role: check access: %v", targetID, err)
-		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
+	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	if err != nil || !target.IsValid() {
+		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to manage this user.")
 		return
 	}
-	if !canManage {
+
+	if !s.authSvc.CanManageTargetRoles(actor, target) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to manage this user.")
 		return
 	}
 
 	// Add roles
 	for _, roleID := range req.Add {
-		err = s.authSvc.AssignRole(targetID, roleID)
+		err = s.authSvc.AssignRole(target.ID, roleID)
 		if err != nil {
-			log.Printf("PATCH /api/users/%d/role: add %q: %v", targetID, roleID, err)
+			log.Printf("PATCH /api/users/%d/role: add %q: %v", target.ID, roleID, err)
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 			return
 		}
@@ -831,37 +767,37 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 
 	// Remove roles
 	for _, roleID := range req.Remove {
-		err = s.authSvc.RemoveRole(targetID, roleID)
+		err = s.authSvc.RemoveRole(target.ID, roleID)
 		if err != nil {
-			log.Printf("PATCH /api/users/%d/role: remove %q: %v", targetID, roleID, err)
+			log.Printf("PATCH /api/users/%d/role: remove %q: %v", target.ID, roleID, err)
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 			return
 		}
 	}
 
 	// Return updated user
-	user, err := s.GetUserByID(targetID)
+	user, err := s.GetUserByID(target.ID)
 	if err != nil {
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
 
-	view := s.buildUserView(user, actorID)
+	view := s.buildUserView(user, actor, target)
 
 	restapi.WriteJsonApiData(w, http.StatusOK, view)
 }
 
 // buildUserView constructs a UserView with permissions based on actor's privileges
-func (s *Service) buildUserView(user *domains.User_t, actorID domains.ID) *UserView {
-	auth, _ := s.authSvc.BuildActorAuth(actorID, user.ID)
+func (s *Service) buildUserView(user *domains.User_t, actor, target *domains.Actor) *UserView {
+	aa := s.authSvc.BuildActorAuth(actor, target)
 	return &UserView{
 		ID:          fmt.Sprintf("%d", user.ID),
 		Username:    user.Username,
 		Email:       user.Email,
 		Handle:      user.Handle,
 		Timezone:    user.Locale.Timezone.Location.String(),
-		Roles:       auth.Roles,
-		Permissions: auth.Permissions,
+		Roles:       aa.Roles,
+		Permissions: aa.Permissions,
 		CreatedAt:   user.Created.UTC(),
 		UpdatedAt:   user.Updated.UTC(),
 	}

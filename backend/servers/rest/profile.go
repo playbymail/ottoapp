@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/playbymail/ottoapp/backend/domains"
 )
 
 // handleGetProfile returns the current user's profile information
@@ -18,10 +20,14 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 		Errors   []string `json:"errors,omitempty"`
 	}
 
-	userID, _ := s.services.authSvc.GetActor(r)
+	actor, err := s.services.authSvc.GetActor(r)
+	if err != nil || !actor.IsValid() {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
 
 	// Fetch user data from the users service
-	user, err := s.services.usersSvc.GetUserByID(userID)
+	user, err := s.services.usersSvc.GetUserByID(actor.ID)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -43,17 +49,28 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 // Users can update their email and timezone, but not their username.
 func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Email    *string `json:"email"`
-		Timezone *string `json:"timezone"`
+		Email    string `json:"email"`
+		Username string `json:"username"`
+		Timezone string `json:"timezone"`
 	}
 	type response struct {
+		Handle   string   `json:"handle,omitempty"`
 		Username string   `json:"username,omitempty"`
 		Email    string   `json:"email,omitempty"`
 		Timezone string   `json:"timezone,omitempty"`
 		Errors   []string `json:"errors,omitempty"`
 	}
 
-	userID, _ := s.services.authSvc.GetActor(r)
+	userID, err := s.services.authSvc.GetActor(r)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(response{
+			Errors: []string{"Invalid request body"},
+		})
+		return
+	}
+	_ = userID
 
 	// Parse the request body
 	var req request
@@ -68,21 +85,15 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 
 	var rsp response
 
-	// Validate email string if provided
-	if req.Email != nil && *req.Email != "" {
-		if !s.services.usersSvc.ValidateEmail(*req.Email) {
-			rsp.Errors = append(rsp.Errors, "Invalid email")
-		}
+	if err := domains.ValidateEmail(req.Email); err != nil {
+		rsp.Errors = append(rsp.Errors, "Invalid email")
 	}
 
 	// Convert timezone string to *time.Location if provided
 	var timezone *time.Location
-	var err error
-	if req.Timezone != nil && *req.Timezone != "" {
-		timezone, err = s.services.tzSvc.Location(*req.Timezone)
-		if err != nil {
-			rsp.Errors = append(rsp.Errors, "Invalid timezone")
-		}
+	timezone, err = s.services.tzSvc.Location(req.Timezone)
+	if err != nil {
+		rsp.Errors = append(rsp.Errors, "Invalid timezone")
 	}
 
 	// Return if there were validation errors
@@ -94,7 +105,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the user (userName is nil since users can't change their username)
-	err = s.services.usersSvc.UpdateUser(userID, nil, req.Email, timezone)
+	updatedUser, err := s.services.usersSvc.UpsertUser("", req.Email, req.Username, timezone)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -103,16 +114,10 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch and return the updated profile
-	user, err := s.services.usersSvc.GetUserByID(userID)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	rsp.Username = user.Username
-	rsp.Email = user.Email
-	rsp.Timezone = user.Locale.Timezone.Location.String()
+	rsp.Handle = updatedUser.Handle
+	rsp.Email = updatedUser.Email
+	rsp.Username = updatedUser.Username
+	rsp.Timezone = updatedUser.Locale.Timezone.Location.String()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

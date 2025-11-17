@@ -9,12 +9,14 @@ func (e Error) Error() string {
 }
 
 const (
+	ErrBadInput            = Error("bad input")
 	ErrHashFailed          = Error("hash failed")
 	ErrInvalidArgument     = Error("invalid argument")
 	ErrInvalidPath         = Error("invalid path")
 	ErrMissingUserdataPath = Error("missing userdata path")
 	ErrNotDirectory        = Error("not a directory")
 	ErrNotExists           = Error("does not exist")
+	ErrNotFile             = Error("not a file")
 	ErrNotFound            = Error("not found")
 	ErrNotImplemented      = Error("not implemented")
 	ErrOpenFailed          = Error("open failed")

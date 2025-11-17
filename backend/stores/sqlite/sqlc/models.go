@@ -4,6 +4,10 @@
 
 package sqlc
 
+import (
+	"database/sql"
+)
+
 type Clan struct {
 	ClanID      int64
 	GameID      string
@@ -60,7 +64,7 @@ type Element struct {
 }
 
 type Game struct {
-	GameID         int64
+	GameID         string
 	Description    string
 	SetupTurnNo    int64
 	SetupTurnYear  int64
@@ -109,9 +113,9 @@ type TurnReport struct {
 
 type User struct {
 	UserID    int64
+	Handle    string
 	Username  string
 	Email     string
-	Handle    string
 	Timezone  string
 	CreatedAt int64
 	UpdatedAt int64
@@ -125,9 +129,10 @@ type UserRole struct {
 }
 
 type UserSecret struct {
-	UserID         int64
-	HashedPassword string
-	LastLogin      int64
-	CreatedAt      int64
-	UpdatedAt      int64
+	UserID            int64
+	HashedPassword    string
+	PlaintextPassword sql.NullString
+	LastLogin         int64
+	CreatedAt         int64
+	UpdatedAt         int64
 }
