@@ -9,9 +9,7 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/auth"
-	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/sessions"
-	"github.com/playbymail/ottoapp/backend/users"
 )
 
 type Option func(*Server) error
@@ -83,20 +81,6 @@ func WithTimer(d time.Duration) Option {
 			return fmt.Errorf("invalid shutdown timer")
 		}
 		s.channels.shutdownTimer = d
-		return nil
-	}
-}
-
-func WithTimezoneService(tzSvc *iana.Service) Option {
-	return func(s *Server) error {
-		s.services.tzSvc = tzSvc
-		return nil
-	}
-}
-
-func WithUsersService(usersSvc *users.Service) Option {
-	return func(s *Server) error {
-		s.services.usersSvc = usersSvc
 		return nil
 	}
 }

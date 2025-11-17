@@ -12,6 +12,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/auth"
@@ -166,6 +167,7 @@ func (s *Service) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 
 // HandlePostLogin creates a session and sets the cookie.
 func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
+	log.Printf("%s %s: entered", r.Method, r.URL.Path)
 	// always invalidate any old cookies
 	s.DeleteCookie(w, r)
 
@@ -180,19 +182,36 @@ func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	//log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Email, body.Password)
-	userID, err := s.authSvc.AuthenticateWithEmailSecret(body.Email, body.Password)
+	body.Email = strings.ToLower(body.Email)
+	log.Printf("%s %s: checkUser(%q, %q)\n", r.Method, r.URL.Path, body.Email, body.Password)
+
+	// ensure that we spend at least 500ms if the authentication path fails
+	timer := time.NewTimer(500 * time.Millisecond)
+	actor, err := s.authSvc.GetActorByEmail(body.Email)
 	if err != nil {
-		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
+		log.Printf("%s %s: checkUser: getActor(%q): %v\n", r.Method, r.URL.Path, body.Email, err)
+		<-timer.C
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	user, err := s.usersSvc.GetUserByID(userID)
+	err = s.authSvc.AuthenticateCredentials(actor, body.Password)
 	if err != nil {
-		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
+		log.Printf("%s %s: checkUser: auth(%d, %q): %v\n", r.Method, r.URL.Path, actor.ID, body.Password, err)
+		<-timer.C
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	user, err := s.usersSvc.GetUserByID(actor.ID)
+	if err != nil {
+		log.Printf("%s %s: checkUser: getUser(%d): %v\n", r.Method, r.URL.Path, actor.ID, err)
+		<-timer.C
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
+	// don't need timer anymore
+	timer.Stop()
+
 	user.Roles, err = s.authSvc.GetUserRoles(user.ID)
 	if err != nil {
 		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)

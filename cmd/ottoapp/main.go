@@ -4,7 +4,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"github.com/playbymail/ottoapp/backend/binder"
 	"github.com/playbymail/ottoapp/backend/documents"
 	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/games"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/parser/office"
 	"github.com/playbymail/ottoapp/backend/runners"
@@ -31,6 +34,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+//go:embed testdata/memdb-players.json
+var memdbPlayersJsonData []byte
 
 func main() {
 	log.SetFlags(log.Lshortfile)
@@ -100,6 +106,7 @@ func main() {
 	cmdApiServe.Flags().Duration("shutdown-delay", 30*time.Second, "delay for services to close during shutdown")
 	cmdApiServe.Flags().String("shutdown-key", "", "api key authorizing shutdown")
 	cmdApiServe.Flags().Duration("shutdown-timer", 0, "timer to shut server down")
+	cmdApiServe.Flags().String("userdata", "userdata", "path to user data")
 
 	var cmdApp = &cobra.Command{
 		Use:   "app",
@@ -133,11 +140,20 @@ func main() {
 	//cmdDb.AddCommand(cmdDbSeed)
 	cmdDb.AddCommand(cmdDbVersion)
 
+	var cmdGame = &cobra.Command{
+		Use:   "game",
+		Short: "game management",
+	}
+	cmdRoot.AddCommand(cmdGame)
+	cmdGame.AddCommand(cmdGameImport)
+
 	var cmdReport = &cobra.Command{
 		Use:   "report",
 		Short: "report management",
 	}
 	cmdRoot.AddCommand(cmdReport)
+	cmdReport.AddCommand(cmdReportExtract)
+	cmdReportExtract.Flags().String("output", "report.txt", "file to create")
 	cmdReport.AddCommand(cmdReportParse)
 	cmdReportParse.Flags().Bool("docxml-only", false, "parse to DocXML only")
 	cmdReport.AddCommand(cmdReportUpload)
@@ -154,15 +170,16 @@ func main() {
 	cmdUserCreate.Flags().String("email", "", "email address for user")
 	cmdUserCreate.Flags().String("password", "", "password for user (generates random if not provided)")
 	cmdUserCreate.Flags().String("tz", "UTC", "IANA timezone for user")
+	cmdUserCreate.Flags().String("username", "", "user name")
 	cmdUser.AddCommand(cmdUserUpdate)
 	cmdUserUpdate.Flags().Bool("active", true, "active flag user")
 	cmdUserUpdate.Flags().String("email", "", "email address for user")
+	cmdUserUpdate.Flags().String("username", "", "user name")
 	cmdUserUpdate.Flags().String("password", "", "password for user (generates random if \":\")")
 	cmdUserUpdate.Flags().String("tz", "", "IANA timezone for user")
 	cmdUser.AddCommand(cmdUserRole)
 	cmdUserRole.Flags().StringSlice("add", []string{}, "roles to add (comma-separated: user,admin,player)")
 	cmdUserRole.Flags().StringSlice("remove", []string{}, "roles to remove (comma-separated: user,admin,player)")
-	cmdUser.AddCommand(cmdUserImport)
 
 	var cmdVersion = &cobra.Command{
 		Use:   "version",
@@ -234,6 +251,11 @@ var cmdApiServe = &cobra.Command{
 		} else if value != 0 {
 			options = append(options, rest.WithTimer(value))
 		}
+		//if value, err := cmd.Flags().GetString("userdata"); err != nil {
+		//	return err
+		//} else {
+		//	options = append(options, rest.WithUserData(value))
+		//}
 
 		log.Printf("[serve] db %q\n", path)
 		ctx := context.Background()
@@ -262,10 +284,18 @@ var cmdApiServe = &cobra.Command{
 		if err != nil {
 			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
+		gamesSvc, err := games.New(db, authSvc, usersSvc)
+		if err != nil {
+			return errors.Join(fmt.Errorf("games.new"), err)
+		}
 
 		// Import test users for in-memory database
 		if path == ":memory:" {
-			if err := importUsersFromCSVData(db, authSvc, usersSvc, memdbPlayersCsvData); err != nil {
+			var data games.ImportFile
+			err = json.Unmarshal(memdbPlayersJsonData, &data)
+			if err != nil {
+				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
+			} else if err = gamesSvc.Import(&data); err != nil {
 				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
 			}
 		}
@@ -302,11 +332,10 @@ var cmdAppVersion = &cobra.Command{
 }
 
 var cmdAppTestUserProfile = &cobra.Command{
-	Use:           "test-user-profile",
-	Short:         "Test the GET /api/users/me endpoint",
-	Long:          `Test the GET /api/users/me endpoint by logging in and fetching the user profile.`,
-	SilenceErrors: true,
-	SilenceUsage:  true,
+	Use:          "test-user-profile",
+	Short:        "Test the GET /api/users/me endpoint",
+	Long:         `Test the GET /api/users/me endpoint by logging in and fetching the user profile.`,
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		host, err := cmd.Flags().GetString("host")
 		if err != nil {
@@ -527,6 +556,98 @@ var cmdDbVersion = &cobra.Command{
 	},
 }
 
+var cmdGameImport = &cobra.Command{
+	Use:          "import <path>",
+	Short:        "import game data from JSON data file",
+	SilenceUsage: true,
+	Args:         cobra.ExactArgs(1), // require path
+	RunE: func(cmd *cobra.Command, args []string) error {
+		started := time.Now()
+		path := args[0]
+		if sb, err := os.Stat(path); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return errors.Join(domains.ErrInvalidPath, domains.ErrNotExists)
+			}
+			return errors.Join(domains.ErrInvalidPath, err)
+		} else if sb.IsDir() || !sb.Mode().IsRegular() {
+			return errors.Join(domains.ErrInvalidPath, domains.ErrNotFile)
+		}
+		input, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var data games.ImportFile
+		err = json.Unmarshal(input, &data)
+		if err != nil {
+			return err
+		}
+
+		dbPath, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+		debug, err := cmd.Flags().GetBool("debug")
+		if err != nil {
+			return err
+		}
+		ctx := context.Background()
+		db, err := sqlite.Open(ctx, dbPath, false, debug)
+		if err != nil {
+			log.Fatalf("db: open: %v\n", err)
+		}
+		defer func() {
+			_ = db.Close()
+		}()
+
+		authSvc := auth.New(db)
+		tzSvc, err := iana.New(db)
+		if err != nil {
+			return errors.Join(fmt.Errorf("import: new tz service"), err)
+		}
+		usersSvc := users.New(db, authSvc, tzSvc)
+		gameSvc, err := games.New(db, authSvc, usersSvc)
+		if err != nil {
+			return errors.Join(fmt.Errorf("import: new game service"), err)
+		}
+		err = gameSvc.Import(&data)
+		if err != nil {
+			return errors.Join(fmt.Errorf("import: game"), err)
+			return err
+		}
+
+		fmt.Printf("%s: imported in %v\n", path, time.Since(started))
+		return nil
+	},
+}
+
+var cmdReportExtract = &cobra.Command{
+	Use:   "extract <documentID>",
+	Short: "Extract text from a turn report document",
+	Args:  cobra.ExactArgs(1), // require path
+	RunE: func(cmd *cobra.Command, args []string) error {
+		//startedAt := time.Now()
+		path := args[0]
+		rptPath, err := cmd.Flags().GetString("output")
+		if err != nil {
+			return err
+		}
+		input, err := office.ParsePath(path)
+		if err != nil {
+			log.Fatalf("error: %v\n", err)
+		}
+		output := &bytes.Buffer{}
+		for _, line := range bytes.Split(input, []byte{'\n'}) {
+			output.Write(bytes.TrimSpace(line))
+			output.WriteByte('\n')
+		}
+		if err := os.WriteFile(rptPath, output.Bytes(), 0o644); err != nil {
+			log.Fatalf("error: %v\n", err)
+		}
+		// log.Printf("report: parse %q: completed in %v\n", path, time.Since(startedAt))
+		return nil
+	},
+}
+
 var cmdReportParse = &cobra.Command{
 	Use:   "parse <documentID>",
 	Short: "Parse a turn report document",
@@ -620,26 +741,36 @@ var cmdReportUpload = &cobra.Command{
 }
 
 var cmdUserCreate = &cobra.Command{
-	Use:   "create <username>",
+	Use:   "create <handle>",
 	Short: "Create a new user",
-	Long:  `Create a new user with specified name.`,
-	Args:  cobra.ExactArgs(1), // require username
+	Long:  `Create a new user.`,
+	Args:  cobra.ExactArgs(1), // require handle
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		userName := strings.ToLower(args[0])
-		if !users.ValidateUsername(userName) {
-			return domains.ErrInvalidUsername
+		handle := strings.ToLower(args[0])
+		if err := domains.ValidateHandle(handle); err != nil {
+			return errors.Join(domains.ErrInvalidUsername, err)
 		}
-		emailSet, email := cmd.Flags().Changed("email"), userName+"@ottoapp"
+		userNameSet, userName := cmd.Flags().Changed("username"), handle
+		if userNameSet {
+			userName, err = cmd.Flags().GetString("username")
+			if err != nil {
+				return err
+			}
+		}
+		if err := domains.ValidateUsername(userName); err != nil {
+			return errors.Join(domains.ErrInvalidUsername, err)
+		}
+		emailSet, email := cmd.Flags().Changed("email"), handle+"@ottoapp"
 		if emailSet {
 			email, err = cmd.Flags().GetString("email")
 			if err != nil {
 				return err
-			} else if !users.ValidateEmail(email) {
-				return domains.ErrInvalidEmail
+			} else if err := domains.ValidateEmail(email); err != nil {
+				return errors.Join(domains.ErrInvalidEmail, err)
 			}
 			email = strings.ToLower(email)
 		}
@@ -648,8 +779,8 @@ var cmdUserCreate = &cobra.Command{
 			password, err = cmd.Flags().GetString("password")
 			if err != nil {
 				return err
-			} else if !auth.ValidatePassword(password) {
-				return domains.ErrInvalidPassword
+			} else if err := domains.ValidatePassword(password); err != nil {
+				return errors.Join(domains.ErrInvalidPassword, err)
 			}
 		}
 		var loc *time.Location
@@ -680,9 +811,23 @@ var cmdUserCreate = &cobra.Command{
 		usersSvc := users.New(db, authSvc, tzSvc)
 
 		// For the user create command, use userName as the handle
-		_, err = usersSvc.CreateUser(userName, email, userName, password, loc)
+		user, err := usersSvc.UpsertUser(handle, email, userName, loc)
 		if err != nil {
-			log.Fatalf("user %q: create: %v\n", userName, err)
+			return errors.Join(fmt.Errorf("user %q", handle), err)
+		}
+		actor, err := authSvc.GetActorById(user.ID)
+		if err != nil {
+			return errors.Join(fmt.Errorf("user %q", handle), err)
+		}
+		err = authSvc.UpdateCredentials(&domains.Actor{ID: auth.SysopId, Sysop: true}, actor, "", password)
+		if err != nil {
+			return errors.Join(fmt.Errorf("user %q: secret %q", handle, password), err)
+		}
+		for _, role := range []string{"active", "user"} {
+			err = authSvc.AssignRole(user.ID, role)
+			if err != nil {
+				return errors.Join(fmt.Errorf("user %q: role %q", handle, role), err)
+			}
 		}
 
 		log.Printf("user %q: email %q: tz %q: password %q: created\n", userName, email, loc.String(), password)
@@ -702,62 +847,6 @@ var cmdUserUpdate = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		userName := strings.ToLower(args[0])
-		if !users.ValidateUsername(userName) {
-			return domains.ErrInvalidUsername
-		}
-		var newUserName *string
-		userNameSet := cmd.Flags().Changed("username")
-		if userNameSet {
-			value, err := cmd.Flags().GetString("username")
-			if err != nil {
-				return err
-			} else if !users.ValidateUsername(value) {
-				return fmt.Errorf("invalid new username")
-			}
-			newUserName = &value
-		}
-		var newEmail *string
-		emailSet := cmd.Flags().Changed("email")
-		if emailSet {
-			value, err := cmd.Flags().GetString("email")
-			if err != nil {
-				return err
-			} else if !users.ValidateEmail(value) {
-				return fmt.Errorf("invalid new email")
-			}
-			newEmail = &value
-		}
-		var newPassword *string
-		passwordSet := cmd.Flags().Changed("password")
-		if passwordSet {
-			value, err := cmd.Flags().GetString("password")
-			if err != nil {
-				return err
-			} else if value == "+" {
-				value = phrases.Generate(6)
-				log.Printf("generated random password: %q", value)
-			}
-			if !auth.ValidatePassword(value) {
-				return fmt.Errorf("invalid new password")
-			}
-			newPassword = &value
-		}
-		var newTimeZone *time.Location
-		tzSet := cmd.Flags().Changed("tz")
-		if tzSet {
-			if tz, err := cmd.Flags().GetString("tz"); err != nil {
-				return err
-			} else if ctz, ok := iana.CanonicalName(tz); !ok {
-				return fmt.Errorf("invalid time zone")
-			} else if newTimeZone, err = time.LoadLocation(ctz); err != nil {
-				return err
-			}
-		}
-		if !(emailSet || passwordSet || tzSet) {
-			return fmt.Errorf("must update at least one field")
-		}
-
 		ctx := context.Background()
 		db, err := sqlite.Open(ctx, dbPath, true, false)
 		if err != nil {
@@ -774,29 +863,78 @@ var cmdUserUpdate = &cobra.Command{
 		}
 		usersSvc := users.New(db, authSvc, tzSvc)
 
-		user, err := usersSvc.GetUserByUsername(userName)
+		handle := strings.ToLower(args[0])
+		user, err := usersSvc.GetUserByHandle(handle)
 		if err != nil {
-			return fmt.Errorf("user: %q: update %v\n", userName, err)
+			return err
 		}
-
-		err = usersSvc.UpdateUser(user.ID, newUserName, newEmail, newTimeZone)
-		if err != nil {
-			return fmt.Errorf("user: %q: update %v\n", userName, err)
-		} else {
-			if emailSet {
-				log.Printf("user %q: email %q: updated", userName, *newEmail)
-			}
-			if tzSet {
-				log.Printf("user %q: tz %q: updated", userName, newTimeZone.String())
-			}
-		}
-
-		if newPassword != nil {
-			err = authSvc.UpdateUserSecret(user.ID, *newPassword)
+		if cmd.Flags().Changed("username") {
+			value, err := cmd.Flags().GetString("username")
 			if err != nil {
-				return fmt.Errorf("user %q: password %q: update %v\n", userName, *newPassword, err)
+				return err
+			} else if err := domains.ValidateUsername(value); err != nil {
+				return errors.Join(domains.ErrInvalidUsername, err)
 			}
-			log.Printf("user %q: password %q: updated", userName, *newPassword)
+			user.Username = value
+		}
+		if err := domains.ValidateUsername(user.Username); err != nil {
+			return errors.Join(domains.ErrInvalidUsername, err)
+		}
+		if cmd.Flags().Changed("email") {
+			value, err := cmd.Flags().GetString("email")
+			if err != nil {
+				return err
+			} else if err := domains.ValidateEmail(value); err != nil {
+				return errors.Join(domains.ErrInvalidEmail, domains.ErrBadInput)
+			}
+			user.Email = value
+		}
+		var password string
+		if cmd.Flags().Changed("password") {
+			value, err := cmd.Flags().GetString("password")
+			if err != nil {
+				return err
+			} else if value == "+" {
+				value = phrases.Generate(6)
+				log.Printf("generated random password: %q", value)
+			}
+			if err := domains.ValidatePassword(value); err != nil {
+				return errors.Join(domains.ErrInvalidPassword, domains.ErrBadInput)
+			}
+			password = value
+		}
+		var loc *time.Location
+		if cmd.Flags().Changed("tz") {
+			if tz, err := cmd.Flags().GetString("tz"); err != nil {
+				return err
+			} else if ctz, ok := iana.CanonicalName(tz); !ok {
+				return fmt.Errorf("invalid time zone")
+			} else if loc, err = time.LoadLocation(ctz); err != nil {
+				return err
+			} else {
+				user.Locale.Timezone.Location = loc
+			}
+		}
+
+		actor, err := authSvc.GetActorById(user.ID)
+		if err != nil {
+			return errors.Join(fmt.Errorf("user %q", handle), err)
+		}
+
+		updatedUser, err := usersSvc.UpsertUser(user.Handle, user.Email, user.Username, user.Locale.Timezone.Location)
+		if err != nil {
+			return fmt.Errorf("user: %q: update %v\n", user.Handle, err)
+		} else {
+			log.Printf("user %q: email %q: updated", user.Handle, user.Email)
+			log.Printf("user %q: tz %q: updated", user.Handle, user.Locale.Timezone.Location.String())
+		}
+
+		if password != "" {
+			err = authSvc.UpdateCredentials(&domains.Actor{ID: auth.SysopId, Sysop: true}, actor, "", password)
+			if err != nil {
+				return fmt.Errorf("user %q: password %q: update %v\n", updatedUser.Handle, password, err)
+			}
+			log.Printf("user %q: password %q: updated", updatedUser.Handle, password)
 		}
 
 		return nil
@@ -804,19 +942,19 @@ var cmdUserUpdate = &cobra.Command{
 }
 
 var cmdUserRole = &cobra.Command{
-	Use:          "role <username>",
+	Use:          "role <handle>",
 	Short:        "Manage user roles",
 	Long:         `Add or remove roles for a specific user. At least one --add or --remove flag must be provided.`,
-	Args:         cobra.ExactArgs(1), // require username
+	Args:         cobra.ExactArgs(1), // require handle
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		userName := strings.ToLower(args[0])
-		if !users.ValidateUsername(userName) {
-			return domains.ErrInvalidUsername
+		handle := strings.ToLower(args[0])
+		if err := domains.ValidateHandle(handle); err != nil {
+			return errors.Join(domains.ErrInvalidHandle, domains.ErrBadInput)
 		}
 
 		rolesToAdd, err := cmd.Flags().GetStringSlice("add")
@@ -848,18 +986,18 @@ var cmdUserRole = &cobra.Command{
 		}
 		usersSvc := users.New(db, authSvc, tzSvc)
 
-		user, err := usersSvc.GetUserByUsername(userName)
+		user, err := usersSvc.GetUserByHandle(handle)
 		if err != nil {
-			return fmt.Errorf("user: %q: not found: %v", userName, err)
+			return fmt.Errorf("user: %q: not found: %v", handle, err)
 		}
 
 		// Add roles
 		for _, roleID := range rolesToAdd {
 			err = authSvc.AssignRole(user.ID, roleID)
 			if err != nil {
-				log.Printf("user %q: role %q: failed to add: %v", userName, roleID, err)
+				log.Printf("user %q: role %q: failed to add: %v", user.Handle, roleID, err)
 			} else {
-				log.Printf("user %q: role %q: added", userName, roleID)
+				log.Printf("user %q: role %q: added", user.Handle, roleID)
 			}
 		}
 
@@ -867,9 +1005,9 @@ var cmdUserRole = &cobra.Command{
 		for _, roleID := range rolesToRemove {
 			err = authSvc.RemoveRole(user.ID, roleID)
 			if err != nil {
-				log.Printf("user %q: role %q: failed to remove: %v", userName, roleID, err)
+				log.Printf("user %q: role %q: failed to remove: %v", user.Handle, roleID, err)
 			} else {
-				log.Printf("user %q: role %q: removed", userName, roleID)
+				log.Printf("user %q: role %q: removed", user.Handle, roleID)
 			}
 		}
 

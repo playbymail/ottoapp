@@ -9,6 +9,6 @@ import UserForm from 'frontend/components/user/form';
     @isSaving={{@controller.isSaving}}
     @errorMessage={{@controller.errorMessage}}
     @successMessage={{@controller.successMessage}}
-    @canEditUsername={{true}}
+    @canEditUsername={{false}}
   />
 </template>

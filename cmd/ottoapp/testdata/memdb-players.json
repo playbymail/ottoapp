@@ -1,0 +1,43 @@
+{
+  "games": [
+    {
+      "id": "0301",
+      "description": "TN3.1",
+      "setupTurn": {
+        "year": 899,
+        "month": 12,
+        "no": 0
+      }
+    }
+  ],
+  "players": {
+    "penguin": {
+      "games": [],
+      "userName": "Penguin",
+      "email": "penguin@ottoapp",
+      "roles": [
+        "active",
+        "admin",
+        "user"
+      ],
+      "tz": "Antarctica/Palmer",
+      "password": "happy.feet.happy.bird"
+    },
+    "catbird": {
+      "games": [
+        {
+          "id": "0301",
+          "clan": 987
+        }
+      ],
+      "userName": "Catbird",
+      "email": "catbird@ottoapp",
+      "roles": [
+        "active",
+        "user"
+      ],
+      "tz": "America/Panama",
+      "password": "catnip.catnap.cowbell"
+    }
+  }
+}

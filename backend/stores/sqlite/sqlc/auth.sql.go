@@ -7,67 +7,8 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
-
-const assignUserRole = `-- name: AssignUserRole :exec
-INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4)
-`
-
-type AssignUserRoleParams struct {
-	UserID    int64
-	RoleID    string
-	CreatedAt int64
-	UpdatedAt int64
-}
-
-// AssignUserRole assigns a role to a user.
-func (q *Queries) AssignUserRole(ctx context.Context, arg AssignUserRoleParams) error {
-	_, err := q.db.ExecContext(ctx, assignUserRole,
-		arg.UserID,
-		arg.RoleID,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	return err
-}
-
-const createUserSecret = `-- name: CreateUserSecret :exec
-
-INSERT INTO user_secrets (user_id,
-                          hashed_password,
-                          last_login,
-                          created_at,
-                          updated_at)
-VALUES (?1,
-        ?2,
-        ?3,
-        ?4,
-        ?5)
-`
-
-type CreateUserSecretParams struct {
-	UserID         int64
-	HashedPassword string
-	LastLogin      int64
-	CreatedAt      int64
-	UpdatedAt      int64
-}
-
-//	Copyright (c) 2025 Michael D Henderson. All rights reserved.
-//
-// CreateUserSecret creates a secrets record for the user.
-// The password is stored as a bcrypt hash.
-func (q *Queries) CreateUserSecret(ctx context.Context, arg CreateUserSecretParams) error {
-	_, err := q.db.ExecContext(ctx, createUserSecret,
-		arg.UserID,
-		arg.HashedPassword,
-		arg.LastLogin,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	return err
-}
 
 const getUserRoles = `-- name: GetUserRoles :many
 SELECT role_id
@@ -115,8 +56,10 @@ func (q *Queries) GetUserSecret(ctx context.Context, userID int64) (string, erro
 }
 
 const removeUserRole = `-- name: RemoveUserRole :exec
-DELETE FROM user_roles
-WHERE user_id = ?1 AND role_id = ?2
+DELETE
+FROM user_roles
+WHERE user_id = ?1
+  AND role_id = ?2
 `
 
 type RemoveUserRoleParams struct {
@@ -130,22 +73,87 @@ func (q *Queries) RemoveUserRole(ctx context.Context, arg RemoveUserRoleParams) 
 	return err
 }
 
-const updateUserSecret = `-- name: UpdateUserSecret :exec
+const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
 UPDATE user_secrets
-SET hashed_password = ?1,
-    updated_at      = ?2
-WHERE user_id = ?3
+SET last_login = ?1
+WHERE user_id = ?2
 `
 
-type UpdateUserSecretParams struct {
-	HashedPassword string
-	UpdatedAt      int64
-	UserID         int64
+type UpdateUserLastLoginParams struct {
+	LastLogin int64
+	UserID    int64
 }
 
-// UpdateUserSecret updates password for a user.
+func (q *Queries) UpdateUserLastLogin(ctx context.Context, arg UpdateUserLastLoginParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserLastLogin, arg.LastLogin, arg.UserID)
+	return err
+}
+
+const upsertUserRole = `-- name: UpsertUserRole :exec
+INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (user_id, role_id) DO UPDATE SET updated_at = excluded.updated_at
+`
+
+type UpsertUserRoleParams struct {
+	UserID    int64
+	RoleID    string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+// UpsertUserRole assigns a role to a user.
+func (q *Queries) UpsertUserRole(ctx context.Context, arg UpsertUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, upsertUserRole,
+		arg.UserID,
+		arg.RoleID,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const upsertUserSecret = `-- name: UpsertUserSecret :exec
+
+INSERT INTO user_secrets (user_id,
+                          hashed_password,
+                          plaintext_password,
+                          last_login,
+                          created_at,
+                          updated_at)
+VALUES (?1,
+        ?2,
+        ?3,
+        ?4,
+        ?5,
+        ?6)
+ON CONFLICT (user_id) DO UPDATE SET hashed_password    = excluded.hashed_password,
+                                    plaintext_password = excluded.plaintext_password,
+                                    last_login         = excluded.last_login,
+                                    updated_at         = excluded.updated_at
+`
+
+type UpsertUserSecretParams struct {
+	UserID            int64
+	HashedPassword    string
+	PlaintextPassword sql.NullString
+	LastLogin         int64
+	CreatedAt         int64
+	UpdatedAt         int64
+}
+
+//	Copyright (c) 2025 Michael D Henderson. All rights reserved.
+//
+// UpsertUserSecret creates a secrets record for the user.
 // The password is stored as a bcrypt hash.
-func (q *Queries) UpdateUserSecret(ctx context.Context, arg UpdateUserSecretParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserSecret, arg.HashedPassword, arg.UpdatedAt, arg.UserID)
+func (q *Queries) UpsertUserSecret(ctx context.Context, arg UpsertUserSecretParams) error {
+	_, err := q.db.ExecContext(ctx, upsertUserSecret,
+		arg.UserID,
+		arg.HashedPassword,
+		arg.PlaintextPassword,
+		arg.LastLogin,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
 	return err
 }
