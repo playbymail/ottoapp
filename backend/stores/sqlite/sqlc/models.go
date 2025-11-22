@@ -19,6 +19,22 @@ type Clan struct {
 	UpdatedAt   int64
 }
 
+type ClanDocumentsVw struct {
+	DocumentID   int64
+	ClanID       int64
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
+	OwnerID      int64
+	IsShared     bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
 type Config struct {
 	Key       string
 	Value     string
@@ -27,30 +43,33 @@ type Config struct {
 }
 
 type Document struct {
-	DocumentID    int64
-	MimeType      string
-	ContentsHash  string
-	ContentLength int64
-	CreatedAt     int64
-	UpdatedAt     int64
-}
-
-type DocumentAcl struct {
 	DocumentID   int64
-	UserID       int64
-	DocumentName string
-	CreatedBy    int64
-	IsOwner      bool
+	ClanID       int64
 	CanRead      bool
 	CanWrite     bool
 	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
 	CreatedAt    int64
 	UpdatedAt    int64
 }
 
 type DocumentContent struct {
+	ContentsHash  string
+	ContentLength int64
+	MimeType      string
+	Contents      []byte
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+type DocumentShare struct {
 	DocumentID int64
-	Contents   []byte
+	ClanID     int64
+	CanRead    bool
+	CanDelete  bool
 	CreatedAt  int64
 	UpdatedAt  int64
 }

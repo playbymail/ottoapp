@@ -1,12 +1,12 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
 import Component from '@glimmer/component';
-import { service } from '@ember/service';
+import {service} from '@ember/service';
 
 // https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
 // Requires a TailwindCSS Plus license.
 
-import { LinkTo } from '@ember/routing';
+import {LinkTo} from '@ember/routing';
 
 export default class NavList extends Component {
   @service router;
@@ -16,7 +16,7 @@ export default class NavList extends Component {
   inactiveLinkStyle = 'p-2 text-sm/6 font-semibold text-gray-700 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white';
 
   linkClass = (routeName, pfxLinkStyle) => {
-    const current =  this.router.currentRouteName;
+    const current = this.router.currentRouteName;
     const isActive = current === routeName || current?.startsWith(`${routeName}.`);
     return `${pfxLinkStyle} ${isActive ? this.activeLinkStyle : this.inactiveLinkStyle}`;
   }
@@ -25,59 +25,42 @@ export default class NavList extends Component {
   inactiveIconStyle = 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white';
 
   iconClass = (routeName, pfxLinkStyle) => {
-    const current =  this.router.currentRouteName;
+    const current = this.router.currentRouteName;
     const isActive = current === routeName || current?.startsWith(`${routeName}.`);
     return `${pfxLinkStyle} ${isActive ? this.activeIconStyle : this.inactiveIconStyle}`;
   }
 
-<template>
+  <template>
     <ul role="list" class="flex flex-1 flex-col gap-y-7">
       <li>
         <ul role="list" class="-mx-2 space-y-1">
           <li>
             {{!-- Current: "bg-gray-50 dark:bg-white/5 text-indigo-600 dark:text-white", Default: "text-gray-700 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5" --}}
             <LinkTo @route="user.dashboard" class={{this.linkClass "user.dashboard" "group flex gap-x-3 rounded-md"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.dashboard" "size-6 shrink-0"}}>
-                <path d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" stroke-linecap="round" stroke-linejoin="round" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon"
+                   aria-hidden="true" class={{this.iconClass "user.dashboard" "size-6 shrink-0"}}>
+                <path
+                  d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
+                  stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               Dashboard
             </LinkTo>
           </li>
           <li>
-            <LinkTo @route="user.team" class={{this.linkClass "user.team" "group flex gap-x-3 rounded-md"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.team" "size-6 shrink-0"}}>
-                <path d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              Team
-            </LinkTo>
-          </li>
-          <li>
-            <LinkTo @route="user.projects" class={{this.linkClass "user.projects" "group flex gap-x-3 rounded-md"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.projects" "size-6 shrink-0"}}>
-                <path d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              Projects
-            </LinkTo>
-          </li>
-          <li>
-            <LinkTo @route="user.calendar" class={{this.linkClass "user.calendar" "group flex gap-x-3 rounded-md"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.calendar" "size-6 shrink-0"}}>
-                <path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              Calendar
-            </LinkTo>
-          </li>
-          <li>
             <LinkTo @route="user.maps" class={{this.linkClass "user.maps" "group flex gap-x-3 rounded-md"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.maps" "size-6 shrink-0"}}>
-                <path d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" stroke-linecap="round" stroke-linejoin="round" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon"
+                   aria-hidden="true" class={{this.iconClass "user.maps" "size-6 shrink-0"}}>
+                <path
+                  d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
+                  stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               Maps
             </LinkTo>
           </li>
           <li>
             <LinkTo @route="user.reports" class={{this.linkClass "user.reports" "group flex gap-x-3 rounded-md"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.reports" "size-6 shrink-0"}}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon"
+                   aria-hidden="true" class={{this.iconClass "user.reports" "size-6 shrink-0"}}>
                 <path d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" stroke-linecap="round" stroke-linejoin="round" />
                 <path d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
@@ -86,71 +69,14 @@ export default class NavList extends Component {
           </li>
         </ul>
       </li>
-      <li>
-        <div class="text-xs/6 font-semibold text-gray-400">Your teams</div>
-        <ul role="list" class="-mx-2 mt-2 space-y-1">
-          <li>
-            <LinkTo @route="user.teams.heroicons" class={{this.linkClass "user.teams.heroicons" "group flex gap-x-3 rounded-md"}}>
-              <span class="flex size-6 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-[0.625rem] font-medium text-gray-400 group-hover:border-indigo-600 group-hover:text-indigo-600 dark:border-white/10 dark:bg-white/5 dark:group-hover:border-white/20 dark:group-hover:text-white">H</span>
-              <span class="truncate">Heroicons</span>
-            </LinkTo>
-          </li>
-          <li>
-            <LinkTo @route="user.teams.tailwindlabs" class={{this.linkClass "user.teams.tailwindlabs" "group flex gap-x-3 rounded-md"}}>
-              <span class="flex size-6 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-[0.625rem] font-medium text-gray-400 group-hover:border-indigo-600 group-hover:text-indigo-600 dark:border-white/10 dark:bg-white/5 dark:group-hover:border-white/20 dark:group-hover:text-white">T</span>
-              <span class="truncate">Tailwind Labs</span>
-            </LinkTo>
-          </li>
-          <li>
-            <LinkTo @route="user.teams.workcation" class={{this.linkClass "user.teams.workcation" "group flex gap-x-3 rounded-md"}}>
-              <span class="flex size-6 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-[0.625rem] font-medium text-gray-400 group-hover:border-indigo-600 group-hover:text-indigo-600 dark:border-white/10 dark:bg-white/5 dark:group-hover:border-white/20 dark:group-hover:text-white">W</span>
-              <span class="truncate">Workcation</span>
-            </LinkTo>
-          </li>
-        </ul>
-      </li>
-      {{#if this.session.canAccessUserRoutes}}
-        <li>
-          <div class="text-xs/6 font-semibold text-gray-400">User</div>
-          <ul role="list" class="-mx-2 mt-2 space-y-1">
-            <li>
-              <LinkTo @route="user.profile" class={{this.linkClass "user.profile" "group flex gap-x-3 rounded-md"}}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "users.profile" "size-6 shrink-0"}}>
-                  <path d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span class="truncate">My Profile</span>
-              </LinkTo>
-            </li>
-            <li>
-              <LinkTo @route="user.profile" class={{this.linkClass "user.profile" "group flex gap-x-3 rounded-md"}}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "users.password" "size-6 shrink-0"}}>
-                  <path d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span class="truncate">Change Password</span>
-              </LinkTo>
-            </li>
-          </ul>
-        </li>
-      {{/if}}
-      {{#if this.session.canAccessAdminRoutes}}
-        <li>
-          <div class="text-xs/6 font-semibold text-gray-400">Administration</div>
-          <ul role="list" class="-mx-2 mt-2 space-y-1">
-            <li>
-              <LinkTo @route="admin.users.index" class={{this.linkClass "admin.users" "group flex gap-x-3 rounded-md"}}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "admin.users" "size-6 shrink-0"}}>
-                  <path d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span class="truncate">Manage Users</span>
-              </LinkTo>
-            </li>
-          </ul>
-        </li>
-      {{/if}}
+
       <li class="mt-auto">
         <LinkTo @route="user.settings" class={{this.linkClass "user.settings" "group -mx-2 flex gap-x-3 rounded-md"}}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon" aria-hidden="true" class={{this.iconClass "user.settings" "size-6 shrink-0"}}>
-            <path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" stroke-linecap="round" stroke-linejoin="round" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-slot="icon"
+               aria-hidden="true" class={{this.iconClass "user.settings" "size-6 shrink-0"}}>
+            <path
+              d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+              stroke-linecap="round" stroke-linejoin="round" />
             <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           Settings

@@ -3,64 +3,8 @@
 package auth
 
 import (
-	"log"
-	"net/http"
-
 	"github.com/playbymail/ottoapp/backend/domains"
 )
-
-// GetActor extracts the actor from the request context.
-// This is a convenience helper that assumes session middleware
-// has added the user to the context.
-func (s *Service) GetActor(r *http.Request) (*domains.Actor, error) {
-	actorId, ok := r.Context().Value(domains.ContextKeyUserID).(domains.ID)
-	if !ok || actorId == domains.InvalidID {
-		return nil, domains.ErrNotAuthenticated
-	}
-	return s.GetActorById(actorId)
-}
-
-// GetActorByEmail returns a domain Actor or an error.
-func (s *Service) GetActorByEmail(email string) (*domains.Actor, error) {
-	log.Printf("[auth] getActorByEmail(%q)", email)
-	userId, err := s.db.Queries().GetUserIDByEmail(s.db.Context(), email)
-	if err != nil {
-		log.Printf("[auth] getActorByEmail(%q): %v", email, err)
-		return nil, err
-	}
-	return s.GetActorById(domains.ID(userId))
-}
-
-// GetActorById returns a domain Actor or an error.
-// TODO: security considerations from handing out a sysop actor.
-//
-// Background processes can construct an actor directly without DB:
-//
-//	var ServiceActor = domains.Actor{
-//	   ID:    domains.InvalidID,              // not a user
-//	   Service: true,
-//	}
-func (s *Service) GetActorById(actorId domains.ID) (*domains.Actor, error) {
-	if actorId == SysopId {
-		return &domains.Actor{ID: SysopId, Sysop: true}, nil
-	}
-	userRoles, err := s.db.Queries().GetUserRoles(s.db.Context(), int64(actorId))
-	if err != nil {
-		return nil, err
-	}
-	actor := domains.Actor{ID: actorId}
-	for _, role := range userRoles {
-		switch role {
-		case "admin":
-			actor.Admin = true
-		case "service":
-			actor.Service = true
-		case "user":
-			actor.User = true
-		}
-	}
-	return &actor, nil
-}
 
 // policy helpers return true if the actor is permitted to take an action.
 
@@ -68,6 +12,12 @@ func (s *Service) CanAuthenticate(actor *domains.Actor) bool {
 	// Only "user" role principals may authenticate via credentials.
 	// Sysop and service actors are always blocked from password-based login.
 	return actor.IsUser() && !(actor.IsSysop() || actor.IsService())
+}
+
+// CanCreateDocuments returns true if the actor can create documents.
+func (s *Service) CanCreateDocuments(actor *domains.Actor) bool {
+	// todo: implement a real policy
+	return actor.IsValid()
 }
 
 // CanCreateTarget checks if actor can create new users.

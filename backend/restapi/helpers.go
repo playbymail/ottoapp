@@ -4,6 +4,7 @@ package restapi
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -27,6 +28,34 @@ func AbsURL(r *http.Request, path string) string {
 	return scheme + "://" + host + path
 }
 
+// GetPaginationParameters query params:
+//   - page[number]
+//   - page[size]
+func GetPaginationParameters(r *http.Request) (pageNumber, pageSize int, err error) {
+	pageNumberParm := r.URL.Query().Get("page[number]")
+	pageSizeParm := r.URL.Query().Get("page[size]")
+	if pageNumberParm == "" && pageSizeParm == "" {
+		return 0, 0, nil
+	}
+	if pageNumberParm != "" {
+		pageNumber, err = strconv.Atoi(pageNumberParm)
+		if err != nil {
+			return 0, 0, errors.Join(ErrInvalidPageNumber, err)
+		}
+	} else {
+		pageNumber = 1
+	}
+	if pageSizeParm != "" {
+		pageSize, err = strconv.Atoi(pageSizeParm)
+		if err != nil {
+			return 0, 0, errors.Join(ErrInvalidPageSize, err)
+		}
+	} else {
+		pageSize = 25
+	}
+	return pageNumber, pageSize, nil
+}
+
 func PaginateURL(r *http.Request, page, size int) string {
 	u := *r.URL // copy
 	q := u.Query()
@@ -38,10 +67,10 @@ func PaginateURL(r *http.Request, page, size int) string {
 
 func WriteJsonApiData(w http.ResponseWriter, status int, view any) {
 	buf := &bytes.Buffer{}
-	err := jsonapi.MarshalPayload(buf, view)
-	if err != nil { // As an absolute last resort, write a minimal JSON:API error payload.
+	if err := jsonapi.MarshalPayload(buf, view); err != nil { // As an absolute last resort, write a minimal JSON:API error payload.
+		// todo: log this!
+		status = http.StatusInternalServerError // reset the status since we're not able to report the right error
 		buf = &bytes.Buffer{}
-		status = http.StatusInternalServerError
 		buf.WriteString(fmt.Sprintf(`{"errors":[{"status":"500","code":"encode_failed","title":"Encoding error","detail":%q}]}`, err.Error()))
 	}
 	WriteJsonApiResponse(w, status, buf.Bytes())
@@ -75,13 +104,10 @@ func WriteJsonApiError(w http.ResponseWriter, status int, code, title, detail st
 	})
 }
 
+// WriteJsonApiErrorObjects writes a list of errors to the response.
 func WriteJsonApiErrorObjects(w http.ResponseWriter, status int, errs ...*jsonapi.ErrorObject) {
-	var list []*jsonapi.ErrorObject
-	for _, err := range errs {
-		list = append(list, err)
-	}
 	buf := &bytes.Buffer{}
-	err := jsonapi.MarshalErrors(buf, list)
+	err := jsonapi.MarshalErrors(buf, errs)
 	if err != nil { // As an absolute last resort, write a minimal JSON:API error payload.
 		buf = &bytes.Buffer{}
 		status = http.StatusInternalServerError
@@ -90,8 +116,83 @@ func WriteJsonApiErrorObjects(w http.ResponseWriter, status int, errs ...*jsonap
 	WriteJsonApiResponse(w, status, buf.Bytes())
 }
 
+func WriteJsonApiDatabaseError(w http.ResponseWriter) {
+	WriteJsonApiError(w, http.StatusInternalServerError, "database_error", "Internal Server Error", "Could not process request due to a database error.")
+}
+
+// WriteJsonApiInvalidQueryParameter uses the error helper to quickly build
+// a JSON:API error for an invalid URL query parameter.
+func WriteJsonApiInvalidQueryParameter(w http.ResponseWriter, field, title string) {
+	WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
+		Status: strconv.Itoa(http.StatusBadRequest),
+		Code:   fmt.Sprintf("invalid_query_%s", field),
+		Title:  fmt.Sprintf("Invalid Parameter: %s", title),
+		Detail: fmt.Sprintf("The value provided for the %q query parameter is invalid.", title),
+		Source: &jsonapi.ErrorSource{
+			Parameter: title,
+		},
+	})
+}
+
+func WriteJsonApiInternalServerError(w http.ResponseWriter, details ...string) {
+	var detail string
+	for _, s := range details {
+		if detail != "" {
+			detail += "\n"
+		}
+		detail += s
+	}
+	WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", detail)
+}
+
+// WriteJsonApiMalformedPathParameter usage is
+//
+//	WriteJsonApiMalformedPathParameter(w, "document_id", "Document Identifier", value)
+func WriteJsonApiMalformedPathParameter(w http.ResponseWriter, field, title, value string) {
+	WriteJsonApiError(w, http.StatusBadRequest,
+		fmt.Sprintf("invalid_%s", field),
+		fmt.Sprintf("Invalid %s", title),
+		fmt.Sprintf("The %s provided in the path ('%s') is malformed.", title, value))
+}
+
+// WriteJsonApiResponse adds the right content type and then writes the response.
 func WriteJsonApiResponse(w http.ResponseWriter, status int, buf []byte) {
 	w.Header().Set("Content-Type", jsonapi.MediaType)
 	w.WriteHeader(status)
 	_, _ = w.Write(buf)
+}
+
+// ValidationDetail is a 422 Unprocessable Entity Helper
+type ValidationDetail struct {
+	// FieldName is the human-readable name (e.g., "Document Name")
+	FieldName string
+	// JsonPointer is the JSON Pointer to the offending field (e.g., "/data/attributes/document-name")
+	JsonPointer string
+	// Detail is the specific reason the field failed (e.g., "must be at least 5 characters")
+	Detail string
+}
+
+// WriteJsonApiValidationErrors is for unprocessable entities.
+func WriteJsonApiValidationErrors(w http.ResponseWriter, details ...ValidationDetail) {
+	const status = http.StatusUnprocessableEntity
+	var list []*jsonapi.ErrorObject
+	statusStr := strconv.Itoa(status)
+
+	for _, detail := range details {
+		list = append(list, &jsonapi.ErrorObject{
+			Status: statusStr,
+			Code:   "validation_failed",
+			Title:  fmt.Sprintf("Invalid Field: %s", detail.FieldName),
+			Detail: detail.Detail,
+			Source: &jsonapi.ErrorSource{
+				Pointer: detail.JsonPointer, // KEY: Use Source.Pointer for request body errors
+			},
+		})
+	}
+	if list == nil {
+		panic("assert(details != nil)")
+	}
+
+	// Delegate final writing to the core helper
+	WriteJsonApiErrorObjects(w, status, list...)
 }

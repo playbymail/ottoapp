@@ -32,14 +32,12 @@ Router.map(function () {
 
   // users routes (authenticated, requires "user" role)
   this.route('user', function () {
-    this.route('calendar'); // obsolete route to be removed in a future sprint
-    this.route('dashboard');
+    this.route('dashboard', { path: '/' });
+    this.route('documents', function () {
+      this.route('show', { path: '/:document_id' });
+    });
     this.route('maps');
-    this.route('my');
-    this.route('profile');
-    this.route('projects'); // obsolete route to be removed in a future sprint
     this.route('reports');
-    this.route('secure'); // obsolete route to be removed in a future sprint
     this.route('settings', function () {
       this.route('about');
       this.route('account', { path: '/'});

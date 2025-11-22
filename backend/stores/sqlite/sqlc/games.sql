@@ -53,10 +53,20 @@ ON CONFLICT (user_id, game_id) DO UPDATE SET clan          = excluded.clan,
                                              updated_at    = excluded.updated_at
 RETURNING clan_id;
 
--- name: GetGameUserClan :one
-SELECT clan_id,
-       game_id,
+-- name: GetClan :one
+SELECT game_id,
        user_id,
+       clan_id,
+       clan,
+       setup_turn_no,
+       is_active
+FROM clans
+WHERE clan_id = :clan_id;
+
+-- name: GetClanByGameUser :one
+SELECT game_id,
+       user_id,
+       clan_id,
        clan,
        setup_turn_no,
        is_active
@@ -64,9 +74,18 @@ FROM clans
 WHERE game_id = :game_id
   AND user_id = :user_id;
 
--- name: RemoveGameUserClan :exec
-DELETE
+-- name: GetClanByGameClanNo :one
+SELECT game_id,
+       user_id,
+       clan_id,
+       clan,
+       setup_turn_no,
+       is_active
 FROM clans
 WHERE game_id = :game_id
-  AND user_id = :user_id
-  AND clan_id = :clan_id;
+  AND clan = :clan_no;
+
+-- name: RemoveClan :exec
+DELETE
+FROM clans
+WHERE clan_id = :clan_id;

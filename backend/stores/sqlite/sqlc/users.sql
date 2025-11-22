@@ -77,6 +77,11 @@ SELECT user_id,
 FROM users
 WHERE username = :username;
 
+-- name: GetUserHandle :one
+SELECT handle
+FROM users
+WHERE user_id = :user_id;
+
 -- name: GetUserIDByEmail :one
 SELECT user_id
 FROM users

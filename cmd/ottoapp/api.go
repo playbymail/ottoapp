@@ -1,0 +1,133 @@
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/playbymail/ottoapp"
+	"github.com/playbymail/ottoapp/backend/auth"
+	"github.com/playbymail/ottoapp/backend/games"
+	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/servers/rest"
+	"github.com/playbymail/ottoapp/backend/services/documents"
+	"github.com/playbymail/ottoapp/backend/sessions"
+	"github.com/playbymail/ottoapp/backend/stores/sqlite"
+	"github.com/playbymail/ottoapp/backend/users"
+	"github.com/playbymail/ottoapp/backend/versions"
+	"github.com/spf13/cobra"
+)
+
+var cmdApiServe = &cobra.Command{
+	Use:          "serve",
+	Short:        "start the API server",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, err := cmd.Flags().GetString("db")
+		if err != nil {
+			return err
+		}
+
+		var options []rest.Option
+		if value, err := cmd.Flags().GetBool("csrf-guard"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithCsrfGuard(value))
+		}
+		if value, err := cmd.Flags().GetString("host"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithHost(value))
+		}
+		if value, err := cmd.Flags().GetBool("log-routes"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithRouteLogging(value))
+		}
+		if value, err := cmd.Flags().GetString("port"); err != nil {
+			return err
+		} else {
+			options = append(options, rest.WithPort(value))
+		}
+		if value, err := cmd.Flags().GetDuration("shutdown-delay"); err != nil {
+			return err
+		} else if value != 0 {
+			options = append(options, rest.WithGrace(value))
+		}
+		if cmd.Flags().Changed("shutdown-key") {
+			if value, err := cmd.Flags().GetString("shutdown-key"); err != nil {
+				return err
+			} else {
+				options = append(options, rest.WithShutdownKey(value))
+			}
+		}
+		if value, err := cmd.Flags().GetDuration("shutdown-timer"); err != nil {
+			return err
+		} else if value != 0 {
+			options = append(options, rest.WithTimer(value))
+		}
+		//if value, err := cmd.Flags().GetString("userdata"); err != nil {
+		//	return err
+		//} else {
+		//	options = append(options, rest.WithUserData(value))
+		//}
+
+		log.Printf("[serve] db %q\n", path)
+		ctx := context.Background()
+		var db *sqlite.DB
+		if path == ":memory:" {
+			// server has the ability to use a temporary database for testing.
+			db, err = sqlite.OpenTempDB(ctx)
+		} else {
+			db, err = sqlite.Open(ctx, path, true, false)
+		}
+		if err != nil {
+			return errors.Join(fmt.Errorf("db.open"), err)
+		}
+		defer func() {
+			log.Printf("[serve] db: close\n")
+			_ = db.Close()
+		}()
+
+		authSvc := auth.New(db)
+		tzSvc, err := iana.New(db)
+		if err != nil {
+			return errors.Join(fmt.Errorf("iana.new"), err)
+		}
+		usersSvc := users.New(db, authSvc, tzSvc) // uses sqlite + domains
+		documentsSvc := documents.New(db, authSvc, usersSvc)
+		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
+		if err != nil {
+			return errors.Join(fmt.Errorf("sessions.new"), err)
+		}
+		gamesSvc := games.New(db, authSvc, usersSvc)
+		versionSvc := versions.New(ottoapp.Version())
+
+		// Import test users for in-memory database
+		if path == ":memory:" {
+			var data games.ImportFile
+			err = json.Unmarshal(memdbPlayersJsonData, &data)
+			if err != nil {
+				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
+			} else if err = gamesSvc.Import(&data); err != nil {
+				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
+			}
+		}
+
+		s, err := rest.New(authSvc, documentsSvc, sessionsSvc, tzSvc, usersSvc, versionSvc, options...)
+		if err != nil {
+			return errors.Join(fmt.Errorf("rest.new"), err)
+		}
+		err = s.Run()
+		if err != nil {
+			return errors.Join(fmt.Errorf("rest.run"), err)
+		}
+
+		return nil
+	},
+}

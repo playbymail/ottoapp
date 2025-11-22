@@ -198,7 +198,7 @@ VALUES ('FLEET', 'f', 'Fleet element', 0, 0);
 INSERT INTO elements (element_type, element_suffix, description, created_at, updated_at)
 VALUES ('GARRISON', 'g', 'Garrison element', 0, 0);
 
--- The Documents table contains meta-data for documents (e.g., turn reports, maps).
+-- The Document_Contents table stores the data for a document.
 -- One row per unique file (deduped by contents_hash).
 --
 -- MIME Types
@@ -206,24 +206,72 @@ VALUES ('GARRISON', 'g', 'Garrison element', 0, 0);
 --  TURN_REPORT application/tn-3.0
 --  TURN_REPORT application/tn-3.1
 --  WXX         application/wxx.xml
-CREATE TABLE documents
-(
-    document_id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    mime_type      TEXT    NOT NULL,
-    contents_hash  TEXT    NOT NULL UNIQUE, -- 64-char sha256 hex
-    content_length INTEGER NOT NULL,        -- size in bytes
-
-    -- audit (unix seconds, UTC)
-    created_at     INTEGER NOT NULL,        -- set in app
-    updated_at     INTEGER NOT NULL         -- set in app
-);
-
--- The Document_Contents table stores the data for a document.
--- Actual bytes, split out so we only store them once per document.
+--
+-- Note: the game engine controls deletion of document contents.
+-- They can be deleted when there are no child documents rows.
 CREATE TABLE document_contents
 (
+    contents_hash  TEXT PRIMARY KEY,
+    content_length INTEGER NOT NULL, -- size in bytes
+    mime_type      TEXT    NOT NULL,
+    contents       BLOB    NOT NULL,
+
+    -- audit (unix seconds, UTC)
+    created_at     INTEGER NOT NULL, -- set in app
+    updated_at     INTEGER NOT NULL  -- set in app
+);
+
+-- The Documents table contains meta-data for documents
+-- (e.g., turn reports, maps).
+--
+-- The Document_Type column is used to categorize or filter
+-- documents in the API.
+--
+-- Note: the upload process must untaint or reject the document_name.
+CREATE TABLE documents
+(
+    document_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    clan_id       INTEGER NOT NULL, -- clan that owns this document
+
+    -- permissions on the document. this is supposed to let
+    -- a user share a document with an ally or the system to
+    -- create a shared read-only document (e.g., the map key).
+    can_read      BOOL    NOT NULL DEFAULT 0 CHECK (can_read IN (0, 1)),
+    can_write     BOOL    NOT NULL DEFAULT 0 CHECK (can_write IN (0, 1)),
+    can_delete    BOOL    NOT NULL DEFAULT 0 CHECK (can_delete IN (0, 1)),
+    can_share     BOOL    NOT NULL DEFAULT 0 CHECK (can_share IN (0, 1)),
+
+    document_name TEXT    NOT NULL, -- user's name for the doc
+    document_type TEXT    NOT NULL, -- report, map, etc
+
+    contents_hash TEXT    NOT NULL, -- 64-char sha256 hex
+
+    -- audit (unix seconds, UTC)
+    created_at    INTEGER NOT NULL, -- set in app
+    updated_at    INTEGER NOT NULL, -- set in app
+
+    -- prevent users from uploading the same document multiple times
+    UNIQUE (clan_id, contents_hash),
+
+    FOREIGN KEY (clan_id)
+        REFERENCES clans (clan_id),
+    FOREIGN KEY (contents_hash)
+        REFERENCES document_contents (contents_hash)
+        ON DELETE CASCADE
+);
+
+-- index for "show me all docs I own"
+CREATE INDEX idx_documents_owner
+    ON documents (clan_id);
+
+-- The Document_Shares table is a bridge table for sharing documents.
+CREATE TABLE document_shares
+(
     document_id INTEGER PRIMARY KEY,
-    contents    BLOB    NOT NULL,
+    clan_id     INTEGER NOT NULL,
+
+    can_read    BOOL    NOT NULL DEFAULT 0 CHECK (can_read IN (0, 1)),
+    can_delete  BOOL    NOT NULL DEFAULT 0 CHECK (can_delete IN (0, 1)),
 
     -- audit (unix seconds, UTC)
     created_at  INTEGER NOT NULL, -- set in app
@@ -231,44 +279,49 @@ CREATE TABLE document_contents
 
     FOREIGN KEY (document_id)
         REFERENCES documents (document_id)
-        ON DELETE CASCADE
-);
-
--- The Document_ACL table tracks per-user ACL/view of the document.
--- ownership and other permissions on the document.
---
--- Each user who uploads or is granted access gets a row here.
---
--- Note: the game engine control deletion of documents. When there are no
--- Document_ACL entries for a document, it can be deleted.
-CREATE TABLE document_acl
-(
-    document_id   INTEGER NOT NULL,
-    user_id       INTEGER NOT NULL,
-
-    document_name TEXT    NOT NULL, -- tainted: user's name for the doc
-    created_by    INTEGER NOT NULL, -- who granted/created this ACL row
-
-    is_owner      BOOL    NOT NULL DEFAULT 0 CHECK (is_owner IN (0, 1)),
-    can_read      BOOL    NOT NULL DEFAULT 0 CHECK (can_read IN (0, 1)),
-    can_write     BOOL    NOT NULL DEFAULT 0 CHECK (can_write IN (0, 1)),
-    can_delete    BOOL    NOT NULL DEFAULT 0 CHECK (can_delete IN (0, 1)),
-
-    -- audit (unix seconds, UTC)
-    created_at    INTEGER NOT NULL, -- set in app
-    updated_at    INTEGER NOT NULL, -- set in app
-
-    PRIMARY KEY (document_id, user_id),
-    FOREIGN KEY (document_id)
-        REFERENCES documents (document_id)
         ON DELETE CASCADE,
-    FOREIGN KEY (user_id)
-        REFERENCES users (user_id)
+    FOREIGN KEY (clan_id)
+        REFERENCES clans (clan_id)
 );
 
--- index for "show me all docs I can see"
-CREATE INDEX idx_document_acl_user ON document_acl (user_id);
+-- index for "show me all docs shared with me"
+CREATE INDEX idx_documents_shared
+    ON document_shares (clan_id);
 
+-- Clan_Documents_VW returns all documents owned by or shared with a clan.
+CREATE VIEW clan_documents_vw
+            (
+             document_id,
+             clan_id,
+             can_read,
+             can_write,
+             can_delete,
+             can_share,
+             document_name,
+             document_type,
+             contents_hash,
+             owner_id,
+             is_shared,
+             created_at,
+             updated_at
+                )
+AS
+SELECT d.document_id,
+       d.clan_id,
+       CASE WHEN s.clan_id IS NULL THEN d.can_read ELSE s.can_read END     AS can_read,
+       CASE WHEN s.clan_id IS NULL THEN d.can_write ELSE 0 END             AS can_write,
+       CASE WHEN s.clan_id IS NULL THEN d.can_delete ELSE s.can_delete END AS can_delete,
+       CASE WHEN s.clan_id IS NULL THEN d.can_share ELSE 0 END             AS can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       CASE WHEN s.clan_id IS NULL THEN d.clan_id ELSE s.clan_id END       AS owner_id,
+       CASE WHEN s.clan_id IS NULL THEN 0 ELSE 1 END                       AS is_shared,
+       d.created_at,
+       d.updated_at
+FROM documents AS d
+         LEFT JOIN document_shares AS s
+                   ON d.document_id = s.document_id;
 
 -- The Turn_Reports table contains meta-data for turn reports.
 --

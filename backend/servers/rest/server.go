@@ -17,6 +17,7 @@ import (
 	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/documents"
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/playbymail/ottoapp/backend/versions"
@@ -25,11 +26,12 @@ import (
 type Server struct {
 	http.Server
 	services struct {
-		authSvc     *auth.Service
-		sessionsSvc *sessions.Service
-		tzSvc       *iana.Service
-		usersSvc    *users.Service
-		versionsSvc *versions.Service
+		authSvc      *auth.Service
+		documentsSvc *documents.Service
+		sessionsSvc  *sessions.Service
+		tzSvc        *iana.Service
+		usersSvc     *users.Service
+		versionsSvc  *versions.Service
 	}
 	csrfGuard bool
 	logRoutes bool
@@ -49,7 +51,7 @@ type Server struct {
 	}
 }
 
-func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Service, usersSvc *users.Service, versionsSvc *versions.Service, options ...Option) (*Server, error) {
+func New(authSvc *auth.Service, documentsSvc *documents.Service, sessionsSvc *sessions.Service, tzSvc *iana.Service, usersSvc *users.Service, versionsSvc *versions.Service, options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -59,6 +61,7 @@ func New(authSvc *auth.Service, sessionsSvc *sessions.Service, tzSvc *iana.Servi
 	s.network.scheme, s.network.host, s.network.port = "http", "localhost", "8181"
 	s.debug.debug = true
 	s.services.authSvc = authSvc
+	s.services.documentsSvc = documentsSvc
 	s.services.sessionsSvc = sessionsSvc
 	s.services.tzSvc = tzSvc
 	s.services.usersSvc = usersSvc

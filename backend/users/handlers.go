@@ -17,19 +17,6 @@ import (
 	"github.com/playbymail/ottoapp/backend/restapi"
 )
 
-// UserView is the JSON:API view for a user
-type UserView struct {
-	ID          string          `jsonapi:"primary,user"` // singular when sending a payload
-	Username    string          `jsonapi:"attr,username"`
-	Email       string          `jsonapi:"attr,email"`
-	Handle      string          `jsonapi:"attr,handle"`
-	Timezone    string          `jsonapi:"attr,timezone"`
-	Roles       []string        `jsonapi:"attr,roles,omitempty"`
-	Permissions map[string]bool `jsonapi:"attr,permissions,omitempty"`
-	CreatedAt   time.Time       `jsonapi:"attr,created-at,iso8601"`
-	UpdatedAt   time.Time       `jsonapi:"attr,updated-at,iso8601"`
-}
-
 // HandleGetMe returns the current user's profile.
 // For completeness; use 401 when no session, 404 if record missing.
 func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
@@ -207,8 +194,14 @@ func (s *Service) HandleGetUsersWithPagination(w http.ResponseWriter, r *http.Re
 		"returned": len(views),
 	}
 
-	out, _ := json.Marshal(payload)
-	restapi.WriteJsonApiResponse(w, http.StatusOK, out)
+	out, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[users] GetUsersWithPagination %v\n", err)
+		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "encode_failed", "Encoding error", err.Error())
+		return
+	}
+
+	restapi.WriteJsonApiData(w, http.StatusOK, out)
 }
 
 func parsePositiveInt(s string, def int) int {
@@ -275,18 +268,9 @@ func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 // Ember Data lies and sends the entire record up, not just the change set.
 // PATCH /api/users/:id
 func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
-	// Parse target user ID from path
 	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || domains.ID(targetID) == domains.InvalidID {
-		restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
-			Status: strconv.Itoa(http.StatusBadRequest),
-			Code:   "invalid_user_id",
-			Title:  "Invalid UserID",
-			Detail: "Provide a valid UserID.",
-			Source: &jsonapi.ErrorSource{
-				Parameter: "id",
-			},
-		})
+		restapi.WriteJsonApiMalformedPathParameter(w, "user_id", "User ID", r.PathValue("id"))
 		return
 	}
 
@@ -307,13 +291,7 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type UserPatchPayload struct {
-		ID       string `jsonapi:"primary,users"` // plural when receiving from Ember Data
-		Username string `jsonapi:"attr,username,omitempty"`
-		Email    string `jsonapi:"attr,email,omitempty"`
-		Timezone string `jsonapi:"attr,timezone,omitempty"`
-	}
-	var p UserPatchPayload
+	var p UserPatchRequest
 	if err := jsonapi.UnmarshalPayload(r.Body, &p); err != nil {
 		log.Printf("PATCH /api/users/%d/role: update: %v", targetID, err)
 		restapi.WriteJsonApiError(w, http.StatusBadRequest, "bad_request", "Invalid Request Body", err.Error())
@@ -534,16 +512,7 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type UserCreatePayload struct {
-		ID       string   `jsonapi:"primary,users"` // plural when receiving from Ember Data
-		Handle   string   `jsonapi:"attr,handle,omitempty"`
-		Email    string   `jsonapi:"attr,email,omitempty"`
-		Username string   `jsonapi:"attr,username,omitempty"`
-		Password string   `jsonapi:"attr,password,omitempty"`
-		Timezone string   `jsonapi:"attr,timezone,omitempty"`
-		Roles    []string `json:"attr,roles,omitempty"`
-	}
-	var p UserCreatePayload
+	var p UserCreateRequest
 	if err := jsonapi.UnmarshalPayload(r.Body, &p); err != nil {
 		log.Printf("POST /api/users: update: %v", err)
 		restapi.WriteJsonApiError(w, http.StatusBadRequest, "bad_request", "Invalid Request Body", err.Error())

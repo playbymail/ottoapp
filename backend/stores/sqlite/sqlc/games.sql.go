@@ -9,6 +9,120 @@ import (
 	"context"
 )
 
+const getClan = `-- name: GetClan :one
+SELECT game_id,
+       user_id,
+       clan_id,
+       clan,
+       setup_turn_no,
+       is_active
+FROM clans
+WHERE clan_id = ?1
+`
+
+type GetClanRow struct {
+	GameID      string
+	UserID      int64
+	ClanID      int64
+	Clan        int64
+	SetupTurnNo int64
+	IsActive    bool
+}
+
+func (q *Queries) GetClan(ctx context.Context, clanID int64) (GetClanRow, error) {
+	row := q.db.QueryRowContext(ctx, getClan, clanID)
+	var i GetClanRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.ClanID,
+		&i.Clan,
+		&i.SetupTurnNo,
+		&i.IsActive,
+	)
+	return i, err
+}
+
+const getClanByGameClanNo = `-- name: GetClanByGameClanNo :one
+SELECT game_id,
+       user_id,
+       clan_id,
+       clan,
+       setup_turn_no,
+       is_active
+FROM clans
+WHERE game_id = ?1
+  AND clan = ?2
+`
+
+type GetClanByGameClanNoParams struct {
+	GameID string
+	ClanNo int64
+}
+
+type GetClanByGameClanNoRow struct {
+	GameID      string
+	UserID      int64
+	ClanID      int64
+	Clan        int64
+	SetupTurnNo int64
+	IsActive    bool
+}
+
+func (q *Queries) GetClanByGameClanNo(ctx context.Context, arg GetClanByGameClanNoParams) (GetClanByGameClanNoRow, error) {
+	row := q.db.QueryRowContext(ctx, getClanByGameClanNo, arg.GameID, arg.ClanNo)
+	var i GetClanByGameClanNoRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.ClanID,
+		&i.Clan,
+		&i.SetupTurnNo,
+		&i.IsActive,
+	)
+	return i, err
+}
+
+const getClanByGameUser = `-- name: GetClanByGameUser :one
+SELECT game_id,
+       user_id,
+       clan_id,
+       clan,
+       setup_turn_no,
+       is_active
+FROM clans
+WHERE game_id = ?1
+  AND user_id = ?2
+`
+
+type GetClanByGameUserParams struct {
+	GameID string
+	UserID int64
+}
+
+type GetClanByGameUserRow struct {
+	GameID      string
+	UserID      int64
+	ClanID      int64
+	Clan        int64
+	SetupTurnNo int64
+	IsActive    bool
+}
+
+func (q *Queries) GetClanByGameUser(ctx context.Context, arg GetClanByGameUserParams) (GetClanByGameUserRow, error) {
+	row := q.db.QueryRowContext(ctx, getClanByGameUser, arg.GameID, arg.UserID)
+	var i GetClanByGameUserRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.ClanID,
+		&i.Clan,
+		&i.SetupTurnNo,
+		&i.IsActive,
+	)
+	return i, err
+}
+
 const getGame = `-- name: GetGame :one
 SELECT game_id,
        description,
@@ -43,62 +157,14 @@ func (q *Queries) GetGame(ctx context.Context, gameID string) (GetGameRow, error
 	return i, err
 }
 
-const getGameUserClan = `-- name: GetGameUserClan :one
-SELECT clan_id,
-       game_id,
-       user_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE game_id = ?1
-  AND user_id = ?2
-`
-
-type GetGameUserClanParams struct {
-	GameID string
-	UserID int64
-}
-
-type GetGameUserClanRow struct {
-	ClanID      int64
-	GameID      string
-	UserID      int64
-	Clan        int64
-	SetupTurnNo int64
-	IsActive    bool
-}
-
-func (q *Queries) GetGameUserClan(ctx context.Context, arg GetGameUserClanParams) (GetGameUserClanRow, error) {
-	row := q.db.QueryRowContext(ctx, getGameUserClan, arg.GameID, arg.UserID)
-	var i GetGameUserClanRow
-	err := row.Scan(
-		&i.ClanID,
-		&i.GameID,
-		&i.UserID,
-		&i.Clan,
-		&i.SetupTurnNo,
-		&i.IsActive,
-	)
-	return i, err
-}
-
-const removeGameUserClan = `-- name: RemoveGameUserClan :exec
+const removeClan = `-- name: RemoveClan :exec
 DELETE
 FROM clans
-WHERE game_id = ?1
-  AND user_id = ?2
-  AND clan_id = ?3
+WHERE clan_id = ?1
 `
 
-type RemoveGameUserClanParams struct {
-	GameID string
-	UserID int64
-	ClanID int64
-}
-
-func (q *Queries) RemoveGameUserClan(ctx context.Context, arg RemoveGameUserClanParams) error {
-	_, err := q.db.ExecContext(ctx, removeGameUserClan, arg.GameID, arg.UserID, arg.ClanID)
+func (q *Queries) RemoveClan(ctx context.Context, clanID int64) error {
+	_, err := q.db.ExecContext(ctx, removeClan, clanID)
 	return err
 }
 

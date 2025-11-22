@@ -4,18 +4,6 @@ package rest
 
 import "net/http"
 
-/*
-Sessions:what are the 4 routes for?
-
-  POST /api/login → create session + Set-Cookie
-
-  POST /api/logout → delete session + clear cookie
-
-  GET /api/session → “is this cookie valid? give me csrf + user”
-
-  GET /api/me → (optional) “give me just user again”
-*/
-
 func Routes(s *Server) http.Handler {
 	mux := http.NewServeMux()
 
@@ -35,7 +23,12 @@ func Routes(s *Server) http.Handler {
 	// Protected routes (authentication required)
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
-	protected.Handle("GET /api/documents", s.handleGetDocuments())
+	protected.Handle("GET /api/documents", GetDocumentList(s.services.authSvc, s.services.documentsSvc))
+	protected.Handle("GET /api/documents/{id}", GetDocument(s.services.authSvc, s.services.documentsSvc))
+	protected.Handle("GET /api/documents/{id}/contents", GetDocumentContents(s.services.authSvc, s.services.documentsSvc))
+	protected.Handle("GET /api/clan-documents", GetClanDocumentList())
+	protected.Handle("GET /api/clan-documents/{id}", GetClanDocument())
+	protected.Handle("DELETE /api/clan-documents/{id}", DeleteClanDocument())
 	protected.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
 	protected.HandleFunc("GET /api/my/profile", s.services.usersSvc.HandleGetMyProfile)
 	protected.HandleFunc("GET /api/profile", s.handleGetProfile)
@@ -63,8 +56,10 @@ func Routes(s *Server) http.Handler {
 	// Add session middleware (runs on all routes)
 	h = s.sessionMiddleware(h)
 
-	// Add logging middleware
-	h = s.loggingMiddleware(h)
+	//// Add logging middleware
+	//if s.logRoutes {
+	//	h = s.loggingMiddleware(h)
+	//}
 
 	return h
 }

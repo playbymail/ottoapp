@@ -3,6 +3,9 @@
 package auth
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"log"
 	"time"
 
@@ -80,4 +83,33 @@ func (s *Service) authenticateCredentials(actor *domains.Actor, secret string) e
 	})
 
 	return nil
+}
+
+// updateUserSecret updates a secret without checking authorization.
+// It forwards the update to upserUserSecret using a generic transaction
+// and context.
+func (s *Service) updateUserSecret(userID domains.ID, newPlainTextSecret string) error {
+	return s.upsertUserSecret(s.db.Context(), s.db.Queries(), userID, newPlainTextSecret, time.Now().UTC())
+}
+
+// upsertUserSecret does the actual insert or update of a user secret.
+// It requires a sqlc.Queries parameter because it expects that we
+// will want to call it within transactions sometimes. Call updateUserSecret
+// if you want to use an immediate statement and generic context.
+func (s *Service) upsertUserSecret(ctx context.Context, q *sqlc.Queries, userId domains.ID, plainTextSecret string, now time.Time) error {
+	// log.Printf("user %d: password %q\n", userId, plainTextSecret)
+	if err := domains.ValidatePassword(plainTextSecret); err != nil {
+		return errors.Join(domains.ErrInvalidCredentials, err)
+	}
+	hashedPassword, err := hashPassword(plainTextSecret)
+	if err != nil {
+		return err
+	}
+	return q.UpsertUserSecret(ctx, sqlc.UpsertUserSecretParams{
+		UserID:            int64(userId),
+		HashedPassword:    hashedPassword,
+		PlaintextPassword: sql.NullString{Valid: true, String: plainTextSecret},
+		CreatedAt:         now.UTC().Unix(),
+		UpdatedAt:         now.UTC().Unix(),
+	})
 }

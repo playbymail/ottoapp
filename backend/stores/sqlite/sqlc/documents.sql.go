@@ -10,26 +10,51 @@ import (
 )
 
 const createDocument = `-- name: CreateDocument :one
-
-INSERT INTO documents (mime_type, contents_hash, content_length, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5)
+INSERT INTO documents (clan_id,
+                       can_read, can_write, can_delete, can_share,
+                       document_name,
+                       document_type,
+                       contents_hash,
+                       created_at, updated_at)
+VALUES (?1,
+        ?2, ?3, ?4, ?5,
+        ?6,
+        ?7,
+        ?8,
+        ?9, ?10)
+ON CONFLICT (clan_id, contents_hash) DO UPDATE
+    SET can_read      = excluded.can_read,
+        can_write     = excluded.can_write,
+        can_delete    = excluded.can_delete,
+        can_share     = excluded.can_share,
+        document_name = excluded.document_name,
+        updated_at    = excluded.updated_at
 RETURNING document_id
 `
 
 type CreateDocumentParams struct {
-	MimeType      string
-	ContentsHash  string
-	ContentLength int64
-	CreatedAt     int64
-	UpdatedAt     int64
+	ClanID       int64
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
+	CreatedAt    int64
+	UpdatedAt    int64
 }
 
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
 func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createDocument,
-		arg.MimeType,
+		arg.ClanID,
+		arg.CanRead,
+		arg.CanWrite,
+		arg.CanDelete,
+		arg.CanShare,
+		arg.DocumentName,
+		arg.DocumentType,
 		arg.ContentsHash,
-		arg.ContentLength,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -38,56 +63,659 @@ func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) 
 	return document_id, err
 }
 
-const createDocumentAcl = `-- name: CreateDocumentAcl :exec
-INSERT INTO document_acl(document_id, user_id, document_name, created_by, is_owner, can_read, can_write, can_delete, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+const createDocumentContents = `-- name: CreateDocumentContents :exec
+
+INSERT INTO document_contents(contents_hash, content_length, mime_type, contents, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+ON CONFLICT (contents_hash) DO UPDATE
+    SET updated_at = excluded.updated_at
 `
 
-type CreateDocumentAclParams struct {
-	DocumentID   int64
-	UserID       int64
-	DocumentName string
-	CreatedBy    int64
-	IsOwner      bool
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CreatedAt    int64
-	UpdatedAt    int64
+type CreateDocumentContentsParams struct {
+	ContentsHash  string
+	ContentLength int64
+	MimeType      string
+	Contents      []byte
+	CreatedAt     int64
+	UpdatedAt     int64
 }
 
-func (q *Queries) CreateDocumentAcl(ctx context.Context, arg CreateDocumentAclParams) error {
-	_, err := q.db.ExecContext(ctx, createDocumentAcl,
-		arg.DocumentID,
-		arg.UserID,
-		arg.DocumentName,
-		arg.CreatedBy,
-		arg.IsOwner,
-		arg.CanRead,
-		arg.CanWrite,
-		arg.CanDelete,
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+func (q *Queries) CreateDocumentContents(ctx context.Context, arg CreateDocumentContentsParams) error {
+	_, err := q.db.ExecContext(ctx, createDocumentContents,
+		arg.ContentsHash,
+		arg.ContentLength,
+		arg.MimeType,
+		arg.Contents,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 	return err
 }
 
-const createDocumentContent = `-- name: CreateDocumentContent :exec
-INSERT INTO document_contents(document_id, contents, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4)
+const deleteDocument = `-- name: DeleteDocument :exec
+DELETE
+FROM documents
+WHERE document_id = ?1
+  AND clan_id = ?2
 `
 
-type CreateDocumentContentParams struct {
+type DeleteDocumentParams struct {
 	DocumentID int64
-	Contents   []byte
+	ClanID     int64
+}
+
+func (q *Queries) DeleteDocument(ctx context.Context, arg DeleteDocumentParams) error {
+	_, err := q.db.ExecContext(ctx, deleteDocument, arg.DocumentID, arg.ClanID)
+	return err
+}
+
+const deleteDocumentAuthorized = `-- name: DeleteDocumentAuthorized :exec
+DELETE
+FROM documents
+WHERE document_id = ?1
+  AND clan_id = ?2
+  AND can_delete = 1
+`
+
+type DeleteDocumentAuthorizedParams struct {
+	DocumentID int64
+	ClanID     int64
+}
+
+func (q *Queries) DeleteDocumentAuthorized(ctx context.Context, arg DeleteDocumentAuthorizedParams) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentAuthorized, arg.DocumentID, arg.ClanID)
+	return err
+}
+
+const deleteDocumentContents = `-- name: DeleteDocumentContents :exec
+DELETE
+FROM document_contents
+WHERE contents_hash = ?1
+  AND NOT EXISTS (SELECT 1
+                  FROM documents
+                  WHERE contents_hash = :contents_hash)
+`
+
+func (q *Queries) DeleteDocumentContents(ctx context.Context, contentsHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentContents, contentsHash)
+	return err
+}
+
+const deleteSharedDocumentById = `-- name: DeleteSharedDocumentById :exec
+DELETE
+FROM document_shares
+WHERE document_id = ?1
+  AND clan_id = ?2
+`
+
+type DeleteSharedDocumentByIdParams struct {
+	DocumentID int64
+	ClanID     int64
+}
+
+func (q *Queries) DeleteSharedDocumentById(ctx context.Context, arg DeleteSharedDocumentByIdParams) error {
+	_, err := q.db.ExecContext(ctx, deleteSharedDocumentById, arg.DocumentID, arg.ClanID)
+	return err
+}
+
+const getAllDocumentsForClan = `-- name: GetAllDocumentsForClan :many
+SELECT d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clan_documents_vw AS d
+WHERE d.clan_id = ?1
+   OR d.owner_id = ?1
+`
+
+func (q *Queries) GetAllDocumentsForClan(ctx context.Context, clanID int64) ([]ClanDocumentsVw, error) {
+	rows, err := q.db.QueryContext(ctx, getAllDocumentsForClan, clanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClanDocumentsVw
+	for rows.Next() {
+		var i ClanDocumentsVw
+		if err := rows.Scan(
+			&i.DocumentID,
+			&i.ClanID,
+			&i.CanRead,
+			&i.CanWrite,
+			&i.CanDelete,
+			&i.CanShare,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ContentsHash,
+			&i.OwnerID,
+			&i.IsShared,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllDocumentsForGameAcrossUsers = `-- name: GetAllDocumentsForGameAcrossUsers :many
+SELECT c.user_id,
+       c.game_id,
+       d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clans AS c,
+     clan_documents_vw AS d
+WHERE c.game_id = ?1
+  AND (d.clan_id = c.clan_id OR d.owner_id = c.clan_id)
+`
+
+type GetAllDocumentsForGameAcrossUsersRow struct {
+	UserID       int64
+	GameID       string
+	DocumentID   int64
+	ClanID       int64
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
+	OwnerID      int64
+	IsShared     bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) GetAllDocumentsForGameAcrossUsers(ctx context.Context, gameID string) ([]GetAllDocumentsForGameAcrossUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllDocumentsForGameAcrossUsers, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllDocumentsForGameAcrossUsersRow
+	for rows.Next() {
+		var i GetAllDocumentsForGameAcrossUsersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.GameID,
+			&i.DocumentID,
+			&i.ClanID,
+			&i.CanRead,
+			&i.CanWrite,
+			&i.CanDelete,
+			&i.CanShare,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ContentsHash,
+			&i.OwnerID,
+			&i.IsShared,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllDocumentsForUserAcrossGames = `-- name: GetAllDocumentsForUserAcrossGames :many
+SELECT c.user_id,
+       c.game_id,
+       d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clans AS c,
+     clan_documents_vw AS d
+WHERE c.user_id = ?1
+  AND (d.clan_id = c.clan_id OR d.owner_id = c.clan_id)
+`
+
+type GetAllDocumentsForUserAcrossGamesRow struct {
+	UserID       int64
+	GameID       string
+	DocumentID   int64
+	ClanID       int64
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
+	OwnerID      int64
+	IsShared     bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) GetAllDocumentsForUserAcrossGames(ctx context.Context, userID int64) ([]GetAllDocumentsForUserAcrossGamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllDocumentsForUserAcrossGames, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllDocumentsForUserAcrossGamesRow
+	for rows.Next() {
+		var i GetAllDocumentsForUserAcrossGamesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.GameID,
+			&i.DocumentID,
+			&i.ClanID,
+			&i.CanRead,
+			&i.CanWrite,
+			&i.CanDelete,
+			&i.CanShare,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ContentsHash,
+			&i.OwnerID,
+			&i.IsShared,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllDocumentsForUserInGame = `-- name: GetAllDocumentsForUserInGame :many
+SELECT c.user_id,
+       c.game_id,
+       d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clans AS c,
+     clan_documents_vw AS d
+WHERE c.user_id = ?1
+  AND c.game_id = ?2
+  AND (d.clan_id = c.clan_id OR d.owner_id = c.clan_id)
+`
+
+type GetAllDocumentsForUserInGameParams struct {
+	UserID int64
+	GameID string
+}
+
+type GetAllDocumentsForUserInGameRow struct {
+	UserID       int64
+	GameID       string
+	DocumentID   int64
+	ClanID       int64
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
+	OwnerID      int64
+	IsShared     bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) GetAllDocumentsForUserInGame(ctx context.Context, arg GetAllDocumentsForUserInGameParams) ([]GetAllDocumentsForUserInGameRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllDocumentsForUserInGame, arg.UserID, arg.GameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllDocumentsForUserInGameRow
+	for rows.Next() {
+		var i GetAllDocumentsForUserInGameRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.GameID,
+			&i.DocumentID,
+			&i.ClanID,
+			&i.CanRead,
+			&i.CanWrite,
+			&i.CanDelete,
+			&i.CanShare,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ContentsHash,
+			&i.OwnerID,
+			&i.IsShared,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDocumentAcl = `-- name: GetDocumentAcl :many
+SELECT d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clan_documents_vw AS d
+WHERE d.document_id = ?1
+`
+
+// GetDocumentAcl returns the list of the users with access to the document.
+func (q *Queries) GetDocumentAcl(ctx context.Context, documentID int64) ([]ClanDocumentsVw, error) {
+	rows, err := q.db.QueryContext(ctx, getDocumentAcl, documentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClanDocumentsVw
+	for rows.Next() {
+		var i ClanDocumentsVw
+		if err := rows.Scan(
+			&i.DocumentID,
+			&i.ClanID,
+			&i.CanRead,
+			&i.CanWrite,
+			&i.CanDelete,
+			&i.CanShare,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ContentsHash,
+			&i.OwnerID,
+			&i.IsShared,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getDocumentById = `-- name: GetDocumentById :one
+SELECT d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.created_at,
+       d.updated_at
+FROM documents AS d
+WHERE d.document_id = ?1
+`
+
+func (q *Queries) GetDocumentById(ctx context.Context, documentID int64) (Document, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentById, documentID)
+	var i Document
+	err := row.Scan(
+		&i.DocumentID,
+		&i.ClanID,
+		&i.CanRead,
+		&i.CanWrite,
+		&i.CanDelete,
+		&i.CanShare,
+		&i.DocumentName,
+		&i.DocumentType,
+		&i.ContentsHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDocumentByIdAuthorized = `-- name: GetDocumentByIdAuthorized :one
+SELECT d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clan_documents_vw AS d
+WHERE d.document_id = ?1
+  AND d.clan_id = ?2
+`
+
+type GetDocumentByIdAuthorizedParams struct {
+	DocumentID int64
+	ClanID     int64
+}
+
+func (q *Queries) GetDocumentByIdAuthorized(ctx context.Context, arg GetDocumentByIdAuthorizedParams) (ClanDocumentsVw, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentByIdAuthorized, arg.DocumentID, arg.ClanID)
+	var i ClanDocumentsVw
+	err := row.Scan(
+		&i.DocumentID,
+		&i.ClanID,
+		&i.CanRead,
+		&i.CanWrite,
+		&i.CanDelete,
+		&i.CanShare,
+		&i.DocumentName,
+		&i.DocumentType,
+		&i.ContentsHash,
+		&i.OwnerID,
+		&i.IsShared,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDocumentContents = `-- name: GetDocumentContents :one
+SELECT content_length,
+       contents_hash,
+       mime_type,
+       contents,
+       created_at,
+       updated_at
+FROM document_contents
+WHERE contents_hash = ?1
+`
+
+type GetDocumentContentsRow struct {
+	ContentLength int64
+	ContentsHash  string
+	MimeType      string
+	Contents      []byte
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+func (q *Queries) GetDocumentContents(ctx context.Context, contentsHash string) (GetDocumentContentsRow, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentContents, contentsHash)
+	var i GetDocumentContentsRow
+	err := row.Scan(
+		&i.ContentLength,
+		&i.ContentsHash,
+		&i.MimeType,
+		&i.Contents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDocumentForUserAuthorized = `-- name: GetDocumentForUserAuthorized :one
+SELECT c.user_id,
+       c.game_id,
+       d.document_id,
+       d.clan_id,
+       d.can_read,
+       d.can_write,
+       d.can_delete,
+       d.can_share,
+       d.document_name,
+       d.document_type,
+       d.contents_hash,
+       d.owner_id,
+       d.is_shared,
+       d.created_at,
+       d.updated_at
+FROM clans AS c,
+     clan_documents_vw AS d
+WHERE d.document_id = ?1
+  AND c.user_id = ?2
+`
+
+type GetDocumentForUserAuthorizedParams struct {
+	DocumentID int64
+	UserID     int64
+}
+
+type GetDocumentForUserAuthorizedRow struct {
+	UserID       int64
+	GameID       string
+	DocumentID   int64
+	ClanID       int64
+	CanRead      bool
+	CanWrite     bool
+	CanDelete    bool
+	CanShare     bool
+	DocumentName string
+	DocumentType string
+	ContentsHash string
+	OwnerID      int64
+	IsShared     bool
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) GetDocumentForUserAuthorized(ctx context.Context, arg GetDocumentForUserAuthorizedParams) (GetDocumentForUserAuthorizedRow, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentForUserAuthorized, arg.DocumentID, arg.UserID)
+	var i GetDocumentForUserAuthorizedRow
+	err := row.Scan(
+		&i.UserID,
+		&i.GameID,
+		&i.DocumentID,
+		&i.ClanID,
+		&i.CanRead,
+		&i.CanWrite,
+		&i.CanDelete,
+		&i.CanShare,
+		&i.DocumentName,
+		&i.DocumentType,
+		&i.ContentsHash,
+		&i.OwnerID,
+		&i.IsShared,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const shareDocumentById = `-- name: ShareDocumentById :exec
+INSERT INTO document_shares (document_id, clan_id, can_read, can_delete, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+`
+
+type ShareDocumentByIdParams struct {
+	DocumentID int64
+	ClanID     int64
+	CanRead    bool
+	CanDelete  bool
 	CreatedAt  int64
 	UpdatedAt  int64
 }
 
-func (q *Queries) CreateDocumentContent(ctx context.Context, arg CreateDocumentContentParams) error {
-	_, err := q.db.ExecContext(ctx, createDocumentContent,
+func (q *Queries) ShareDocumentById(ctx context.Context, arg ShareDocumentByIdParams) error {
+	_, err := q.db.ExecContext(ctx, shareDocumentById,
 		arg.DocumentID,
-		arg.Contents,
+		arg.ClanID,
+		arg.CanRead,
+		arg.CanDelete,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)

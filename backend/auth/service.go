@@ -4,9 +4,8 @@
 package auth
 
 import (
-	"context"
-	"database/sql"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
@@ -132,31 +131,66 @@ func (s *Service) BuildActorAuth(actor, target *domains.Actor) *domains.ActorAut
 	return aa
 }
 
-// updateUserSecret updates a secret without checking authorization.
-// It forwards the update to upserUserSecret using a generic transaction
-// and context.
-func (s *Service) updateUserSecret(userID domains.ID, newPlainTextSecret string) error {
-	return s.upsertUserSecret(s.db.Context(), s.db.Queries(), userID, newPlainTextSecret, time.Now().UTC())
+// GetActor extracts the actor from the request context.
+// This is a convenience helper that assumes session middleware
+// has added the user to the context.
+func (s *Service) GetActor(r *http.Request) (*domains.Actor, error) {
+	actorId, ok := r.Context().Value(domains.ContextKeyUserID).(domains.ID)
+	if !ok || actorId == domains.InvalidID {
+		return nil, domains.ErrNotAuthenticated
+	}
+	return s.GetActorById(actorId)
 }
 
-// upsertUserSecret does the actual insert or update of a user secret.
-// It requires a sqlc.Queries parameter because it expects that we
-// will want to call it within transactions sometimes. Call updateUserSecret
-// if you want to use an immediate statement and generic context.
-func (s *Service) upsertUserSecret(ctx context.Context, q *sqlc.Queries, userId domains.ID, plainTextSecret string, now time.Time) error {
-	// log.Printf("user %d: password %q\n", userId, plainTextSecret)
-	if err := domains.ValidatePassword(plainTextSecret); err != nil {
-		return errors.Join(domains.ErrInvalidCredentials, err)
-	}
-	hashedPassword, err := hashPassword(plainTextSecret)
+// GetActorByEmail returns a domain Actor or an error.
+func (s *Service) GetActorByEmail(email string) (*domains.Actor, error) {
+	//log.Printf("[auth] getActorByEmail(%q)", email)
+	userId, err := s.db.Queries().GetUserIDByEmail(s.db.Context(), email)
 	if err != nil {
-		return err
+		//log.Printf("[auth] getActorByEmail(%q): %v", email, err)
+		return nil, err
 	}
-	return q.UpsertUserSecret(ctx, sqlc.UpsertUserSecretParams{
-		UserID:            int64(userId),
-		HashedPassword:    hashedPassword,
-		PlaintextPassword: sql.NullString{Valid: true, String: plainTextSecret},
-		CreatedAt:         now.UTC().Unix(),
-		UpdatedAt:         now.UTC().Unix(),
-	})
+	return s.GetActorById(domains.ID(userId))
+}
+
+// GetActorByHandle returns a domain Actor or an error.
+func (s *Service) GetActorByHandle(handle string) (*domains.Actor, error) {
+	//log.Printf("[auth] getActorByHandle(%q)", handle)
+	userId, err := s.db.Queries().GetUserIDByHandle(s.db.Context(), handle)
+	if err != nil {
+		//log.Printf("[auth] getActorByHandle(%q): %v", handle, err)
+		return nil, err
+	}
+	return s.GetActorById(domains.ID(userId))
+}
+
+// GetActorById returns a domain Actor or an error.
+// TODO: security considerations from handing out a sysop actor.
+//
+// Background processes can construct an actor directly without DB:
+//
+//	var ServiceActor = domains.Actor{
+//	   ID:    domains.InvalidID,              // not a user
+//	   Service: true,
+//	}
+func (s *Service) GetActorById(actorId domains.ID) (*domains.Actor, error) {
+	if actorId == SysopId {
+		return &domains.Actor{ID: SysopId, Sysop: true}, nil
+	}
+	userRoles, err := s.db.Queries().GetUserRoles(s.db.Context(), int64(actorId))
+	if err != nil {
+		return nil, err
+	}
+	actor := domains.Actor{ID: actorId}
+	for _, role := range userRoles {
+		switch role {
+		case "admin":
+			actor.Admin = true
+		case "service":
+			actor.Service = true
+		case "user":
+			actor.User = true
+		}
+	}
+	return &actor, nil
 }

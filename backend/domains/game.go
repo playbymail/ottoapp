@@ -3,3 +3,12 @@
 package domains
 
 type TurnNo string // YYYY-MM
+
+type Clan struct {
+	GameID      string
+	UserID      ID
+	ClanID      ID
+	ClanNo      int
+	SetupTurnNo TurnNo
+	IsActive    bool
+}

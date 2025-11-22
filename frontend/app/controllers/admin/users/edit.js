@@ -1,4 +1,5 @@
 // app/controllers/admin/users/edit/profile.js
+
 import Controller from '@ember/controller';
 import { service } from '@ember/service';
 import { action } from '@ember/object';

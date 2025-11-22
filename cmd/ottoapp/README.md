@@ -131,15 +131,55 @@ Show database version:
 ottoapp db version
 ```
 
-## Report Commands
+## Game Commands
+
+### Import
+
+Import users from a JSON file.
+Creates new users or updates existing ones based on handle.
+
+```bash
+ottoapp game import data/inputs/alpha.json
+```
+
+The import process:
+1. Validates all records before making any changes
+2. For each user:
+    - If handle doesn't exist: creates a new user
+    - If handle exists: updates remaining fields
+    - Generates passwords for blank entries using the phrases generator
+    - Updates or creates user_secrets record
 
 ### Upload
 
-Upload a report file:
+Upload a document for a game:
 
 ```bash
-ottoapp report upload 0134.docx --owner penguin --name 0301.0899-12.0134.report.docx
+ottoapp game upload 0987.docx --owner catbird --name 0301.0899-12.0987.report.docx
 ```
+
+## Report Commands
+
+### Extract
+
+## Run Commands
+
+### Genmake
+
+Generate a Makefile for cumulative map generation.
+
+```bash
+ottoapp run genmake --root data/tn3.1
+```
+
+This scans the data directory for turn reports (both `.docx` and `.txt`) and generates a Makefile that:
+1. Extracts text reports from `.docx` files where needed.
+2. Builds maps cumulatively, meaning each map depends on its turn report AND all previous turn reports for that clan.
+3. Handles allied data (multiple clans in the same folder) by including all text reports found in the folder for each turn.
+
+Options:
+- `--root` - root directory containing clan folders (default: "data/tn3.1")
+- `--output` - path to write the Makefile (default: "data/tn3.1/maps.mk")
 
 ## User Commands
 
@@ -150,44 +190,6 @@ Create a new user:
 ```bash
 ottoapp user create penguin --tz America/New_York --email penguin@ottoapp --password happy-feet
 ```
-
-### Import
-
-Import users from a CSV file. Creates new users or updates existing ones based on email:
-
-```bash
-ottoapp user import data/inputs/players.csv
-```
-
-The CSV file must have these exact columns:
-- **Clan** - 4-digit number starting with 0 (e.g., "0500")
-- **User Name** - username for the user
-- **Email** - email address (used as unique identifier)
-- **Role** - "admin" or "user" (Penguin must have "admin", all others "user")
-- **Timezone** - IANA timezone name (e.g., "America/New_York")
-- **Password** - password or blank (blank passwords will be auto-generated)
-
-The import process:
-1. Validates all records before making any changes
-2. For each user:
-    - If email doesn't exist: creates a new user
-    - If email exists: updates username and timezone if different
-    - Generates passwords for blank entries using the phrases generator
-    - Updates or creates user_secrets record
-    - Ensures "active" role exists
-    - Ensures the role from CSV (admin/user) exists
-3. Updates the CSV file with any generated passwords
-
-**Example CSV:**
-
-```csv
-Clan,User Name,Email,Role,Timezone,Password
-0000,Penguin,penguin@ottoapp,admin,Antarctica/Palmer,joyous.pepper.frogs
-0123,Tom Tomtom,tomtom.tom@example.com,user,Europe/London,
-0987,Catbird,catbird@ottoapp,user,Europe/London,
-```
-
-After import, blank passwords will be filled in with generated values like `aroma.jump.rally.limb.chomp.crown`.
 
 ### Update
 

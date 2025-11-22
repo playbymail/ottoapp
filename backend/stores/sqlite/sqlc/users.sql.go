@@ -215,6 +215,19 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUs
 	return i, err
 }
 
+const getUserHandle = `-- name: GetUserHandle :one
+SELECT handle
+FROM users
+WHERE user_id = ?1
+`
+
+func (q *Queries) GetUserHandle(ctx context.Context, userID int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserHandle, userID)
+	var handle string
+	err := row.Scan(&handle)
+	return handle, err
+}
+
 const getUserIDByEmail = `-- name: GetUserIDByEmail :one
 SELECT user_id
 FROM users

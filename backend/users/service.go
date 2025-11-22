@@ -167,6 +167,15 @@ func (s *Service) GetUserByHandle(handle string) (*domains.User_t, error) {
 
 	return user, nil
 }
+
+func (s *Service) GetUserHandle(userId domains.ID) (string, error) {
+	handle, err := s.db.Queries().GetUserHandle(s.db.Context(), int64(userId))
+	if err != nil {
+		return "", err
+	}
+	return handle, nil
+}
+
 func (s *Service) GetUserIDByEmail(email string) (domains.ID, error) {
 	id, err := s.db.Queries().GetUserIDByEmail(s.db.Context(), email)
 	if err != nil {
