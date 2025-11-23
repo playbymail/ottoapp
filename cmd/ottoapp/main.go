@@ -153,14 +153,7 @@ func main() {
 	cmdReport.AddCommand(cmdReportParse)
 	cmdReportParse.Flags().Bool("docxml-only", false, "parse to DocXML only")
 
-	var cmdRun = &cobra.Command{
-		Use:   "run",
-		Short: "Run utility commands",
-	}
-	cmdRoot.AddCommand(cmdRun)
-	cmdRun.AddCommand(cmdRunGenMake)
-	cmdRunGenMake.Flags().String("root", "data/tn3.1", "root directory for data")
-	cmdRunGenMake.Flags().String("output", "data/tn3.1/maps.mk", "output makefile path")
+	cmdRoot.AddCommand(cmdRun())
 
 	var cmdUser = &cobra.Command{
 		Use:   "user",

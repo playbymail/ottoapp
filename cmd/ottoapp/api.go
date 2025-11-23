@@ -12,10 +12,10 @@ import (
 
 	"github.com/playbymail/ottoapp"
 	"github.com/playbymail/ottoapp/backend/auth"
-	"github.com/playbymail/ottoapp/backend/games"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/servers/rest"
 	"github.com/playbymail/ottoapp/backend/services/documents"
+	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/users"
