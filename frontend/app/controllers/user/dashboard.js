@@ -10,6 +10,6 @@ export default class UserDashboardController extends Controller {
 
   constructor(...args) {
     super(...args);
-    console.log('app/controllers/user/dashboard');
+    //console.log('app/controllers/user/dashboard');
   }
 }
