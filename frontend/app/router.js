@@ -36,6 +36,7 @@ Router.map(function () {
     this.route('documents', function () {
       this.route('show', { path: '/:document_id' });
     });
+    this.route('extracts');
     this.route('maps');
     this.route('reports');
     this.route('settings', function () {

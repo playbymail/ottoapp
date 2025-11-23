@@ -52,7 +52,7 @@ export default class RecentTurnReportFiles extends Component {
 
       <footer class="mt-4 border-t border-gray-100 pt-4">
         <LinkTo
-          @route="user.documents"
+          @route="user.reports"
           class="text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
           View all turn report files &rarr;

@@ -11,7 +11,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/playbymail/ottoapp/backend/parser/office"
 	"github.com/playbymail/ottoapp/backend/services/email"
 	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/spf13/cobra"
@@ -24,6 +26,7 @@ func cmdRun() *cobra.Command {
 	}
 
 	cmd.AddCommand(cmdRunGenMake())
+	cmd.AddCommand(cmdRunParse())
 	cmd.AddCommand(cmdRunWelcomeEmail())
 
 	return cmd
@@ -249,6 +252,57 @@ func cmdRunGenMake() *cobra.Command {
 
 	if err := addFlags(cmd); err != nil {
 		log.Fatalf("%s: %v\n", cmd.Use, err)
+	}
+
+	return cmd
+}
+
+func cmdRunParse() *cobra.Command {
+	var cmd = &cobra.Command{
+		Use:   "parse",
+		Short: "Run parser commands",
+	}
+
+	cmd.AddCommand(cmdRunParseReportFile())
+
+	return cmd
+}
+
+func cmdRunParseReportFile() *cobra.Command {
+	var outputPath string
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().StringVar(&outputPath, "output", outputPath, "path to save parsed report to")
+		return nil
+	}
+
+	var cmd = &cobra.Command{
+		Use:   "report <turn-report-file-name>",
+		Short: "Parse a turn report file",
+		Args:  cobra.ExactArgs(1), // require path to turn report file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			startedAt := time.Now()
+			report := args[0]
+			if strings.ToLower(filepath.Ext(report)) != ".docx" {
+				return fmt.Errorf("turn report file must be .docx")
+			}
+			output, err := office.ParsePath(report)
+			if err != nil {
+				log.Fatalf("error: %v\n", err)
+			}
+			if outputPath == "" {
+				fmt.Println(string(output))
+				return nil
+			}
+			if err = os.WriteFile(outputPath, output, 0o644); err != nil {
+				log.Fatalf("error: %v\n", err)
+			}
+			log.Printf("%s: created in %v\n", outputPath, time.Since(startedAt))
+			return nil
+		},
+	}
+
+	if err := addFlags(cmd); err != nil {
+		log.Fatal(err)
 	}
 
 	return cmd
