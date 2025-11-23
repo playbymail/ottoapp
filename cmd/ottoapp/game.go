@@ -17,9 +17,9 @@ import (
 
 	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
-	"github.com/playbymail/ottoapp/backend/games"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/services/documents"
+	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/spf13/cobra"
@@ -35,7 +35,7 @@ func cmdGame() *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	cmd.AddCommand(cmdGameImport)
+	cmd.AddCommand(cmdGameImport())
 
 	cmd.AddCommand(cmdGameUpload)
 	cmdGameUpload.Flags().Bool("can-delete", true, "delete flag")
@@ -54,65 +54,69 @@ func cmdGame() *cobra.Command {
 	return cmd
 }
 
-var cmdGameImport = &cobra.Command{
-	Use:          "import <path>",
-	Short:        "import game data from JSON data file",
-	SilenceUsage: true,
-	Args:         cobra.ExactArgs(1), // require path
-	RunE: func(cmd *cobra.Command, args []string) error {
-		started := time.Now()
-		path := args[0]
-		if sb, err := os.Stat(path); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return errors.Join(domains.ErrInvalidPath, domains.ErrNotExists)
+func cmdGameImport() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "import <path>",
+		Short:        "import game data from JSON data file",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1), // require path
+		RunE: func(cmd *cobra.Command, args []string) error {
+			started := time.Now()
+			path := args[0]
+			if sb, err := os.Stat(path); err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					return errors.Join(domains.ErrInvalidPath, domains.ErrNotExists)
+				}
+				return errors.Join(domains.ErrInvalidPath, err)
+			} else if sb.IsDir() || !sb.Mode().IsRegular() {
+				return errors.Join(domains.ErrInvalidPath, domains.ErrNotFile)
 			}
-			return errors.Join(domains.ErrInvalidPath, err)
-		} else if sb.IsDir() || !sb.Mode().IsRegular() {
-			return errors.Join(domains.ErrInvalidPath, domains.ErrNotFile)
-		}
-		input, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var data games.ImportFile
-		err = json.Unmarshal(input, &data)
-		if err != nil {
-			return err
-		}
+			input, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			var data games.ImportFile
+			err = json.Unmarshal(input, &data)
+			if err != nil {
+				return err
+			}
 
-		dbPath, err := cmd.Flags().GetString("db")
-		if err != nil {
-			return err
-		}
-		debug, err := cmd.Flags().GetBool("debug")
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		db, err := sqlite.Open(ctx, dbPath, false, debug)
-		if err != nil {
-			log.Fatalf("db: open: %v\n", err)
-		}
-		defer func() {
-			_ = db.Close()
-		}()
+			dbPath, err := cmd.Flags().GetString("db")
+			if err != nil {
+				return err
+			}
+			debug, err := cmd.Flags().GetBool("debug")
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			db, err := sqlite.Open(ctx, dbPath, false, debug)
+			if err != nil {
+				log.Fatalf("db: open: %v\n", err)
+			}
+			defer func() {
+				_ = db.Close()
+			}()
 
-		authSvc := auth.New(db)
-		tzSvc, err := iana.New(db)
-		if err != nil {
-			return errors.Join(fmt.Errorf("import: new tz service"), err)
-		}
-		usersSvc := users.New(db, authSvc, tzSvc)
-		gameSvc := games.New(db, authSvc, usersSvc)
-		err = gameSvc.Import(&data)
-		if err != nil {
-			return errors.Join(fmt.Errorf("import: game"), err)
-			return err
-		}
+			authSvc := auth.New(db)
+			tzSvc, err := iana.New(db)
+			if err != nil {
+				return errors.Join(fmt.Errorf("import: new tz service"), err)
+			}
+			usersSvc := users.New(db, authSvc, tzSvc)
+			gameSvc := games.New(db, authSvc, usersSvc)
+			err = gameSvc.Import(&data)
+			if err != nil {
+				return errors.Join(fmt.Errorf("import: game"), err)
+				return err
+			}
 
-		fmt.Printf("%s: imported in %v\n", path, time.Since(started))
-		return nil
-	},
+			fmt.Printf("%s: imported in %v\n", path, time.Since(started))
+			return nil
+		},
+	}
+
+	return cmd
 }
 
 var cmdGameUpload = &cobra.Command{

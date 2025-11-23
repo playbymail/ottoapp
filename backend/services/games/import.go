@@ -3,8 +3,11 @@
 package games
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -17,8 +20,21 @@ import (
 )
 
 type ImportFile struct {
+	Config  *ImportConfig `json:"config,omitempty"`
 	Games   []*ImportGame
 	Players map[string]*ImportPlayer
+}
+
+type ImportConfig struct {
+	Mailgun *ImportConfigMailgun `json:"mailgun,omitempty"`
+}
+
+type ImportConfigMailgun struct {
+	Domain  string `json:"domain,omitempty"`
+	From    string `json:"from,omitempty"`
+	ReplyTo string `json:"reply-to,omitempty"`
+	ApiKey  string `json:"api-key,omitempty"`
+	ApiBase string `json:"api-base,omitempty"`
 }
 
 type ImportGame struct {
@@ -38,6 +54,7 @@ type ImportPlayer struct {
 	Username          string              `json:"username,omitempty"`
 	Email             string              `json:"email,omitempty"`
 	Timezone          string              `json:"tz,omitempty"`
+	Config            *ImportPlayerConfig `json:"config,omitempty"`
 	Roles             []string            `json:"roles,omitempty"`
 	Games             []*ImportPlayerGame `json:"games,omitempty"`
 	Password          string              `json:"password,omitempty"`
@@ -46,10 +63,45 @@ type ImportPlayer struct {
 	generatedPassword bool
 }
 
+type ImportPlayerConfig struct {
+	EmailOptIn bool `json:"email-opt-in,omitempty"`
+}
+
 type ImportPlayerGame struct {
 	Id          string `json:"id"`
 	Clan        int    `json:"clan"`
 	SetupTurnNo int    `json:"setupTurnNo,omitempty"`
+}
+
+func LoadGameData(path string) (*ImportFile, error) {
+	// load the game data from the json file (should be in the database?)
+	if sb, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errors.Join(domains.ErrInvalidPath, domains.ErrNotExists)
+		}
+		return nil, errors.Join(domains.ErrInvalidPath, err)
+	} else if sb.IsDir() || !sb.Mode().IsRegular() {
+		return nil, errors.Join(domains.ErrInvalidPath, domains.ErrNotFile)
+	}
+	input, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var data ImportFile
+	err = json.Unmarshal(input, &data)
+	if err != nil {
+		return nil, err
+	}
+	// force default configs for backwards compatibility
+	if data.Config == nil {
+		data.Config = &ImportConfig{}
+	}
+	for _, player := range data.Players {
+		if player.Config == nil {
+			player.Config = &ImportPlayerConfig{}
+		}
+	}
+	return &data, nil
 }
 
 // Import expects to run from the command line, so log errors.
