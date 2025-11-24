@@ -1,4 +1,4 @@
-// app/templates/user/maps.gjs
+// app/templates/user/extracts.gjs
 import { LinkTo } from '@ember/routing';
 
 <template>
@@ -12,7 +12,7 @@ import { LinkTo } from '@ember/routing';
             </svg>
           </LinkTo>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-            Maps
+            Extracts
           </h1>
         </div>
       </header>
@@ -32,19 +32,20 @@ import { LinkTo } from '@ember/routing';
                 </div>
 
                 <div class="shrink-0">
-                  <a
-                    href={{file.links.contents.href}}
+                  <LinkTo
+                    @route="user.extracts.show"
+                    @model={{file.id}}
                     class="inline-flex items-center rounded-md border border-indigo-500 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-400 dark:text-indigo-400 dark:hover:bg-indigo-900/20"
                   >
-                    Download
-                  </a>
+                    View
+                  </LinkTo>
                 </div>
               </li>
             {{/each}}
           </ul>
         {{else}}
           <p class="flex-1 text-sm text-gray-500 dark:text-gray-400">
-            You don’t have any map files yet.
+            You don’t have any turn report extracts yet.
           </p>
         {{/if}}
       </section>

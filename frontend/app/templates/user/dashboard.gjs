@@ -1,12 +1,3 @@
-// // Copyright (c) 2025 Michael D Henderson. All rights reserved.
-//
-// import Dashboard from 'frontend/components/dashboard';
-//
-// < template >
-//   < Dashboard />
-// < /template >
-
-
 // app/templates/user/dashboard.gjs
 
 import {LinkTo} from "@ember/routing";
@@ -16,10 +7,10 @@ import DashboardRecentTurnReportExtracts from 'frontend/components/user/dashboar
 import DashboardRecentTurnReportFiles from 'frontend/components/user/dashboard/recent-turn-report-files';
 
 <template>
-  <div class="min-h-screen bg-gray-100">
+  <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
     <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <header class="mb-6 flex items-center justify-between">
-        <h1 class="text-2xl font-semibold text-gray-900">
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
           Dashboard
         </h1>
 
