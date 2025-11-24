@@ -9,8 +9,8 @@ export default class ServerAuthenticator extends Base {
     if (!resp.ok) {
       throw 'not authenticated';
     }
-    const json = await resp.json();
     // ESA will persist this whole object
+    const json = await resp.json();
     // console.log('esa', 'app/authenticators/server:restore', json);
     return json;
   }
@@ -33,7 +33,7 @@ export default class ServerAuthenticator extends Base {
   }
 
   async invalidate() {
-    // console.log('esa', 'app/authenticators/server:invalidate', 'enter');
+    console.log('esa', 'app/authenticators/server:invalidate', 'enter');
     try {
       await fetch('/api/logout', {
         method: 'POST',

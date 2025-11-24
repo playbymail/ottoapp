@@ -20,7 +20,7 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 		Errors   []string `json:"errors,omitempty"`
 	}
 
-	actor, err := s.services.authSvc.GetActor(r)
+	actor, err := s.services.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 		return
@@ -61,7 +61,7 @@ func (s *Server) handlePostProfile(w http.ResponseWriter, r *http.Request) {
 		Errors   []string `json:"errors,omitempty"`
 	}
 
-	userID, err := s.services.authSvc.GetActor(r)
+	userID, err := s.services.authzSvc.GetActor(r)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

@@ -1,11 +1,8 @@
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+// app/components/gm/sidebar/flex.gjs
 
 import Component from '@glimmer/component';
 
-// https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
-// Requires a TailwindCSS Plus license.
-
-import NavList from 'frontend/components/sidebar/nav-list.gjs';
+import NavList from './nav-list.gjs';
 
 export default class SidebarFlex extends Component {
   <template>
@@ -18,7 +15,7 @@ export default class SidebarFlex extends Component {
           <img src="/img/logo-dark.svg" alt="OttoApp" class="h-8 w-auto not-dark:hidden" />
         </div>
         <nav class="flex flex-1 flex-col">
-          <NavList @adminShell={{this.args.adminShell}} @gmShell={{this.args.gmShell}} @userShell={{this.args.userShell}} />
+          <NavList />
         </nav>
       </div>
     </div>

@@ -15,9 +15,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/documents"
 	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
@@ -98,13 +99,14 @@ func cmdGameImport() *cobra.Command {
 				_ = db.Close()
 			}()
 
-			authSvc := auth.New(db)
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
 			tzSvc, err := iana.New(db)
 			if err != nil {
 				return errors.Join(fmt.Errorf("import: new tz service"), err)
 			}
-			usersSvc := users.New(db, authSvc, tzSvc)
-			gameSvc := games.New(db, authSvc, usersSvc)
+			usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
+			gameSvc := games.New(db, authnSvc, authzSvc, usersSvc)
 			err = gameSvc.Import(&data)
 			if err != nil {
 				return errors.Join(fmt.Errorf("import: game"), err)
@@ -203,25 +205,26 @@ var cmdGameUpload = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db)
+		authzSvc := authz.New(db)
+		authnSvc := authn.New(db, authzSvc)
 		tzSvc, err := iana.New(db)
-		usersSvc := users.New(db, authSvc, tzSvc)
-		docSvc := documents.New(db, authSvc, usersSvc)
-		gamesSvc := games.New(db, authSvc, usersSvc)
+		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
+		docSvc := documents.New(db, authzSvc, usersSvc)
+		gamesSvc := games.New(db, authnSvc, authzSvc, usersSvc)
 
-		actor := &domains.Actor{ID: auth.SysopId, Sysop: true}
+		actor := &domains.Actor{ID: authz.SysopId, Sysop: true}
 		var clan *domains.Clan
 		if clanSet {
-			clan, err = gamesSvc.GetClan(gameId, clanNo)
+			clan, err = gamesSvc.GetClan(domains.GameID(gameId), clanNo)
 			if err != nil {
 				return errors.Join(fmt.Errorf("gameId %q: clanNo %d: invalid", gameId, clanNo), err)
 			}
 		} else {
-			owner, err := authSvc.GetActorByHandle(handle)
+			owner, err := authzSvc.GetActorByHandle(handle)
 			if err != nil {
 				return errors.Join(fmt.Errorf("handle %q: invalid", handle), err)
 			}
-			clan, err = gamesSvc.GetClanForUser(gameId, owner.ID)
+			clan, err = gamesSvc.GetClanForUser(domains.GameID(gameId), owner.ID)
 			if err != nil {
 				return errors.Join(fmt.Errorf("handle %q: invalid", handle), err)
 			}

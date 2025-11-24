@@ -2,6 +2,12 @@
 
 package domains
 
+type GameID string // something like 0300, 0301
+
+const (
+	InvalidGameID GameID = ""
+)
+
 type TurnNo string // YYYY-MM
 
 type Clan struct {

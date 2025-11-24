@@ -1,0 +1,16 @@
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+
+package office
+
+type Error string
+
+func (e Error) Error() string {
+	return string(e)
+}
+
+const (
+	ErrBadInput                = Error("bad input")
+	ErrNotAWordDocument        = Error("not a word document")
+	ErrorUncompressFailed      = Error("uncompress failed")
+	ErrWordXmlDocumentNotFound = Error("word/document.xml not found")
+)

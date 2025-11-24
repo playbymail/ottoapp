@@ -15,31 +15,39 @@ import (
 	"strings"
 )
 
+type WordDocument struct {
+	Text []byte
+}
+
 // Parse a reader that's loaded a .docx file. Returns the body text with
 // whitespace preserved from <w:t xml:space="preserve"> plus tabs and
 // line breaks. Injects a line-feed at the end of every paragraph.
-func Parse(r *bytes.Reader) ([]byte, error) {
+func Parse(r *bytes.Reader) (*WordDocument, error) {
 	zr, err := zip.NewReader(r, r.Size())
 	if err != nil {
-		return nil, fmt.Errorf("open zip: %w", err)
+		return nil, errors.Join(ErrNotAWordDocument, ErrorUncompressFailed, err)
 	}
 	for _, file := range zr.File {
 		if file.Name == "word/document.xml" {
 			rc, err := file.Open()
 			if err != nil {
-				return nil, fmt.Errorf("open document.xml: %w", err)
+				return nil, errors.Join(ErrBadInput, err)
 			}
 			defer rc.Close()
-			return parseWordXML(rc)
+			text, err := parseWordXML(rc)
+			if err != nil {
+				return nil, errors.Join(ErrBadInput, err)
+			}
+			return &WordDocument{Text: text}, nil
 		}
 	}
-	return nil, errors.New("word/document.xml not found")
+	return nil, errors.Join(ErrNotAWordDocument, ErrWordXmlDocumentNotFound)
 }
 
 // ParsePath is a helper function. It opens and parses a .docx file. Returns
 // the body text with whitespace preserved from <w:t xml:space="preserve">
 // plus tabs and line breaks.  Injects a line-feed at the end of every paragraph.
-func ParsePath(path string) ([]byte, error) {
+func ParsePath(path string) (*WordDocument, error) {
 	zr, err := zip.OpenReader(path)
 	if err != nil {
 		return nil, fmt.Errorf("open docx: %w", err)
@@ -52,27 +60,11 @@ func ParsePath(path string) ([]byte, error) {
 				return nil, fmt.Errorf("open document.xml: %w", err)
 			}
 			defer rc.Close()
-			return parseWordXML(rc)
-		}
-	}
-	return nil, errors.New("word/document.xml not found")
-}
-
-// ParseBufferPreserveWhitespace from a reader that's loaded a .docx file and returns the body text
-// with whitespace preserved from <w:t xml:space="preserve"> plus tabs and line breaks.
-func ParseBufferPreserveWhitespace(r *bytes.Reader) ([]byte, error) {
-	zr, err := zip.NewReader(r, r.Size())
-	if err != nil {
-		return nil, fmt.Errorf("open zip: %w", err)
-	}
-	for _, file := range zr.File {
-		if file.Name == "word/document.xml" {
-			rc, err := file.Open()
+			text, err := parseWordXML(rc)
 			if err != nil {
-				return nil, fmt.Errorf("open document.xml: %w", err)
+				return nil, err
 			}
-			defer rc.Close()
-			return parseWordXML(rc)
+			return &WordDocument{Text: text}, nil
 		}
 	}
 	return nil, errors.New("word/document.xml not found")

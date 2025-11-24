@@ -18,8 +18,9 @@ import (
 
 type Actor struct {
 	ID ID // the numeric user_id from the DB
-	// one or more roles: admin, sysop, service, player
+	// one or more roles: admin, gm, sysop, service, player
 	Admin   bool
+	GM      bool
 	Service bool
 	Sysop   bool
 	User    bool
@@ -27,6 +28,7 @@ type Actor struct {
 
 func (a *Actor) IsValid() bool   { return a != nil && a.ID != InvalidID }
 func (a *Actor) IsAdmin() bool   { return a != nil && a.Admin }
+func (a *Actor) IsGM() bool      { return a != nil && a.GM }
 func (a *Actor) IsService() bool { return a != nil && a.Service }
 func (a *Actor) IsSysop() bool   { return a != nil && a.Sysop }
 func (a *Actor) IsUser() bool    { return a != nil && a.User }
@@ -35,6 +37,7 @@ type Role string
 
 const (
 	RoleAdmin   Role = "admin"
+	RoleGM      Role = "gm"
 	RoleService Role = "service"
 	RoleSysop   Role = "sysop"
 	RoleUser    Role = "user"
@@ -146,7 +149,7 @@ func ValidatePassword(plainTextPassword string) error {
 }
 
 func ValidateRole(role string) error {
-	if !containsWord(role, "active", "sysop", "admin", "player", "guest", "user", "tn3", "tn3.1") {
+	if !containsWord(role, "active", "sysop", "admin", "gm", "player", "guest", "user", "tn3", "tn3.1") {
 		return ErrBadInput
 	}
 	return nil

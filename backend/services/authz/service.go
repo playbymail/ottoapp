@@ -1,20 +1,21 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-// Package auth implements an authentication / authorization service.
-package auth
+// Package authz implements an authorization service.
+package authz
 
 import (
+	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
-	"golang.org/x/crypto/bcrypt"
 )
 
-// Service provides authentication and authorization operations.
+// Service provides authorization operations.
 type Service struct {
 	db *sqlite.DB
 }
@@ -23,49 +24,11 @@ func New(db *sqlite.DB) *Service {
 	return &Service{db: db}
 }
 
-// AuthenticateUser verifies the user's credentials (username + password).
-func (s *Service) AuthenticateUser(userName, plainTextSecret string) (domains.ID, error) {
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	user, err := q.GetUserByUsername(ctx, userName)
-	if err != nil {
-		// mitigate user-enum: compare against dummy
-		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(plainTextSecret))
-		return domains.InvalidID, domains.ErrInvalidCredentials
-	}
-
-	return s.verifyPasswordByID(user.UserID, plainTextSecret)
-}
-
-func (s *Service) GetUserRoles(userID domains.ID) (domains.Roles, error) {
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	userRoles, err := q.GetUserRoles(ctx, int64(userID))
-	if err != nil {
-		return nil, err
-	}
-	roles := map[domains.Role]bool{}
-	for _, role := range userRoles {
-		roles[domains.Role(role)] = true
-	}
-	return roles, nil
-}
-
-// verifyPasswordByID fetches the user's hash and compares it.
-func (s *Service) verifyPasswordByID(userID int64, plain string) (domains.ID, error) {
-	panic("!consolidated")
-}
-
-// hashPassword hashes the password with a reasonable cost.
-func hashPassword(plainTextPassword string) (string, error) {
-	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(plainTextPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hashedPasswordBytes), nil
-}
+const (
+	// SysopId is asserted in the database initialization scripts
+	// and initial database connection.
+	SysopId = domains.ID(1)
+)
 
 // AssignRole assigns a role to a user.
 func (s *Service) AssignRole(userID domains.ID, roleID string) error {
@@ -82,21 +45,6 @@ func (s *Service) AssignRole(userID domains.ID, roleID string) error {
 		RoleID:    roleID,
 		CreatedAt: now.Unix(),
 		UpdatedAt: now.Unix(),
-	})
-}
-
-// RemoveRole removes a role from a user.
-func (s *Service) RemoveRole(userID domains.ID, roleID string) error {
-	if err := domains.ValidateRole(roleID); err != nil {
-		return errors.Join(domains.ErrInvalidRole, err)
-	}
-
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	return q.RemoveUserRole(ctx, sqlc.RemoveUserRoleParams{
-		UserID: int64(userID),
-		RoleID: roleID,
 	})
 }
 
@@ -193,4 +141,79 @@ func (s *Service) GetActorById(actorId domains.ID) (*domains.Actor, error) {
 		}
 	}
 	return &actor, nil
+}
+
+func (s *Service) GetSessionData(r *http.Request) (*domains.SessionView, error) {
+	//log.Printf("[authz] GetSessionData\n")
+	sessionCookie, err := r.Cookie("sid")
+	if err != nil || sessionCookie.Value == "" {
+		return &domains.SessionView{}, ErrMissingSessionCookie
+	}
+	var view domains.SessionView
+	rows, err := s.db.Queries().GetSessionData(s.db.Context(), sqlc.GetSessionDataParams{
+		SessionID: sessionCookie.Value,
+		ExpiresAt: time.Now().UTC().Unix(),
+	})
+	//log.Printf("[authz] GetSessionData: %d: %v\n", len(rows), err)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[authz] GetSessionData: no data found\n")
+			return &domains.SessionView{}, ErrNoSessionData
+		}
+		log.Printf("[authz] GetSessionData: %v\n", err)
+		return &domains.SessionView{}, errors.Join(domains.ErrDatabaseError, err)
+	} else if len(rows) == 0 {
+		log.Printf("[authz] GetSessionData: no data found\n")
+		return &domains.SessionView{}, ErrNoSessionData
+	}
+	var isAdmin, isGM, isUser bool
+	for _, row := range rows {
+		view.CSRF = row.Csrf
+		view.UserID = domains.ID(row.UserID)
+		view.Handle = row.Handle
+		switch row.RoleID {
+		case "admin":
+			isAdmin = true
+		case "gm":
+			isGM = true
+		case "user":
+			isUser = true
+		}
+	}
+	view.Roles.AccessAdminRoutes = s.CanAccessAdminRoutes(isAdmin)
+	view.Roles.AccessGMRoutes = s.CanAccessGMRoutes(isAdmin, isGM)
+	view.Roles.AccessUserRoutes = s.CanAccessUserRoutes(isAdmin, isUser)
+	view.Roles.EditHandle = isAdmin
+	//log.Printf("[authz] GetSessionData: %+v\n", view)
+	return &view, nil
+}
+
+func (s *Service) GetUserRoles(userID domains.ID) (domains.Roles, error) {
+	q := s.db.Queries()
+	ctx := s.db.Context()
+
+	userRoles, err := q.GetUserRoles(ctx, int64(userID))
+	if err != nil {
+		return nil, err
+	}
+	roles := map[domains.Role]bool{}
+	for _, role := range userRoles {
+		roles[domains.Role(role)] = true
+	}
+	return roles, nil
+}
+
+// RemoveRole removes a role from a user.
+func (s *Service) RemoveRole(userID domains.ID, roleID string) error {
+	if err := domains.ValidateRole(roleID); err != nil {
+		return errors.Join(domains.ErrInvalidRole, err)
+	}
+
+	q := s.db.Queries()
+	ctx := s.db.Context()
+
+	return q.RemoveUserRole(ctx, sqlc.RemoveUserRoleParams{
+		UserID: int64(userID),
+		RoleID: roleID,
+	})
 }

@@ -13,22 +13,20 @@ func Routes(s *Server) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","msg":"pong"}`))
 	})
-	mux.HandleFunc("POST /api/login", s.services.sessionsSvc.HandlePostLogin)
-	mux.HandleFunc("GET /api/session", s.services.sessionsSvc.HandleGetSession)
+	mux.HandleFunc("POST /api/login", HandlePostLogin(s.services.authnSvc, s.services.authzSvc, s.services.sessionsSvc, s.services.usersSvc))
+	mux.HandleFunc("GET /api/session", HandleGetSession(s.services.authzSvc, s.services.sessionsSvc))
+	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
 	mux.HandleFunc("GET /api/timezones", s.services.tzSvc.HandleGetTimezones())
 	mux.HandleFunc("GET /api/versions", s.getAllVersions())
 	mux.HandleFunc("GET /api/versions/{id}", s.getVersions())
-	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
 
 	// Protected routes (authentication required)
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
-	protected.Handle("GET /api/documents", GetDocumentList(s.services.authSvc, s.services.documentsSvc))
-	protected.Handle("GET /api/documents/{id}", GetDocument(s.services.authSvc, s.services.documentsSvc))
-	protected.Handle("GET /api/documents/{id}/contents", GetDocumentContents(s.services.authSvc, s.services.documentsSvc))
-	protected.Handle("GET /api/clan-documents", GetClanDocumentList())
-	protected.Handle("GET /api/clan-documents/{id}", GetClanDocument())
-	protected.Handle("DELETE /api/clan-documents/{id}", DeleteClanDocument())
+	protected.Handle("GET /api/documents", GetDocumentList(s.services.authzSvc, s.services.documentsSvc))
+	protected.Handle("GET /api/documents/{id}", GetDocument(s.services.authzSvc, s.services.documentsSvc))
+	protected.Handle("GET /api/documents/{id}/contents", GetDocumentContents(s.services.authzSvc, s.services.documentsSvc))
+	protected.Handle("POST /api/games/{id}/turn-report-files", PostGamesTurnReportFiles(s.services.authzSvc, s.services.documentsSvc, s.services.gamesSvc))
 	protected.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
 	protected.HandleFunc("GET /api/my/profile", s.services.usersSvc.HandleGetMyProfile)
 	protected.HandleFunc("GET /api/profile", s.handleGetProfile)
@@ -54,7 +52,8 @@ func Routes(s *Server) http.Handler {
 	}
 
 	// Add session middleware (runs on all routes)
-	h = s.sessionMiddleware(h)
+	//h = s.sessionMiddleware(h)
+	h = s.services.sessionsSvc.Middleware(h)
 
 	//// Add logging middleware
 	//if s.logRoutes {

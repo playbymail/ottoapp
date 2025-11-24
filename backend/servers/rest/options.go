@@ -8,15 +8,15 @@ import (
 	"log"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
+	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/sessions"
 )
 
 type Option func(*Server) error
 
-func WithAuthService(authSvc *auth.Service) Option {
+func WithAuthService(authnSvc *authn.Service) Option {
 	return func(s *Server) error {
-		s.services.authSvc = authSvc
+		s.services.authnSvc = authnSvc
 		return nil
 	}
 }

@@ -3,6 +3,8 @@
 package sessions
 
 import (
+	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -15,8 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/restapi"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 	"github.com/playbymail/ottoapp/backend/users"
@@ -30,13 +34,14 @@ import (
 // * https://themsaid.com/csrf-protection-go-web-applications
 type Service struct {
 	db         *sqlite.DB
-	authSvc    *auth.Service
+	authnSvc   *authn.Service
+	authzSvc   *authz.Service
 	usersSvc   *users.Service
 	ttl        time.Duration
 	gcInterval time.Duration
 }
 
-func New(db *sqlite.DB, authSvc *auth.Service, usersSvc *users.Service, ttl time.Duration, gcInterval time.Duration) (*Service, error) {
+func New(db *sqlite.DB, authnSvc *authn.Service, authzSvc *authz.Service, usersSvc *users.Service, ttl time.Duration, gcInterval time.Duration) (*Service, error) {
 	if ttl < 1*time.Minute {
 		return nil, domains.ErrInvalidTtl
 	} else if gcInterval < 1*time.Minute {
@@ -45,7 +50,8 @@ func New(db *sqlite.DB, authSvc *auth.Service, usersSvc *users.Service, ttl time
 
 	s := &Service{
 		db:         db,
-		authSvc:    authSvc,
+		authnSvc:   authnSvc,
+		authzSvc:   authzSvc,
 		usersSvc:   usersSvc,
 		ttl:        ttl,
 		gcInterval: gcInterval,
@@ -146,9 +152,8 @@ func (s *Service) GetCurrentUserID(r *http.Request) (domains.ID, error) {
 }
 
 func (s *Service) HandleGetSession(w http.ResponseWriter, r *http.Request) {
-	//log.Printf("%s %s: entered\n", r.Method, r.URL.Path)
 	if r.Method != http.MethodGet {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		restapi.WriteJsonApiError(w, http.StatusMethodNotAllowed, "method_not_allowed", fmt.Sprintf("%s not allowed", r.Method), "Only GET is allowed.")
 		return
 	}
 
@@ -165,7 +170,8 @@ func (s *Service) HandleGetSession(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(toPayload(sess.Csrf, &sess.User))
 }
 
-// HandlePostLogin creates a session and sets the cookie.
+// HandlePostLogin is deprecated.
+// Create a session and set the cookie.
 func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s: entered", r.Method, r.URL.Path)
 	// always invalidate any old cookies
@@ -187,14 +193,14 @@ func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
 
 	// ensure that we spend at least 500ms if the authentication path fails
 	timer := time.NewTimer(500 * time.Millisecond)
-	actor, err := s.authSvc.GetActorByEmail(body.Email)
+	actor, err := s.authzSvc.GetActorByEmail(body.Email)
 	if err != nil {
 		log.Printf("%s %s: checkUser: getActor(%q): %v\n", r.Method, r.URL.Path, body.Email, err)
 		<-timer.C
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	err = s.authSvc.AuthenticateCredentials(actor, body.Password)
+	_, err = s.authnSvc.AuthenticateActorCredentials(actor, body.Password)
 	if err != nil {
 		log.Printf("%s %s: checkUser: auth(%d, %q): %v\n", r.Method, r.URL.Path, actor.ID, body.Password, err)
 		<-timer.C
@@ -212,7 +218,7 @@ func (s *Service) HandlePostLogin(w http.ResponseWriter, r *http.Request) {
 	// don't need timer anymore
 	timer.Stop()
 
-	user.Roles, err = s.authSvc.GetUserRoles(user.ID)
+	user.Roles, err = s.authzSvc.GetUserRoles(user.ID)
 	if err != nil {
 		//log.Printf("%s %s: checkUser: %v\n", r.Method, r.URL.Path, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -274,6 +280,90 @@ func (s *Service) HandlePostLogout(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleCreateSession creates a session and sets the cookie.
+func (s *Service) HandleCreateSession(w http.ResponseWriter, r *http.Request, user *domains.User_t) {
+	if roles, err := s.authzSvc.GetUserRoles(user.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { // should never happen
+			log.Printf("[sessions] HandleCreateSession(%d) %v\n", user.ID, err)
+			restapi.WriteJsonApiDatabaseError(w)
+			return
+		}
+		log.Printf("[sessions] HandleCreateSession(%d) %v\n", user.ID, err)
+		restapi.WriteJsonApiDatabaseError(w)
+		return
+	} else {
+		user.Roles = roles
+	}
+	//log.Printf("%s %s: user %q: roles %+v: authenticated\n", r.Method, r.URL.Path, user.Username, user.Roles)
+
+	sess, err := s.CreateSession(user, s.ttl)
+	if err != nil {
+		log.Printf("%s %s: user %q: createSession %v\n", r.Method, r.URL.Path, user.Username, err)
+		restapi.WriteJsonApiDatabaseError(w)
+		return
+	}
+
+	// Ember Simple Auth doesn't use the cookie - it's for our session manager
+	http.SetCookie(w, &http.Cookie{
+		Name:     "sid",
+		Value:    string(sess.Id),
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,                 // HTTPS via Caddy (dev & prod)
+		SameSite: http.SameSiteLaxMode, // same-site SPA+API
+		MaxAge:   60 * 60 * 24 * 14,
+	})
+
+	// Ember Simple Auth requires an HTTP 200 response
+	var view = struct {
+		ID       string `jsonapi:"primary,session"` // singular when sending a payload
+		UserName string `jsonapi:"attr,user-name"`
+		Handle   string `jsonapi:"attr,handle"`
+	}{
+		ID:       fmt.Sprintf("%d", user.ID),
+		UserName: user.Username,
+		Handle:   user.Handle,
+	}
+	restapi.WriteJsonApiData(w, http.StatusOK, &view)
+}
+
+func (s *Service) HandleInvalidateSession(w http.ResponseWriter, r *http.Request) {
+	// todo: implement
+	s.DeleteCookie(w, r)
+}
+
+// Middleware injects the authenticated user ID into the request context.
+// It sets InvalidID if no valid session exists.
+func (s *Service) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s: sessions: middleware\n", r.Method, r.URL.Path)
+
+		var userID domains.ID = domains.InvalidID
+
+		// get session from cookie
+		sid, ok := readSID(r)
+		if !ok { // no session cookie
+			// inject an invalid actor
+			ctx := context.WithValue(r.Context(), domains.ContextKeyUserID, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		sess, err := s.ReadSession(sid)
+		if err != nil { // no session or database error
+			log.Printf("%s %s: sessions: middleware: read(%q) %v\n", r.Method, r.URL.Path, sid, err)
+			// inject an invalid actor
+			ctx := context.WithValue(r.Context(), domains.ContextKeyUserID, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		log.Printf("%s %s: sessions: middleware: actor %d\n", r.Method, r.URL.Path, sess.User.ID)
+		ctx := context.WithValue(r.Context(), domains.ContextKeyUserID, sess.User.ID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func (s *Service) ReadSession(sessionId domains.SessionId) (*domains.Session, error) {
 	q := s.db.Queries()
 	ctx := s.db.Context()
@@ -291,7 +381,7 @@ func (s *Service) ReadSession(sessionId domains.SessionId) (*domains.Session, er
 	if err != nil {
 		return nil, errors.Join(domains.ErrNotExists, err)
 	}
-	user.Roles, err = s.authSvc.GetUserRoles(user.ID)
+	user.Roles, err = s.authzSvc.GetUserRoles(user.ID)
 	if err != nil {
 		return nil, domains.ErrNoRolesAssigned
 	}

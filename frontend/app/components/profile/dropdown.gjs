@@ -56,11 +56,7 @@ export default class ProfileDropdown extends Component {
         <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt="" class="size-8 rounded-full bg-gray-50 outline -outline-offset-1 outline-black/5 dark:bg-gray-800 dark:outline-white/10" />
         <span class="hidden lg:flex lg:items-center">
           <span aria-hidden="true" class="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white">
-            {{#if this.session.isAuthenticated}}
-              {{#if this.currentUser}}👋{{this.currentUser.handle}}👋{{else}}👋{{/if}}
-            {{else}}
-              Guest
-            {{/if}}
+            {{#if this.session.isAuthenticated}}{{this.session.getHandle}}{{else}}guest{{/if}}
           </span>
           <svg viewBox="0 0 20 20" fill="currentColor" data-slot="icon" aria-hidden="true" class="ml-2 size-5 text-gray-400 dark:text-gray-500">
             <path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" />
@@ -81,8 +77,6 @@ export default class ProfileDropdown extends Component {
             Sign in
           </LinkTo>
         {{/if}}
-        <a href="/api/cookies/delete"
-           class="block px-3 py-1 text-sm/6 text-gray-900 focus:bg-gray-50 focus:outline-hidden dark:text-white dark:focus:bg-white/5">Nuke cookies</a>
       </el-menu>
     </el-dropdown>
   </template>

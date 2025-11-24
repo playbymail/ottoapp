@@ -68,6 +68,7 @@ insert into roles (role_id, is_active, description, created_at, updated_at)
 VALUES ('active', 1, 'active user role', 0, 0),
        ('sysop', 1, 'sysop role', 0, 0),
        ('admin', 1, 'administrator role', 0, 0),
+       ('gm', 1, 'gm role', 0, 0),
        ('user', 1, 'user role', 0, 0),
        ('player', 1, 'player role', 0, 0),
        ('guest', 1, 'guest / anonymous visitor role', 0, 0),

@@ -1,12 +1,28 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-package auth
+package authz
 
 import (
 	"github.com/playbymail/ottoapp/backend/domains"
 )
 
 // policy helpers return true if the actor is permitted to take an action.
+
+func (s *Service) CanAccessAdminRoutes(isAdmin bool) bool {
+	return isAdmin
+}
+
+func (s *Service) CanAccessGMRoutes(isAdmin, isGM bool) bool {
+	return isAdmin || isGM
+}
+
+func (s *Service) CanAccessUserRoutes(isAdmin, isUser bool) bool {
+	return isAdmin || isUser
+}
+
+func (s *Service) CanEditHandle(isAdmin bool) bool {
+	return isAdmin
+}
 
 func (s *Service) CanAuthenticate(actor *domains.Actor) bool {
 	// Only "user" role principals may authenticate via credentials.
@@ -178,6 +194,21 @@ func (s *Service) CanShutdownServer(actor *domains.Actor) bool {
 	}
 
 	return false
+}
+
+func (s *Service) CanUploadTurnReports(actor *domains.Actor) bool {
+	if actor.IsSysop() {
+		// sysop can always upload turn report documents
+		return true
+	}
+	// from here down, sysop is impossible
+
+	// uploading requires either admin or gm role
+	if !(actor.IsAdmin() || actor.IsGM()) {
+		return false
+	}
+
+	return true
 }
 
 func (s *Service) CanUpdateTargetCredentials(actor, target *domains.Actor) bool {
