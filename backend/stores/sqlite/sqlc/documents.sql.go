@@ -646,13 +646,14 @@ SELECT c.user_id,
        d.updated_at
 FROM clans AS c,
      clan_documents_vw AS d
-WHERE d.document_id = ?1
-  AND c.user_id = ?2
+WHERE c.user_id = ?1
+  AND c.clan_id = d.clan_id
+  AND d.document_id = ?2
 `
 
 type GetDocumentForUserAuthorizedParams struct {
-	DocumentID int64
 	UserID     int64
+	DocumentID int64
 }
 
 type GetDocumentForUserAuthorizedRow struct {
@@ -674,7 +675,7 @@ type GetDocumentForUserAuthorizedRow struct {
 }
 
 func (q *Queries) GetDocumentForUserAuthorized(ctx context.Context, arg GetDocumentForUserAuthorizedParams) (GetDocumentForUserAuthorizedRow, error) {
-	row := q.db.QueryRowContext(ctx, getDocumentForUserAuthorized, arg.DocumentID, arg.UserID)
+	row := q.db.QueryRowContext(ctx, getDocumentForUserAuthorized, arg.UserID, arg.DocumentID)
 	var i GetDocumentForUserAuthorizedRow
 	err := row.Scan(
 		&i.UserID,

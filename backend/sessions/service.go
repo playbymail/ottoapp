@@ -336,7 +336,7 @@ func (s *Service) HandleInvalidateSession(w http.ResponseWriter, r *http.Request
 // It sets InvalidID if no valid session exists.
 func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s: sessions: middleware\n", r.Method, r.URL.Path)
+		//log.Printf("%s %s: sessions: middleware\n", r.Method, r.URL.Path)
 
 		var userID domains.ID = domains.InvalidID
 
@@ -351,14 +351,14 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 
 		sess, err := s.ReadSession(sid)
 		if err != nil { // no session or database error
-			log.Printf("%s %s: sessions: middleware: read(%q) %v\n", r.Method, r.URL.Path, sid, err)
+			//log.Printf("%s %s: sessions: middleware: read(%q) %v\n", r.Method, r.URL.Path, sid, err)
 			// inject an invalid actor
 			ctx := context.WithValue(r.Context(), domains.ContextKeyUserID, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
-		log.Printf("%s %s: sessions: middleware: actor %d\n", r.Method, r.URL.Path, sess.User.ID)
+		//log.Printf("%s %s: sessions: middleware: actor %d\n", r.Method, r.URL.Path, sess.User.ID)
 		ctx := context.WithValue(r.Context(), domains.ContextKeyUserID, sess.User.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

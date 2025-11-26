@@ -167,6 +167,7 @@ func (s *Service) DeleteDocument(actor *domains.Actor, documentId domains.ID) er
 
 // GetDocument returns nil, nil if no data found
 func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*DocumentView, error) {
+	//log.Printf("[documents] GetDocument(%d, %d)\n", actor.ID, documentId)
 	q := s.db.Queries()
 	ctx := s.db.Context()
 
@@ -174,6 +175,7 @@ func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*Doc
 		DocumentID: int64(documentId),
 		UserID:     int64(actor.ID),
 	})
+	//log.Printf("[documents] GetDocumentForUserAuthorized(%d, %d) %v\n", actor.ID, documentId, err)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil

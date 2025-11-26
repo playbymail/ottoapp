@@ -22,7 +22,7 @@ import (
 // HandleGetSession returns the current session
 func HandleGetSession(authzSvc *authz.Service, sessionsSvc *sessions.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s: entered", r.Method, r.URL.Path)
+		//log.Printf("%s %s: entered", r.Method, r.URL.Path)
 		if r.Method != http.MethodGet {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return

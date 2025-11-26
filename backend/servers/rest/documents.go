@@ -3,7 +3,6 @@
 package rest
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -53,8 +52,8 @@ func GetDocument(authzSvc *authz.Service, documentsSvc *documents.Service) http.
 				fmt.Sprintf("Document with ID %d could not be found.", docId))
 			return
 		}
-		b, _ := json.MarshalIndent(view, "", "  ")
-		log.Printf("json %s\n", string(b))
+		//b, _ := json.MarshalIndent(view, "", "  ")
+		//log.Printf("json %s\n", string(b))
 		restapi.WriteJsonApiData(w, http.StatusOK, view)
 	}
 }

@@ -139,8 +139,9 @@ SELECT c.user_id,
        d.updated_at
 FROM clans AS c,
      clan_documents_vw AS d
-WHERE d.document_id = :document_id
-  AND c.user_id = :user_id;
+WHERE c.user_id = :user_id
+  AND c.clan_id = d.clan_id
+  AND d.document_id = :document_id;
 
 
 -- name: GetAllDocumentsForClan :many
