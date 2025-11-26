@@ -13,10 +13,28 @@ type Docx struct {
 	Text []byte
 }
 
-func ParseDocx(r *bytes.Reader) (*Docx, error) {
+func ParseDocx(r *bytes.Reader, trimLeading, trimTrailing bool) (*Docx, error) {
 	doc, err := office.Parse(r)
-	if err != nil {
+	if err != nil || doc == nil {
 		return nil, err
+	}
+	if trimLeading || trimTrailing {
+		const asciiSpace = " \t\n\v\f\r"
+		lines := bytes.Split(doc.Text, []byte{'\n'})
+		if trimLeading && trimTrailing {
+			for i, line := range lines {
+				lines[i] = bytes.TrimSpace(line)
+			}
+		} else if trimLeading {
+			for i, line := range lines {
+				lines[i] = bytes.TrimLeft(line, asciiSpace)
+			}
+		} else {
+			for i, line := range lines {
+				lines[i] = bytes.TrimRight(line, asciiSpace)
+			}
+		}
+		doc.Text = bytes.Join(lines, []byte{'\n'})
 	}
 	return &Docx{Text: doc.Text}, nil
 }

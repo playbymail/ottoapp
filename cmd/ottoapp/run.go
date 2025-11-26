@@ -271,7 +271,11 @@ func cmdRunParse() *cobra.Command {
 
 func cmdRunParseReportFile() *cobra.Command {
 	var outputPath string
+	trimLeading := true
+	trimTrailing := true
 	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().BoolVar(&trimLeading, "trim-leading", trimLeading, "trim leading spaces")
+		cmd.Flags().BoolVar(&trimTrailing, "trim-trailing", trimTrailing, "trim trailing spaces")
 		cmd.Flags().StringVar(&outputPath, "output", outputPath, "path to save parsed report to")
 		return nil
 	}
@@ -290,7 +294,7 @@ func cmdRunParseReportFile() *cobra.Command {
 			var docx *parsers.Docx
 			if input, err := os.ReadFile(report); err != nil {
 				log.Fatal(err)
-			} else if docx, err = parsers.ParseDocx(bytes.NewReader(input)); err != nil {
+			} else if docx, err = parsers.ParseDocx(bytes.NewReader(input), trimLeading, trimTrailing); err != nil {
 				log.Fatal(err)
 			}
 

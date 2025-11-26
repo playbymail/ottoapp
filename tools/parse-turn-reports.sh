@@ -93,7 +93,7 @@ done
   exit 2
 }
 
-# upload the turn reports
+# parse the turn reports and save the extracts
 jq -r 'to_entries | sort_by(.key) | .[] | "\(.key) \(.value)"' clans.json |
 while read -r clanNo handle; do
   for turn in 0899-12; do

@@ -24,7 +24,7 @@ import (
 // PostGamesTurnReportFiles creates a new turn report document for the clan specified
 // in the document. If the document already exists, overwrite it.
 //
-// The GameID is extracted from th route path and the ClanNo from the document. These
+// The GameID is extracted from the route path and the ClanNo from the document. These
 // are used to create the document - don't use this handler if you want to upload a
 // document for a different user!
 //
@@ -67,7 +67,7 @@ func PostGamesTurnReportFiles(authzSvc *authz.Service, documentsSvc *documents.S
 			return
 		}
 
-		docx, err := parsers.ParseDocx(bytes.NewReader(data))
+		docx, err := parsers.ParseDocx(bytes.NewReader(data), true, true)
 		if err != nil {
 			log.Printf("%s %s: game %q: ParseDocx %v\n", r.Method, r.URL.Path, gameId, err)
 			if errors.Is(err, office.ErrNotAWordDocument) {

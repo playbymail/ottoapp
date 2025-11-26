@@ -30,7 +30,7 @@ var cmdReportExtract = &cobra.Command{
 		var docx *parsers.Docx
 		if input, err := os.ReadFile(path); err != nil {
 			log.Fatal(err)
-		} else if docx, err = parsers.ParseDocx(bytes.NewReader(input)); err != nil {
+		} else if docx, err = parsers.ParseDocx(bytes.NewReader(input), false, false); err != nil {
 			log.Fatal(err)
 		}
 
@@ -69,7 +69,7 @@ var cmdReportParse = &cobra.Command{
 			}
 			fmt.Printf("%s\n", string(p))
 		} else {
-			docx, err := parsers.ParseDocx(bytes.NewReader(input))
+			docx, err := parsers.ParseDocx(bytes.NewReader(input), true, true)
 			if err != nil {
 				return errors.Join(fmt.Errorf("parser: parse file"), err)
 			}
