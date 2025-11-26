@@ -1,18 +1,9 @@
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+// app/templates/user.gjs
 
-import Sidebar from 'frontend/components/sidebar';
-import StickyHeader from 'frontend/components/sticky-header';
+import Shell from 'frontend/components/user/shell';
 
 <template>
-  <Sidebar />
-
-  <div class="lg:pl-72">
-    <StickyHeader />
-
-    <main class="py-10">
-      <div class="px-4 sm:px-6 lg:px-8">
-        {{outlet}}
-      </div>
-    </main>
-  </div>
+  <Shell>
+    {{outlet}}
+  </Shell>
 </template>

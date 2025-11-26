@@ -1,9 +1,6 @@
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+// app/components/user/sticky-header.gjs
 
 import Component from '@glimmer/component';
-
-// https://tailwindcss.com/plus/ui-blocks/application-ui/application-shells/sidebar#sidebar-with-header
-// Requires a TailwindCSS Plus license.
 
 import ProfileDropdown from 'frontend/components/profile/dropdown';
 

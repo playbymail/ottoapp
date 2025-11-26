@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/mdhender/phrases/v2"
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 )
 
@@ -106,7 +106,7 @@ func LoadGameData(path string) (*ImportFile, error) {
 
 // Import expects to run from the command line, so log errors.
 func (s *Service) Import(data *ImportFile) error {
-	actor := &domains.Actor{ID: auth.SysopId, Sysop: true}
+	actor := &domains.Actor{ID: authz.SysopId, Sysop: true}
 
 	// json import won't update the player handle, so we must make that update
 	for handle, player := range data.Players {
@@ -243,7 +243,7 @@ func (s *Service) Import(data *ImportFile) error {
 
 		// create or update the player's password
 		//log.Printf(" info: player %q: password %q\n", player.Handle, player.Password)
-		err = s.authSvc.UpdateCredentials(actor, player.actor, "", player.Password)
+		_, err = s.authnSvc.UpdateCredentials(actor, player.actor, "", player.Password)
 		if err != nil {
 			log.Printf("error: player %q: password %q: upsert %v\n", player.Handle, player.Password, err)
 			return err
@@ -255,7 +255,7 @@ func (s *Service) Import(data *ImportFile) error {
 		// create or update the player's roles
 		for _, role := range player.Roles {
 			// the assign is implemented as an "upsert."
-			err = s.authSvc.AssignRole(user.ID, role)
+			err = s.authzSvc.AssignRole(user.ID, role)
 			if err != nil {
 				log.Printf("error: player %q: role %q: upsert %v\n", player.Handle, role, err)
 				return err

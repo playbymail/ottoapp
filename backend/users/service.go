@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 )
@@ -26,16 +27,18 @@ type SessionService interface {
 // Service provides user operations.
 type Service struct {
 	db          *sqlite.DB
-	authSvc     *auth.Service
+	authnSvc    *authn.Service
+	authzSvc    *authz.Service
 	tzSvc       *iana.Service
 	sessionsSvc SessionService
 }
 
-func New(db *sqlite.DB, authSvc *auth.Service, tzSvc *iana.Service) *Service {
+func New(db *sqlite.DB, authnSvc *authn.Service, authzSvc *authz.Service, tzSvc *iana.Service) *Service {
 	return &Service{
-		db:      db,
-		authSvc: authSvc,
-		tzSvc:   tzSvc,
+		db:       db,
+		authnSvc: authnSvc,
+		authzSvc: authzSvc,
+		tzSvc:    tzSvc,
 	}
 }
 

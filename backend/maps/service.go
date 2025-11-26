@@ -7,24 +7,24 @@ import (
 	"os"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/services/authn"
 )
 
 // Service provides authentication and authorization operations.
 type Service struct {
-	authSvc *auth.Service
-	path    string // path to root of data
+	authnSvc *authn.Service
+	path     string // path to root of data
 }
 
-func New(authSvc *auth.Service, path string) (*Service, error) {
+func New(authnSvc *authn.Service, path string) (*Service, error) {
 	// verify that path is a valid location
 	if sb, err := os.Stat(path); err != nil {
 		return nil, errors.Join(domains.ErrInvalidPath, err)
 	} else if !sb.IsDir() {
 		return nil, errors.Join(domains.ErrInvalidPath, domains.ErrNotDirectory)
 	}
-	return &Service{authSvc: authSvc, path: path}, nil
+	return &Service{authnSvc: authnSvc, path: path}, nil
 }
 
 // MapView is the JSON:API view for a map

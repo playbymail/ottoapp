@@ -10,7 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/parser/office"
+	"github.com/playbymail/ottoapp/backend/parsers"
+	"github.com/playbymail/ottoapp/backend/parsers/office"
 	"github.com/spf13/cobra"
 )
 
@@ -25,19 +26,23 @@ var cmdReportExtract = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		input, err := office.ParsePath(path)
-		if err != nil {
-			log.Fatalf("error: %v\n", err)
+
+		var docx *parsers.Docx
+		if input, err := os.ReadFile(path); err != nil {
+			log.Fatal(err)
+		} else if docx, err = parsers.ParseDocx(bytes.NewReader(input)); err != nil {
+			log.Fatal(err)
 		}
+
 		output := &bytes.Buffer{}
-		for _, line := range bytes.Split(input, []byte{'\n'}) {
+		for _, line := range bytes.Split(docx.Text, []byte{'\n'}) {
 			output.Write(bytes.TrimSpace(line))
 			output.WriteByte('\n')
 		}
 		if err := os.WriteFile(rptPath, output.Bytes(), 0o644); err != nil {
 			log.Fatalf("error: %v\n", err)
 		}
-		// log.Printf("report: parse %q: completed in %v\n", path, time.Since(startedAt))
+
 		return nil
 	},
 }
@@ -54,16 +59,23 @@ var cmdReportParse = &cobra.Command{
 			return err
 		}
 		path := args[0]
-		var p []byte
-		if toDocXmlOnly {
-			p, err = office.DocXMLPath(path)
+
+		if input, err := os.ReadFile(path); err != nil {
+			log.Fatal(err)
+		} else if toDocXmlOnly {
+			p, err := office.DocXMLPath(path)
+			if err != nil {
+				return errors.Join(fmt.Errorf("parser: parse file"), err)
+			}
+			fmt.Printf("%s\n", string(p))
 		} else {
-			p, err = office.ParsePath(path)
+			docx, err := parsers.ParseDocx(bytes.NewReader(input))
+			if err != nil {
+				return errors.Join(fmt.Errorf("parser: parse file"), err)
+			}
+			fmt.Printf("%s\n", string(docx.Text))
 		}
-		if err != nil {
-			return errors.Join(fmt.Errorf("parser: parse file"), err)
-		}
-		fmt.Printf("%s\n", string(p))
+
 		fmt.Printf("report: parse %q: completed in %v\n", path, time.Since(startedAt))
 		return nil
 	},

@@ -15,8 +15,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
 	"github.com/playbymail/ottoapp/backend/users"
@@ -25,12 +25,12 @@ import (
 // Service provides document management operations.
 type Service struct {
 	db       *sqlite.DB
-	authSvc  *auth.Service
+	authzSvc *authz.Service
 	usersSvc *users.Service
 }
 
-func New(db *sqlite.DB, authSvc *auth.Service, usersSvc *users.Service) *Service {
-	return &Service{db: db, authSvc: authSvc, usersSvc: usersSvc}
+func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service) *Service {
+	return &Service{db: db, authzSvc: authzSvc, usersSvc: usersSvc}
 }
 
 // CreateDocument creates a document.
@@ -42,7 +42,7 @@ func (s *Service) CreateDocument(actor *domains.Actor, clan *domains.Clan, doc *
 	if doc.Path != html.EscapeString(doc.Path) {
 		return domains.InvalidID, ErrInvalidPath
 	}
-	if !s.authSvc.CanCreateDocuments(actor) {
+	if !s.authzSvc.CanCreateDocuments(actor) {
 		return domains.InvalidID, domains.ErrNotAuthorized
 	}
 
@@ -389,7 +389,6 @@ func (s *Service) ShareDocumentById(actor, ally *domains.Actor, documentId domai
 	}
 	return nil
 }
-
 func hashContents(b []byte) (string, error) {
 	h := sha256.New()
 	if _, err := h.Write(b); err != nil {
@@ -442,4 +441,22 @@ func (s *Service) loadFromFS(actor *domains.Actor, clan *domains.Clan, path, nam
 // It's used by the file upload handlers.
 func (s *Service) loadFromRequest(r *http.Request) (domains.ID, error) {
 	return domains.InvalidID, domains.ErrNotImplemented
+}
+
+func (s *Service) FindClanByGameAndNumber(gameID string, clanNo int) (*domains.Clan, error) {
+	q := s.db.Queries()
+	ctx := s.db.Context()
+	row, err := q.GetClanByGameClanNo(ctx, sqlc.GetClanByGameClanNoParams{
+		GameID: gameID,
+		ClanNo: int64(clanNo),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &domains.Clan{
+		GameID: row.GameID,
+		UserID: domains.ID(row.UserID),
+		ClanID: domains.ID(row.ClanID),
+		ClanNo: int(row.Clan),
+	}, nil
 }

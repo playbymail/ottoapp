@@ -133,7 +133,7 @@ Startup code (roughly):
 ```go
 import (
     bsqlite "github.com/playbymail/ottoapp/backend/stores/sqlite"
-    "github.com/playbymail/ottoapp/backend/auth"
+    "github.com/playbymail/ottoapp/backend/services/authn"
     "github.com/playbymail/ottoapp/backend/users"
     "github.com/playbymail/ottoapp/backend/documents"
 )
@@ -144,7 +144,7 @@ func main() {
         panic(err)
     }
 
-    authSvc := auth.New(db)         // uses sqlite + domains
+    authnSvc := auth.New(db)         // uses sqlite + domains
     userSvc := users.New(db)        // uses sqlite + domains
     docSvc := documents.New(db)     // uses sqlite + domains
 

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -13,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/parser/office"
+	"github.com/playbymail/ottoapp/backend/parsers"
 	"github.com/playbymail/ottoapp/backend/services/email"
 	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/spf13/cobra"
@@ -285,15 +286,19 @@ func cmdRunParseReportFile() *cobra.Command {
 			if strings.ToLower(filepath.Ext(report)) != ".docx" {
 				return fmt.Errorf("turn report file must be .docx")
 			}
-			output, err := office.ParsePath(report)
-			if err != nil {
-				log.Fatalf("error: %v\n", err)
+
+			var docx *parsers.Docx
+			if input, err := os.ReadFile(report); err != nil {
+				log.Fatal(err)
+			} else if docx, err = parsers.ParseDocx(bytes.NewReader(input)); err != nil {
+				log.Fatal(err)
 			}
+
 			if outputPath == "" {
-				fmt.Println(string(output))
+				fmt.Println(string(docx.Text))
 				return nil
 			}
-			if err = os.WriteFile(outputPath, output, 0o644); err != nil {
+			if err := os.WriteFile(outputPath, docx.Text, 0o644); err != nil {
 				log.Fatalf("error: %v\n", err)
 			}
 			log.Printf("%s: created in %v\n", outputPath, time.Since(startedAt))

@@ -30,6 +30,19 @@ Router.map(function () {
     this.route('park');
   });
 
+  // gm routes (authenticated, requires "gm" role)
+  this.route('gm', function () {
+    this.route('dashboard', { path: '/' });
+    this.route('turn-report-files', function () {
+      this.route('upload');  // /gm/turn-report-files/upload
+      // later: index, history, errors, etc.
+    });
+
+    // future GM-only routes:
+    // this.route('maps');
+    // this.route('ally-data');
+  });
+
   // users routes (authenticated, requires "user" role)
   this.route('user', function () {
     this.route('dashboard', { path: '/' });

@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"github.com/mdhender/phrases/v2"
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/spf13/cobra"
@@ -85,25 +86,26 @@ var cmdUserCreate = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db)
+		authzSvc := authz.New(db)
+		authnSvc := authn.New(db, authzSvc)
 		tzSvc, err := iana.New(db)
-		usersSvc := users.New(db, authSvc, tzSvc)
+		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
 
 		// For the user create command, use userName as the handle
 		user, err := usersSvc.UpsertUser(handle, email, userName, loc)
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q", handle), err)
 		}
-		actor, err := authSvc.GetActorById(user.ID)
+		actor, err := authzSvc.GetActorById(user.ID)
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q", handle), err)
 		}
-		err = authSvc.UpdateCredentials(&domains.Actor{ID: auth.SysopId, Sysop: true}, actor, "", password)
+		_, err = authnSvc.UpdateCredentials(&domains.Actor{ID: authz.SysopId, Sysop: true}, actor, "", password)
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q: secret %q", handle, password), err)
 		}
 		for _, role := range []string{"active", "user"} {
-			err = authSvc.AssignRole(user.ID, role)
+			err = authzSvc.AssignRole(user.ID, role)
 			if err != nil {
 				return errors.Join(fmt.Errorf("user %q: role %q", handle, role), err)
 			}
@@ -135,12 +137,13 @@ var cmdUserUpdate = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db)
+		authzSvc := authz.New(db)
+		authnSvc := authn.New(db, authzSvc)
 		tzSvc, err := iana.New(db)
 		if err != nil {
 			return err
 		}
-		usersSvc := users.New(db, authSvc, tzSvc)
+		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
 
 		handle := strings.ToLower(args[0])
 		user, err := usersSvc.GetUserByHandle(handle)
@@ -195,7 +198,7 @@ var cmdUserUpdate = &cobra.Command{
 			}
 		}
 
-		actor, err := authSvc.GetActorById(user.ID)
+		actor, err := authzSvc.GetActorById(user.ID)
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q", handle), err)
 		}
@@ -209,7 +212,7 @@ var cmdUserUpdate = &cobra.Command{
 		}
 
 		if password != "" {
-			err = authSvc.UpdateCredentials(&domains.Actor{ID: auth.SysopId, Sysop: true}, actor, "", password)
+			_, err = authnSvc.UpdateCredentials(&domains.Actor{ID: authz.SysopId, Sysop: true}, actor, "", password)
 			if err != nil {
 				return fmt.Errorf("user %q: password %q: update %v\n", updatedUser.Handle, password, err)
 			}
@@ -258,12 +261,13 @@ var cmdUserRole = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db)
+		authzSvc := authz.New(db)
+		authnSvc := authn.New(db, authzSvc)
 		tzSvc, err := iana.New(db)
 		if err != nil {
 			return err
 		}
-		usersSvc := users.New(db, authSvc, tzSvc)
+		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
 
 		user, err := usersSvc.GetUserByHandle(handle)
 		if err != nil {
@@ -272,7 +276,7 @@ var cmdUserRole = &cobra.Command{
 
 		// Add roles
 		for _, roleID := range rolesToAdd {
-			err = authSvc.AssignRole(user.ID, roleID)
+			err = authzSvc.AssignRole(user.ID, roleID)
 			if err != nil {
 				log.Printf("user %q: role %q: failed to add: %v", user.Handle, roleID, err)
 			} else {
@@ -282,7 +286,7 @@ var cmdUserRole = &cobra.Command{
 
 		// Remove roles
 		for _, roleID := range rolesToRemove {
-			err = authSvc.RemoveRole(user.ID, roleID)
+			err = authzSvc.RemoveRole(user.ID, roleID)
 			if err != nil {
 				log.Printf("user %q: role %q: failed to remove: %v", user.Handle, roleID, err)
 			} else {

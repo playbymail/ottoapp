@@ -14,10 +14,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/documents"
+	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/playbymail/ottoapp/backend/versions"
@@ -26,8 +28,10 @@ import (
 type Server struct {
 	http.Server
 	services struct {
-		authSvc      *auth.Service
+		authnSvc     *authn.Service
+		authzSvc     *authz.Service
 		documentsSvc *documents.Service
+		gamesSvc     *games.Service
 		sessionsSvc  *sessions.Service
 		tzSvc        *iana.Service
 		usersSvc     *users.Service
@@ -51,7 +55,16 @@ type Server struct {
 	}
 }
 
-func New(authSvc *auth.Service, documentsSvc *documents.Service, sessionsSvc *sessions.Service, tzSvc *iana.Service, usersSvc *users.Service, versionsSvc *versions.Service, options ...Option) (*Server, error) {
+func New(
+	authnSvc *authn.Service,
+	authzSvc *authz.Service,
+	documentsSvc *documents.Service,
+	gamesSvc *games.Service,
+	sessionsSvc *sessions.Service,
+	tzSvc *iana.Service,
+	usersSvc *users.Service,
+	versionsSvc *versions.Service,
+	options ...Option) (*Server, error) {
 	s := &Server{
 		Server: http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -60,8 +73,10 @@ func New(authSvc *auth.Service, documentsSvc *documents.Service, sessionsSvc *se
 	}
 	s.network.scheme, s.network.host, s.network.port = "http", "localhost", "8181"
 	s.debug.debug = true
-	s.services.authSvc = authSvc
+	s.services.authnSvc = authnSvc
+	s.services.authzSvc = authzSvc
 	s.services.documentsSvc = documentsSvc
+	s.services.gamesSvc = gamesSvc
 	s.services.sessionsSvc = sessionsSvc
 	s.services.tzSvc = tzSvc
 	s.services.usersSvc = usersSvc
@@ -77,23 +92,28 @@ func New(authSvc *auth.Service, documentsSvc *documents.Service, sessionsSvc *se
 		}
 	}
 
-	if s.services.authSvc == nil {
-		log.Printf("[rest] authSvc not initialized")
+	if s.services.authnSvc == nil {
+		log.Printf("[rest] authnSvc not initialized")
 		return nil, domains.ErrInvalidArgument
-	}
-	if s.services.sessionsSvc == nil {
+	} else if s.services.authzSvc == nil {
+		log.Printf("[rest] authzSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	} else if s.services.documentsSvc == nil {
+		log.Printf("[rest] documentsSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	} else if s.services.gamesSvc == nil {
+		log.Printf("[rest] gamesSvc not initialized")
+		return nil, domains.ErrInvalidArgument
+	} else if s.services.sessionsSvc == nil {
 		log.Printf("[rest] sessionsSvc not initialized")
 		return nil, domains.ErrInvalidArgument
-	}
-	if s.services.tzSvc == nil {
+	} else if s.services.tzSvc == nil {
 		log.Printf("[rest] tzSvc not initialized")
 		return nil, domains.ErrInvalidArgument
-	}
-	if s.services.usersSvc == nil {
+	} else if s.services.usersSvc == nil {
 		log.Printf("[rest] usersSvc not initialized")
 		return nil, domains.ErrInvalidArgument
-	}
-	if s.services.versionsSvc == nil {
+	} else if s.services.versionsSvc == nil {
 		log.Printf("[rest] versionsSvc not initialized")
 		return nil, domains.ErrInvalidArgument
 	}

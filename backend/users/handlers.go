@@ -20,7 +20,7 @@ import (
 // HandleGetMe returns the current user's profile.
 // For completeness; use 401 when no session, 404 if record missing.
 func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
@@ -46,7 +46,7 @@ func (s *Service) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 // HandleGetMyProfile returns the current user's profile.
 // GET /api/my/profile
 func (s *Service) HandleGetMyProfile(w http.ResponseWriter, r *http.Request) {
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
@@ -72,13 +72,13 @@ func (s *Service) HandleGetMyProfile(w http.ResponseWriter, r *http.Request) {
 // HandleGetUsers returns a list of all non-admin, non-sysop users (admin only)
 // GET /api/users
 func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	if !s.authSvc.CanListUsers(actor) {
+	if !s.authzSvc.CanListUsers(actor) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view user lists.")
 		return
 	}
@@ -96,11 +96,11 @@ func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
 
 	var view []*UserView
 	for _, row := range rows {
-		target, err := s.authSvc.GetActorById(domains.ID(row.UserID))
+		target, err := s.authzSvc.GetActorById(domains.ID(row.UserID))
 		if err != nil || !target.IsValid() {
 			continue
 		}
-		if !s.authSvc.CanViewTarget(actor, target) {
+		if !s.authzSvc.CanViewTarget(actor, target) {
 			// skip targets the actor is not allowed to view
 			continue
 		}
@@ -126,13 +126,13 @@ func (s *Service) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
 // HandleGetUsersWithPagination returns a user list with optional pagination support
 // GET /api/users?page[number]=1&page[size]=25
 func (s *Service) HandleGetUsersWithPagination(w http.ResponseWriter, r *http.Request) {
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	if !s.authSvc.CanListUsers(actor) {
+	if !s.authzSvc.CanListUsers(actor) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view user lists.")
 		return
 	}
@@ -232,19 +232,19 @@ func (s *Service) HandleGetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	target, err := s.authzSvc.GetActorById(domains.ID(targetID))
 	if err != nil || !actor.IsValid() {
 		// don't leak valid or invalid id
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view this user.")
 		return
 	}
 
-	if !s.authSvc.CanViewTarget(actor, target) {
+	if !s.authzSvc.CanViewTarget(actor, target) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view this user.")
 		return
 	}
@@ -274,19 +274,19 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	target, err := s.authzSvc.GetActorById(domains.ID(targetID))
 	if err != nil || !target.IsValid() {
 		// don't leak valid or invalid id
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to view this user.")
 		return
 	}
 
-	if !s.authSvc.CanEditTarget(actor, target) {
+	if !s.authzSvc.CanEditTarget(actor, target) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update this user.")
 		return
 	}
@@ -372,7 +372,7 @@ func (s *Service) HandlePatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if trying to edit username
-	if changedUsername && !s.authSvc.CanEditTargetUsername(actor, target) {
+	if changedUsername && !s.authzSvc.CanEditTargetUsername(actor, target) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user names.")
 		return
 	}
@@ -431,18 +431,18 @@ func (s *Service) HandlePatchPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	target, err := s.authzSvc.GetActorById(domains.ID(targetID))
 	if err != nil || !target.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user passwords.")
 		return
 	}
 
-	err = s.authSvc.UpdateCredentials(actor, target, req.CurrentPassword, req.NewPassword)
+	_, err = s.authnSvc.UpdateCredentials(actor, target, req.CurrentPassword, req.NewPassword)
 	if err != nil {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user passwords.")
 		return
@@ -469,12 +469,12 @@ func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	target, err := s.authzSvc.GetActorById(domains.ID(targetID))
 	if err != nil || !target.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to reset the user's password.")
 		return
@@ -482,7 +482,7 @@ func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request
 
 	// Generate temporary password reset link
 	magicLink := phrases.Generate(6)
-	err = s.authSvc.UpdateCredentials(actor, target, "", magicLink)
+	_, err = s.authnSvc.UpdateCredentials(actor, target, "", magicLink)
 	if err != nil {
 		log.Printf("POST /api/users/%d/reset-password: %d: %d: %v", actor.ID, target.ID, err)
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to reset the user's password.")
@@ -501,13 +501,13 @@ func (s *Service) HandlePostResetPassword(w http.ResponseWriter, r *http.Request
 // HandlePostUser creates a new user (admin only)
 // POST /api/users
 func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
 
-	if !s.authSvc.CanCreateTarget(actor) {
+	if !s.authzSvc.CanCreateTarget(actor) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to create users.")
 		return
 	}
@@ -623,13 +623,13 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
-	target, err := s.authSvc.GetActorById(user.ID)
+	target, err := s.authzSvc.GetActorById(user.ID)
 	if err != nil {
 		log.Printf("POST /api/users: %d: %d: create: %v", actor.ID, user.ID, err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 		return
 	}
-	err = s.authSvc.UpdateCredentials(actor, target, "", password)
+	_, err = s.authnSvc.UpdateCredentials(actor, target, "", password)
 	if err != nil {
 		log.Printf("POST /api/users: %d: %d: create: %v", actor.ID, user.ID, err)
 		restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
@@ -647,14 +647,14 @@ func (s *Service) HandlePostUser(w http.ResponseWriter, r *http.Request) {
 		}
 		if !hasUserOrAdmin {
 			// Remove "user" role and add "guest"
-			s.authSvc.RemoveRole(user.ID, "user")
-			s.authSvc.AssignRole(user.ID, "guest")
+			s.authzSvc.RemoveRole(user.ID, "user")
+			s.authzSvc.AssignRole(user.ID, "guest")
 		}
 
 		// Assign additional roles
 		for _, role := range p.Roles {
 			if role != "active" && role != "user" { // active and user already assigned
-				err = s.authSvc.AssignRole(user.ID, role)
+				err = s.authzSvc.AssignRole(user.ID, role)
 				if err != nil {
 					log.Printf("POST /api/users: assign role %q: %v", role, err)
 				}
@@ -708,25 +708,25 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, err := s.authSvc.GetActor(r)
+	actor, err := s.authzSvc.GetActor(r)
 	if err != nil || !actor.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
 		return
 	}
-	target, err := s.authSvc.GetActorById(domains.ID(targetID))
+	target, err := s.authzSvc.GetActorById(domains.ID(targetID))
 	if err != nil || !target.IsValid() {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to manage this user.")
 		return
 	}
 
-	if !s.authSvc.CanManageTargetRoles(actor, target) {
+	if !s.authzSvc.CanManageTargetRoles(actor, target) {
 		restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to manage this user.")
 		return
 	}
 
 	// Add roles
 	for _, roleID := range req.Add {
-		err = s.authSvc.AssignRole(target.ID, roleID)
+		err = s.authzSvc.AssignRole(target.ID, roleID)
 		if err != nil {
 			log.Printf("PATCH /api/users/%d/role: add %q: %v", target.ID, roleID, err)
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
@@ -736,7 +736,7 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 
 	// Remove roles
 	for _, roleID := range req.Remove {
-		err = s.authSvc.RemoveRole(target.ID, roleID)
+		err = s.authzSvc.RemoveRole(target.ID, roleID)
 		if err != nil {
 			log.Printf("PATCH /api/users/%d/role: remove %q: %v", target.ID, roleID, err)
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
@@ -758,7 +758,7 @@ func (s *Service) HandlePatchUserRole(w http.ResponseWriter, r *http.Request) {
 
 // buildUserView constructs a UserView with permissions based on actor's privileges
 func (s *Service) buildUserView(user *domains.User_t, actor, target *domains.Actor) *UserView {
-	aa := s.authSvc.BuildActorAuth(actor, target)
+	aa := s.authzSvc.BuildActorAuth(actor, target)
 	return &UserView{
 		ID:          fmt.Sprintf("%d", user.ID),
 		Username:    user.Username,

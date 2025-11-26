@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp"
-	"github.com/playbymail/ottoapp/backend/auth"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/servers/rest"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/documents"
 	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/sessions"
@@ -94,18 +95,19 @@ var cmdApiServe = &cobra.Command{
 			_ = db.Close()
 		}()
 
-		authSvc := auth.New(db)
+		authzSvc := authz.New(db)
+		authnSvc := authn.New(db, authzSvc)
 		tzSvc, err := iana.New(db)
 		if err != nil {
 			return errors.Join(fmt.Errorf("iana.new"), err)
 		}
-		usersSvc := users.New(db, authSvc, tzSvc) // uses sqlite + domains
-		documentsSvc := documents.New(db, authSvc, usersSvc)
-		sessionsSvc, err := sessions.New(db, authSvc, usersSvc, 24*time.Hour, 15*time.Minute)
+		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc) // uses sqlite + domains
+		documentsSvc := documents.New(db, authzSvc, usersSvc)
+		sessionsSvc, err := sessions.New(db, authnSvc, authzSvc, usersSvc, 24*time.Hour, 15*time.Minute)
 		if err != nil {
 			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
-		gamesSvc := games.New(db, authSvc, usersSvc)
+		gamesSvc := games.New(db, authnSvc, authzSvc, usersSvc)
 		versionSvc := versions.New(ottoapp.Version())
 
 		// Import test users for in-memory database
@@ -119,7 +121,7 @@ var cmdApiServe = &cobra.Command{
 			}
 		}
 
-		s, err := rest.New(authSvc, documentsSvc, sessionsSvc, tzSvc, usersSvc, versionSvc, options...)
+		s, err := rest.New(authnSvc, authzSvc, documentsSvc, gamesSvc, sessionsSvc, tzSvc, usersSvc, versionSvc, options...)
 		if err != nil {
 			return errors.Join(fmt.Errorf("rest.new"), err)
 		}
