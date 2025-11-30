@@ -8,14 +8,14 @@ export default class GmRoute extends Route {
   @service router;
 
   async beforeModel() {
-    if (!this.session.canAccessGMRoutes) {
-      // send them away if they’re not a GM
-      this.router.transitionTo('user.dashboard');
+    if (!this.session.canAccessGMRoutes) { // send them away if they’re not a GM
+      this.router.transitionTo('login');
     }
   }
 
   model() {
-    // any global GM data if needed (current game list, etc.)
-    return {};
+    return { // any global GM data if needed (current game list, etc.)
+      gameId: "0301", // default to TN3.1
+    };
   }
 }

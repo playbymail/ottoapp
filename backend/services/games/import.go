@@ -51,6 +51,7 @@ type ImportGameSetupTurn struct {
 
 type ImportPlayer struct {
 	Handle            string              `json:"handle"`
+	Active            bool                `json:"active,omitempty"`
 	Username          string              `json:"username,omitempty"`
 	Email             string              `json:"email,omitempty"`
 	Timezone          string              `json:"tz,omitempty"`
@@ -64,7 +65,8 @@ type ImportPlayer struct {
 }
 
 type ImportPlayerConfig struct {
-	EmailOptIn bool `json:"email-opt-in,omitempty"`
+	EmailOptIn      bool `json:"email-opt-in,omitempty"`
+	SendWelcomeMail bool `json:"send-welcome-mail,omitempty"`
 }
 
 type ImportPlayerGame struct {

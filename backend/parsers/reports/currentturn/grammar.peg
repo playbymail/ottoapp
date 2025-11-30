@@ -1,0 +1,78 @@
+{
+package reports
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+
+type TurnLine struct {
+	Current  *Turn
+}
+
+type Turn struct {
+	Year  int
+	Month int
+	No    int
+}
+
+type Season string
+
+type Weather string
+
+func toAnySlice(v any) []any {
+	if v == nil {
+		return nil
+	}
+	return v.([]any)
+}
+
+}
+
+CurrentTurnLine <- "Current Turn" SP cym:TurnYearMonth SP "(" cno:TurnNo ")" "," SP Season "," SP Weather SP "Next Turn" SP TurnYearMonth SP "(" TurnNo ")" "," SP REPORT_DATE EOL {
+    var current Turn
+    yyyymm := cym.(string)
+    yyyy, mm, _ := strings.Cut(yyyymm, "-")
+    current.Year, _ = strconv.Atoi(yyyy)
+    current.Month, _ = strconv.Atoi(mm)
+    hno := cno.(string)
+    current.No, _ = strconv.Atoi(hno[1:])
+    return &TurnLine{
+        Current: &current,
+    }, nil
+}
+
+TurnNo <- "#" DIGIT+ {
+    return string(c.text), nil
+}
+
+TurnYearMonth <- DIGIT DIGIT DIGIT DIGIT? "-" DIGIT DIGIT? {
+    return string(c.text), nil
+}
+
+Season <- ( "Winter" / "Spring" ) {
+    return Season(string(c.text)), nil
+}
+
+Weather <- "FINE" {
+    return Weather(string(c.text)), nil
+}
+
+DIGIT           = [0-9]
+EOF             = .* !.
+EOL             = "\n"
+REPORT_DATE     = DIGIT DIGIT? "/" DIGIT DIGIT? "/" DIGIT DIGIT DIGIT DIGIT
+SP              = " "
+

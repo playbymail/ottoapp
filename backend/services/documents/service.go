@@ -38,7 +38,7 @@ func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service) *Servi
 // Actor is the user/service requesting the creation.
 // Owner is the user that will own the new document.
 func (s *Service) CreateDocument(actor *domains.Actor, clan *domains.Clan, doc *domains.Document) (domains.ID, error) {
-	//log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) d:%v r:%v s:%v w:%v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, doc.CanDelete, doc.CanRead, doc.CanShare, doc.CanWrite)
+	log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) d:%v r:%v s:%v w:%v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, doc.CanDelete, doc.CanRead, doc.CanShare, doc.CanWrite)
 	if doc.Path != html.EscapeString(doc.Path) {
 		return domains.InvalidID, ErrInvalidPath
 	}
@@ -73,7 +73,7 @@ func (s *Service) CreateDocument(actor *domains.Actor, clan *domains.Clan, doc *
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	})
-	//log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, err)
+	log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, err)
 	if err != nil {
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, fmt.Errorf("CreateDocumentContents(%q)", contentsHash), err)
 	}
@@ -90,7 +90,7 @@ func (s *Service) CreateDocument(actor *domains.Actor, clan *domains.Clan, doc *
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	})
-	//log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %d %v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, id, err)
+	log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %d %v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, id, err)
 	if err != nil {
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, fmt.Errorf("CreateDocument(%d)", clan.ClanID), err)
 	}
@@ -167,7 +167,7 @@ func (s *Service) DeleteDocument(actor *domains.Actor, documentId domains.ID) er
 
 // GetDocument returns nil, nil if no data found
 func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*DocumentView, error) {
-	//log.Printf("[documents] GetDocument(%d, %d)\n", actor.ID, documentId)
+	log.Printf("[documents] GetDocument(%d, %d)\n", actor.ID, documentId)
 	q := s.db.Queries()
 	ctx := s.db.Context()
 
@@ -175,10 +175,11 @@ func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*Doc
 		DocumentID: int64(documentId),
 		UserID:     int64(actor.ID),
 	})
-	//log.Printf("[documents] GetDocumentForUserAuthorized(%d, %d) %v\n", actor.ID, documentId, err)
+	log.Printf("[documents] GetDocumentForUserAuthorized(%d, %d) %v\n", actor.ID, documentId, err)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
+			log.Printf("[documents] GetDocument(%d, %d): not authorized\n", actor.ID, documentId)
+			return nil, domains.ErrNotFound
 		}
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
@@ -187,7 +188,7 @@ func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*Doc
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) { // should never happen
 			log.Printf("[documents] GetDocument(%d, %d): GetUserHandle(%d): does not exist", actor.ID, documentId, actor.ID)
-			return nil, nil
+			return nil, domains.ErrNotFound
 		}
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
@@ -197,7 +198,7 @@ func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*Doc
 	} else if ownerHandle, err = q.GetUserHandle(ctx, doc.OwnerID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { // should never happen
 			log.Printf("[documents] GetDocument(%d, %d): GetUserHandle(%d): does not exist", actor.ID, documentId, doc.OwnerID)
-			return nil, nil
+			return nil, domains.ErrNotFound
 		}
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
@@ -391,6 +392,7 @@ func (s *Service) ShareDocumentById(actor, ally *domains.Actor, documentId domai
 	}
 	return nil
 }
+
 func hashContents(b []byte) (string, error) {
 	h := sha256.New()
 	if _, err := h.Write(b); err != nil {

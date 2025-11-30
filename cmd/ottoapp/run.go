@@ -5,6 +5,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +17,8 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/parsers"
+	"github.com/playbymail/ottoapp/backend/parsers/reports"
+	"github.com/playbymail/ottoapp/backend/parsers/reports/scrubbers"
 	"github.com/playbymail/ottoapp/backend/services/email"
 	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/spf13/cobra"
@@ -34,11 +38,11 @@ func cmdRun() *cobra.Command {
 }
 
 func cmdRunGenMake() *cobra.Command {
-	rootDir := filepath.Join("data", "tn3.1")
-	outputPath := filepath.Join(rootDir, "maps.mk")
+	makefileName := "maps.mk"
+	oldBehavior := false
 	addFlags := func(cmd *cobra.Command) error {
-		cmd.Flags().StringVar(&rootDir, "root", rootDir, "root directory for data")
-		cmd.Flags().StringVar(&outputPath, "output", outputPath, "output makefile path")
+		cmd.Flags().StringVar(&makefileName, "output", makefileName, "name of makefile to create")
+		cmd.Flags().BoolVar(&oldBehavior, "old-behavior", oldBehavior, "enable old behavior")
 		return nil
 	}
 
@@ -46,9 +50,30 @@ func cmdRunGenMake() *cobra.Command {
 		Use:   "genmake",
 		Short: "Generate a Makefile for map generation",
 		Long:  `Scans the data directory for turn reports and generates a Makefile to build maps.`,
+		Args:  cobra.ExactArgs(1), // require path to TN3.1 root
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Normalize root path
-			rootDir = filepath.Clean(rootDir)
+			rootDir, err := filepath.Abs(args[0])
+			if err != nil {
+				return errors.Join(fmt.Errorf("invalid path"), err)
+			} else if sb, err := os.Stat(rootDir); err != nil {
+				return errors.Join(fmt.Errorf("invalid path"), err)
+			} else if !sb.IsDir() {
+				return fmt.Errorf("%s: not a directory", rootDir)
+			}
+			log.Printf("%s: root\n", rootDir)
+
+			if filepath.Base(makefileName) != makefileName {
+				return fmt.Errorf("%s: not a filename", makefileName)
+			} else if filepath.Ext(makefileName) != ".mk" {
+				makefileName += ".mk"
+			}
+			makefileName = filepath.Join(rootDir, makefileName)
+			log.Printf("%s: make file\n", makefileName)
+
+			if !oldBehavior {
+				return nil
+			}
 
 			// Regex to match clan directories (e.g., 0500)
 			clanDirRe := regexp.MustCompile(`^0\d{3}$`)
@@ -132,7 +157,7 @@ func cmdRunGenMake() *cobra.Command {
 			sort.Strings(clanIDs)
 
 			// Open output file
-			f, err := os.Create(outputPath)
+			f, err := os.Create(makefileName)
 			if err != nil {
 				return fmt.Errorf("creating output file: %w", err)
 			}
@@ -238,14 +263,14 @@ func cmdRunGenMake() *cobra.Command {
 				}
 				// Clean up partial output file
 				f.Close()
-				os.Remove(outputPath)
+				os.Remove(makefileName)
 				return fmt.Errorf("validation failed with %d errors", len(validationErrors))
 			}
 
 			fmt.Fprintf(f, "maps: %s\n\n", strings.Join(allMaps, " "))
 			fmt.Fprintf(f, "%s", specificRules.String())
 
-			fmt.Printf("Generated Makefile at %s with %d map targets\n", outputPath, len(allMaps))
+			fmt.Printf("Generated Makefile at %s with %d map targets\n", makefileName, len(allMaps))
 
 			return nil
 		},
@@ -265,6 +290,7 @@ func cmdRunParse() *cobra.Command {
 	}
 
 	cmd.AddCommand(cmdRunParseReportFile())
+	cmd.AddCommand(cmdRunParseTurnReport())
 
 	return cmd
 }
@@ -306,6 +332,76 @@ func cmdRunParseReportFile() *cobra.Command {
 				log.Fatalf("error: %v\n", err)
 			}
 			log.Printf("%s: created in %v\n", outputPath, time.Since(startedAt))
+			return nil
+		},
+	}
+
+	if err := addFlags(cmd); err != nil {
+		log.Fatal(err)
+	}
+
+	return cmd
+}
+
+func cmdRunParseTurnReport() *cobra.Command {
+	rawExtractFile := ""
+	scrubbedFile := ""
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().StringVar(&rawExtractFile, "raw-report-extract", rawExtractFile, "path to save raw extract to")
+		cmd.Flags().StringVar(&scrubbedFile, "scrubbed-extract", scrubbedFile, "path to save scrubbed extract to")
+		return nil
+	}
+
+	var cmd = &cobra.Command{
+		Use:          "turn-report <turn-report-file-name>",
+		Short:        "Parse a turn report file",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1), // require path to turn report file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			startedAt := time.Now()
+
+			var docx *parsers.Docx
+			docxFileName := args[0]
+			if data, err := os.ReadFile(docxFileName); err != nil {
+				return err
+			} else if docx, err = parsers.ParseDocx(bytes.NewReader(data), false, false); err != nil {
+				return err
+			}
+			log.Printf("%s: %d bytes\n", args[0], len(docx.Text))
+			if cmd.Flags().Changed("raw-report-extract") {
+				err := os.WriteFile(rawExtractFile, docx.Text, 0o644)
+				if err != nil {
+					return err
+				}
+				log.Printf("%s: wrote raw extract\n", rawExtractFile)
+			}
+
+			lines := scrubbers.Scrub(bytes.Split(docx.Text, []byte{'\n'}))
+			if cmd.Flags().Changed("scrubbed-extract") {
+				err := os.WriteFile(scrubbedFile, bytes.Join(lines, []byte{'\n'}), 0o644)
+				if err != nil {
+					return err
+				}
+				log.Printf("%s: wrote scrubbed extract\n", scrubbedFile)
+			}
+
+			stats := reports.Stats{}
+			rpt, err := reports.Parse(filepath.Base(docxFileName), lines, reports.Statistics(&stats, "no match"))
+			if err != nil {
+				return err
+			}
+			b, err := json.MarshalIndent(rpt, "", "  ")
+			if err != nil {
+				return err
+			}
+			log.Printf("rpt: %s\n", string(b))
+
+			b, err = json.MarshalIndent(stats.ChoiceAltCnt, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			log.Printf("parse: turn-report: completed in %v\n", time.Since(startedAt))
 			return nil
 		},
 	}
@@ -376,7 +472,7 @@ func cmdRunWelcomeEmail() *cobra.Command {
 			// fetch the players in the game
 			var players []*games.ImportPlayer
 			for _, p := range data.Players {
-				if !(p.Config != nil && p.Config.EmailOptIn == true) {
+				if !(p.Config != nil && p.Config.EmailOptIn == true && p.Config.SendWelcomeMail == true) {
 					continue
 				}
 				for _, g := range p.Games {

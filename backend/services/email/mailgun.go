@@ -104,13 +104,14 @@ Hi %s (Clan %04d)!
 
 Your OttoMap account has been created.
 The URL for the web server is https://ottomap.playbymailgames.com/.
+This is NOT the same server the TN3 game uses.
 
 You will need to use your email address to log in.
 
 Your password is "%s" (without the quotes).
 
 The server is a work in progress (there are plans, big plans, but I'm not much of a web developer).
-You can view your maps (right now that's limited to just the map key) and download them.
+You can view your maps and download them.
 
 I don't want OttoMap to send too many e-mails, so announcements will be made on the Discord server (https://discord.gg/8v2pWUs2Pg).
 
@@ -133,6 +134,7 @@ Hi %s (Clan %04d)!
 <p>
 Your OttoMap account has been created.
 The URL for the web server is https://ottomap.playbymailgames.com/.
+This is <strong>NOT</strong> the same server the TN3 game uses.
 </p>
 <p>
 You will need to use your email address to log in.
@@ -141,7 +143,7 @@ Your password is "%s" (without the quotes).
 </p>
 <p>
 The server is a work in progress (there are plans, big plans, but I'm not much of a web developer).
-You can view your maps (right now that's limited to just the map key) and download them.
+You can view your maps and download them.
 </p>
 <p>
 I don't want OttoMap to send too many e-mails, so announcements will be made on the Discord server (https://discord.gg/8v2pWUs2Pg).

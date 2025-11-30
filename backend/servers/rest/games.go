@@ -66,8 +66,10 @@ func PostGamesTurnReportFiles(authzSvc *authz.Service, documentsSvc *documents.S
 			restapi.WriteJsonApiError(w, http.StatusBadRequest, "bad_request", "Bad Request", "Error reading request body.")
 			return
 		}
+		log.Printf("%s %s: game %q: data %d\n", r.Method, r.URL.Path, gameId, len(data))
 
 		docx, err := parsers.ParseDocx(bytes.NewReader(data), true, true)
+		log.Printf("%s %s: docx %v\n", r.Method, r.URL.Path, err)
 		if err != nil {
 			log.Printf("%s %s: game %q: ParseDocx %v\n", r.Method, r.URL.Path, gameId, err)
 			if errors.Is(err, office.ErrNotAWordDocument) {
@@ -78,6 +80,7 @@ func PostGamesTurnReportFiles(authzSvc *authz.Service, documentsSvc *documents.S
 			return
 		}
 		header, err := parsers.ParseClanHeading(docx)
+		log.Printf("%s %s: header %v\n", r.Method, r.URL.Path, err)
 		if err != nil {
 			// todo: add meta?
 			// "meta": {"first-line": "TN3.1 Clan 9999", "expected-format": "GAME CLAN TURN"}
@@ -85,6 +88,7 @@ func PostGamesTurnReportFiles(authzSvc *authz.Service, documentsSvc *documents.S
 			return
 		}
 		clanNo, err := strconv.Atoi(header.Id)
+		log.Printf("%s %s: clanNo %d: %v\n", r.Method, r.URL.Path, clanNo, err)
 		if err != nil {
 			// todo: add meta?
 			// "meta": {"first-line": "TN3.1 Clan 9999", "expected-format": "GAME CLAN TURN"}
@@ -94,6 +98,7 @@ func PostGamesTurnReportFiles(authzSvc *authz.Service, documentsSvc *documents.S
 
 		// we must have a valid clan id to upload a document, so use the gameId and the clanNo from the header to find the clan
 		clan, err := gamesSvc.GetClan(gameId, clanNo)
+		log.Printf("%s %s: getClan(%q, %d) %v\n", r.Method, r.URL.Path, gameId, clanNo, err)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				restapi.WriteJsonApiError(w, http.StatusUnprocessableEntity, "clan_not_found", "Clan Not Found", fmt.Sprintf("game %q: clan %q: not found", gameId, header.Id))
@@ -116,21 +121,29 @@ func PostGamesTurnReportFiles(authzSvc *authz.Service, documentsSvc *documents.S
 			CanDelete: false,
 			CanShare:  true,
 		}
+		log.Printf("%s %s: doc %q\n", r.Method, r.URL.Path, doc.Path)
 
 		docID, err := documentsSvc.CreateDocument(actor, clan, doc)
+		log.Printf("%s %s: doc %d %v\n", r.Method, r.URL.Path, docID, err)
 		if err != nil {
 			// todo: handle unique constraint violation (idempotency)
 			log.Printf("%s %s: CreateDocument: %v\n", r.Method, r.URL.Path, err)
 			restapi.WriteJsonApiInternalServerError(w)
 			return
 		}
-		view, err := documentsSvc.GetDocument(actor, docID)
-		if err != nil {
-			log.Printf("%s %s: GetDocument: %v\n", r.Method, r.URL.Path, err)
-			restapi.WriteJsonApiInternalServerError(w)
-			return
+
+		view := struct {
+			ID           string `jsonapi:"primary,document"`   // singular when sending a payload
+			GameId       string `jsonapi:"attr,game-id"`       // game for this document
+			ClanNo       string `jsonapi:"attr,clan"`          // clan for this document
+			DocumentName string `jsonapi:"attr,document-name"` // untainted name of document
+		}{
+			ID:           fmt.Sprintf("%s", docID),
+			GameId:       string(gameId),
+			ClanNo:       fmt.Sprintf("%d", clan.ClanNo),
+			DocumentName: doc.Path,
 		}
 
-		restapi.WriteJsonApiData(w, http.StatusCreated, view)
+		restapi.WriteJsonApiData(w, http.StatusCreated, &view)
 	}
 }

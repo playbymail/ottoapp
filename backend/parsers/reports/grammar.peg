@@ -1,0 +1,254 @@
+{
+package reports
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+
+}
+
+ReportFile <- cs:ClanSection _ EOF {
+    clanSection := cs.(*gSection)
+    return &ReportFile_t{
+        Clan: &ClanSection_t{
+            Id: UnitId_t(clanSection.location.unitId),
+            CurrentHex: Coords_t{
+                Grid: clanSection.location.current.grid,
+                Col: clanSection.location.current.col,
+                Row: clanSection.location.current.row,
+            },
+            PreviousHex: Coords_t{
+                Grid: clanSection.location.previous.grid,
+                Col: clanSection.location.previous.col,
+                Row: clanSection.location.previous.row,
+            },
+            CurrentTurn: &TurnInfo_t{
+                Year: clanSection.turn.current.year,
+                Month: clanSection.turn.current.month,
+                No: clanSection.turn.current.no,
+            },
+        },
+        Turn: &TurnInfo_t{
+            Year: clanSection.turn.current.year,
+            Month: clanSection.turn.current.month,
+            No: clanSection.turn.current.no,
+        },
+    }, nil
+}
+
+ClanSection <- loc:ClanLocationLine turn:CurrentTurnLine scoutLines:ScoutLine* {
+    section := &gSection{
+        location: loc.(*gLocation),
+        turn: turn.(*gTurnLine),
+    }
+    for _, scoutLine := range toAnySlice(scoutLines) {
+        section.scoutLines = append(section.scoutLines, scoutLine.(*gScoutLine))
+    }
+    if buf, err := json.MarshalIndent(section.scoutLines, "", "  "); err != nil {
+        log.Printf("scoutLines %v\n", err)
+    } else {
+        log.Printf("scoutLines %s\n", string(buf))
+    }
+    return section, nil
+}
+
+ClanLocationLine <- "Tribe" SP u:ClanUnitId "," SP "," SP "Current Hex =" SP ch:Coords "," SP "(Previous Hex =" SP ph:Coords ")" EOL {
+    return &gLocation{
+        unitId: u.(gUnitId),
+        current: ch.(gCoords),
+        previous: ph.(gCoords),
+    }, nil
+}
+
+CurrentTurnLine <- "Current Turn" SP cym:TurnYearMonth SP "(" cno:TurnNo ")" "," SP Season "," SP Weather SP "Next Turn" SP TurnYearMonth SP "(" TurnNo ")" "," SP REPORT_DATE EOL {
+    var current gTurn
+    yyyymm := cym.(string)
+    yyyy, mm, _ := strings.Cut(yyyymm, "-")
+    current.year, _ = strconv.Atoi(yyyy)
+    current.month, _ = strconv.Atoi(mm)
+    hno := cno.(string)
+    current.no, _ = strconv.Atoi(hno[1:])
+    return &gTurnLine{
+        current: &current,
+    }, nil
+}
+
+Season <- ( "Winter" / "Spring" ) {
+    return string(c.text), nil
+}
+
+Weather <- "FINE" {
+    return string(c.text), nil
+}
+
+// Coords can be
+// AB 0201   ## 0201   N/A
+// 0123456   0123456
+Coords <- LETTER LETTER SP DIGIT DIGIT DIGIT DIGIT {
+    // AB 0201
+    // 0123456
+    return gCoords{
+        grid: string(c.text[0:2]),
+        col: int(c.text[3] - '0') * 10 + int(c.text[4]-'0'),
+        row: int(c.text[5] - '0') * 10 + int(c.text[6]-'0'),
+    }, nil
+} / "##" SP DIGIT DIGIT DIGIT DIGIT {
+    // ## 0201
+    // 0123456
+    return gCoords{
+        grid: "##",
+        col: int(c.text[3] - '0') * 10 + int(c.text[4]-'0'),
+        row: int(c.text[5] - '0') * 10 + int(c.text[6]-'0'),
+    }, nil
+} / "N/A" {
+    return gCoords{grid: "N/A"}, nil
+}
+
+TurnNo <- "#" DIGIT+ {
+    return string(c.text), nil
+}
+
+TurnYearMonth <- DIGIT DIGIT DIGIT DIGIT? "-" DIGIT DIGIT? {
+    return string(c.text), nil
+}
+
+ClanUnitId <- "0" DIGIT DIGIT DIGIT {
+    return gUnitId(string(c.text)), nil
+}
+
+ScoutLine <- "Scout" SP id:ScoutID ":" "Scout" SP moves:ScoutMoves EOL {
+    // build and return a *ScoutLine node* here
+    // e.g. with ID and Moves
+    return &gScoutLine{
+        Id: id.(gScoutId),
+        Moves: moves.([]*gScoutMove),
+    }, nil
+}
+
+ScoutID <- [1-8] {
+    return gScoutId(c.text[0] - '0'), nil
+}
+
+ScoutMoves <- first:ScoutMove rest:(BACKSLASH m:ScoutMove { return m, nil })* {
+    moves := []*gScoutMove{
+        first.(*gScoutMove),
+    }
+    for _, mv := range toAnySlice(rest) {
+        moves = append(moves, mv.(*gScoutMove))
+    }
+    return moves, nil
+}
+
+ScoutMove <- moved:ScoutMoved {
+    return &gScoutMove{Moved: moved.(*gScoutMoved)}, nil
+} / failed:ScoutFailed {
+    return failed.(*gScoutMove), nil
+} / patrolled:ScoutPatrolled {
+    return &gScoutMove{Patrolled: patrolled.(*gScoutPatrolled)}, nil
+} / (!BACKSLASH !EOL .)+ {
+    return &gScoutMove{
+        Move: "***" + string(c.text),
+    }, nil
+}
+
+ScoutFailed <- ",Can't Move on Lake to " d:Direction " of HEX" patrolled:ScoutPatrolled? (!BACKSLASH !EOL .)* {
+    move := &gScoutMove{
+        Failed: &gScoutFailed {
+            Move: string(c.text),
+            Direction: d.(string),
+            BlockedByLake: true,
+        },
+    }
+    if patrolled != nil {
+        move.Patrolled = patrolled.(*gScoutPatrolled)
+    }
+    return move, nil
+} / ",Can't Move on Ocean to " d:Direction " of HEX" patrolled:ScoutPatrolled? (!BACKSLASH !EOL .)* {
+    move := &gScoutMove{
+        Failed: &gScoutFailed {
+            Move: string(c.text),
+            Direction: d.(string),
+            BlockedByOcean: true,
+        },
+    }
+    if patrolled != nil {
+        move.Patrolled = patrolled.(*gScoutPatrolled)
+    }
+    return move, nil
+} / ",No Ford on River to " d:Direction " of HEX" patrolled:ScoutPatrolled? (!BACKSLASH !EOL .)* {
+    move := &gScoutMove{
+        Failed: &gScoutFailed {
+            Move: string(c.text),
+            Direction: d.(string),
+            BlockedByRiver: true,
+        },
+    }
+    if patrolled != nil {
+        move.Patrolled = patrolled.(*gScoutPatrolled)
+    }
+    return move, nil
+} / ",Not enough M.P's to move to " d:Direction " into " t:TerrainLong patrolled:ScoutPatrolled? (!BACKSLASH !EOL .)* {
+    move := &gScoutMove{
+        Failed: &gScoutFailed {
+            Move: string(c.text),
+            Direction: d.(string),
+            Terrain: t.(string),
+            NotEnoughMPs: true,
+        },
+    }
+    if patrolled != nil {
+        move.Patrolled = patrolled.(*gScoutPatrolled)
+    }
+    return move, nil
+}
+
+ScoutMoved <- d:Direction "-" t:Terrain rest:(!BACKSLASH !EOL .)+ {
+    return &gScoutMoved{
+        Move: string(c.text),
+        Direction: d.(string),
+        Terrain: t.(string),
+    }, nil
+}
+
+ScoutPatrolled <- ", Nothing of interest found" {
+    return &gScoutPatrolled{
+        Move: string(c.text),
+        NothingOfInterest: true,
+    }, nil
+}
+
+Direction <- ("NE" / "NW" / "SE" / "SW" / "N" / "S") &(SP / COMMA / BACKSLASH / "-") {
+    return string(c.text), nil
+}
+
+Terrain <- ("BF" / "GH" / "JH" / "PR") &(SP / COMMA / BACKSLASH)  {
+    return string(c.text), nil
+}
+
+TerrainLong <- ("BRUSH FLAT" / "GRASSY HILLS" / "PRAIRIE") &(SP / COMMA / BACKSLASH)  {
+    return string(c.text), nil
+}
+
+BACKSLASH       = "\\"
+COMMA           = ","
+DIGIT           = [0-9]
+EOF             = .* !.
+EOL             = "\n"
+LETTER          = [A-Z]
+REPORT_DATE     = DIGIT DIGIT? "/" DIGIT DIGIT? "/" DIGIT DIGIT DIGIT DIGIT
+SP              = " "
+_               = [ \t]*
+
