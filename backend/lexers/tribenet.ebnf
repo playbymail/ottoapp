@@ -1,0 +1,207 @@
+(* TribeNet Turn Report Grammar - EBNF *)
+(* This grammar documents the structure of TribeNet turn reports. *)
+(* It is intended as documentation for implementing a recursive descent parser. *)
+
+(* ============================================================================ *)
+(* Top-Level Structure *)
+(* ============================================================================ *)
+
+(* A cleaned turn report contains one or more unit sections *)
+turn_report     = unit_section, { unit_section }, EOF ;
+
+unit_section    = unit_line,
+                  turn_line,
+                  [ unit_movement_line ],
+                  { scout_line },
+                  unit_status_line ;
+
+(* ============================================================================ *)
+(* Unit Line *)
+(* ============================================================================ *)
+
+(* Example: Tribe 0987, , Current Hex = QQ 1315, (Previous Hex = N/A) *)
+(* Example: Element 0987e1, , Current Hex = QQ 0303, (Previous Hex = ## 0203) *)
+(* Example: Fleet 0987f9, , Current Hex = QQ 0303, (Previous Hex = QQ 1315) *)
+unit_line       = unit_keyword, UNIT_ID, ",", [ note ], ",",
+                  "Current Hex =", coords, ",", "(Previous Hex =", coords, ")", EOL ;
+
+unit_keyword    = "Courier" | "Element" | "Fleet" | "Garrison" | "Tribe" ;
+
+note            = { letter | digit | SP | punctuation } ;  (* free-form text, all characters up to the comma, may be empty *)
+
+coords          = grid_coords | na_coords | obscured_coords ;
+grid_coords     = GRID_ID, SP, NUMBER ;                    (* e.g., QQ 1315 *)
+na_coords       = "N/A" ;                                  (* not available *)
+obscured_coords = "##", NUMBER ;                           (* obscured location *)
+
+(* ============================================================================ *)
+(* Turn Line *)
+(* ============================================================================ *)
+
+(* Example: Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025 *)
+(* Example: Current Turn 900-01 (#1), Spring, FINE Next Turn 900-02 (#2), 12/12/2025 *)
+turn_line       = "Current Turn", SP, turn_year_month, SP, turn_number, ",", SP,
+                  season, ",", SP, weather, SP,
+                  "Next Turn", SP, turn_year_month, SP, turn_number, ",", SP, report_date,
+                  EOL ;
+
+turn_year_month = NUMBER, "-", NUMBER ;                    (* e.g., 899-12, 900-01 *)
+turn_number     = "(#", NUMBER, ")" ;                      (* e.g., (#0), (#1) *)
+season          = "Winter" | "Spring" | "Summer" | "Fall" ;
+weather         = "FINE" | "MILD" | "RAIN" | "SNOW" ;      (* TODO: verify full list *)
+report_date     = NUMBER, "/", NUMBER, "/", NUMBER ;       (* DD/MM/YYYY *)
+
+(* ============================================================================ *)
+(* Unit Movement *)
+(* ============================================================================ *)
+
+unit_movement_line = tribe_goes_to_line | tribe_movement_line ;
+
+tribe_goes_to_line = "Tribe Goes to", SP, grid_coords ;
+
+(* Example: Tribe Movement: Move SE-PR, , O SE\S-PR, , O NE, SE, S\SW-PR, , O SE, L NW\S-PR, , O NE, SE, L SW\ *)
+(* Example: Tribe Movement: Move NE-PR, \ *)
+tribe_movement_line = "Tribe Movement:", SP, "Move", SP, movement_steps, EOL ;
+
+(* ============================================================================ *)
+(* Scout Lines *)
+(* ============================================================================ *)
+
+(* Example: Scout 1:Scout ,Can't Move on Lake to NW of HEX, Nothing of interest found *)
+(* Example: Scout 2:Scout N-PR, , L SW,River N NE\NW-PR, , L SW, S,Ford NE\NW-GH, , L S\,Not enough M.P's to move to NE into CONIFER HILLS, Nothing of interest found *)
+(* Example: Scout 7:Scout N-PR, \N-PR, \ Nothing of interest found *)
+scout_line      = "Scout", SP, NUMBER, ":Scout", SP, scout_body, EOL ;
+
+(* Scout body can be:
+   1. Empty movement with immediate failure message: ,Can't Move...
+   2. Movement steps followed by failure message and summary
+   3. Movement steps followed by just summary (space-separated)
+*)
+scout_body      = [ movement_steps ], ",", SP, scout_failure, ",", SP, scout_summary
+                | movement_steps, SP, scout_summary ;
+
+scout_failure   = text ;                                   (* e.g., "Can't Move on Lake to NW of HEX" *)
+scout_summary   = text ;                                   (* e.g., "Nothing of interest found" *)
+
+(* ============================================================================ *)
+(* Movement Steps *)
+(* ============================================================================ *)
+
+(* Movement is a backslash-separated sequence of steps *)
+(* Each step describes entering a hex: direction-terrain, blocking_neighbors, edge_features, [special] *)
+(* Example: SE-PR, , O SE\S-PR, , O NE, SE, S\SW-PR, , O SE, L NW\S-PR, , O NE, SE, L SW\ *)
+(* Example: N-PR, Lcm NE,\N-PR, Lcm SE,\NE-CH, Lcm S,, O NE, SE\ *)
+
+movement_steps  = movement_step, { "\", movement_step }, "\" ;
+
+movement_step   = direction, "-", TERRAIN_CODE, 
+                  [ ",", SP, blocking_list ],
+                  [ ",", edge_features ],
+                  [ ",", special_feature ]
+                | settlement_step ;
+
+(* Settlement step: -, 1925 *)
+settlement_step = "-,", SP, NUMBER ;
+
+direction       = "N" | "NE" | "SE" | "S" | "SW" | "NW" ;
+
+(* ============================================================================ *)
+(* Blocking Neighbors *)
+(* ============================================================================ *)
+
+(* Neighbors that block movement in certain directions *)
+(* Example: "L SW" - Lake to SW *)
+(* Example: "O NE, SE, S" - Ocean to NE, SE, and S *)
+(* Example: "Lcm NE, N" - Low Conifer Mountains to NE and N *)
+(* Example: "L SW, NW, N, S" - Lakes in multiple directions *)
+
+blocking_list   = blocking_item, { ",", SP, blocking_item } ;
+blocking_item   = blocking_type, SP, direction, { ",", SP, direction } ;
+
+blocking_type   = "L"                   (* Lake *)
+                | "O"                   (* Ocean *)
+                | "Lcm"                 (* Low Conifer Mountains *)
+                | "LJm"                 (* Low Jungle Mountains *)
+                ;
+(* Note: There may be other blocking types; parser should be flexible *)
+
+(* ============================================================================ *)
+(* Edge Features *)
+(* ============================================================================ *)
+
+(* Features on hex edges that affect movement *)
+(* Example: "River N NE" - River on N and NE edges *)
+(* Example: "Ford NE" - Ford on NE edge *)
+(* Example: "River SE S" - River on SE and S edges *)
+
+edge_features   = edge_feature, { ",", edge_feature } ;
+edge_feature    = edge_type, SP, direction, { SP, direction } ;
+
+edge_type       = "River"               (* River edge - requires ford to cross *)
+                | "Ford"                (* Ford - allows river crossing *)
+                ;
+
+(* ============================================================================ *)
+(* Special Features *)
+(* ============================================================================ *)
+
+(* Resources or discoveries in a hex *)
+(* Example: "Find Copper Ore" *)
+(* Example: "Find Salt" *)
+
+special_feature = "Find", SP, resource_name ;
+resource_name   = text ;                                   (* e.g., "Copper Ore", "Salt" *)
+
+(* ============================================================================ *)
+(* Unit Status Line *)
+(* ============================================================================ *)
+
+(* Example: 0987 Status: PRAIRIE, L NW 0987 *)
+(* Example: 0987 Status: PRAIRIE, 0987 *)
+(* Example: 0987 Status: PRAIRIE, O NE, SE, L SW 0987 *)
+unit_status_line = UNIT_ID, SP, "Status:", SP, TERRAIN_CODE, 
+                   [ ",", SP, blocking_list ],
+                   SP, UNIT_ID, EOL ;
+
+(* ============================================================================ *)
+(* Common Productions *)
+(* ============================================================================ *)
+
+text            = { letter | digit | SP | punctuation } ;
+punctuation     = "," | "." | ":" | ";" | "'" | "-" | "(" | ")" | "/" | "$" | "#" ;
+
+(* ============================================================================ *)
+(* Lexical Elements *)
+(* ============================================================================ *)
+
+digit       = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+letter      = "A" | "B" | "C" | ... | "Z" | "a" | "b" | ... | "z" ;
+uppercase   = "A" | "B" | "C" | ... | "Z" ;
+
+NUMBER          = digit, { digit } ;
+GRID_ID         = uppercase, uppercase ;                            (* e.g., QQ, QR, WX *)
+UNIT_ID         = digit, digit, digit, digit, [ letter, [ digit ] ] ; (* e.g., 0987, 0987e1 *)
+TERRAIN_CODE    = uppercase, { uppercase } ;                        (* e.g., PR, GH, LCM *)
+
+SP              = " " ;
+EOL             = "\n" | "\r\n" ;
+
+(* ============================================================================ *)
+(* Terrain Types *)
+(* ============================================================================ *)
+(* Based on observed data in cleaned reports *)
+
+terrain_type    = "BF"                  (* Brush Flat *)
+                | "BH"                  (* Brush Hills *)
+                | "CH"                  (* Conifer Hills *)
+                | "DF"                  (* Deciduous Forest *)
+                | "GH"                  (* Grassy Hills *)
+                | "JH"                  (* Jungle Hills *)
+                | "LCM"                 (* Low Conifer Mountains *)
+                | "LJM"                 (* Low Jungle Mountains *)
+                | "PR"                  (* Prairie *)
+                | "RH"                  (* Rocky Hills *)
+                | "SW"                  (* Swamp - appears in messages *)
+                ;
+(* Note: This list is not exhaustive; parser should accept any uppercase sequence *)
+

@@ -1,0 +1,179 @@
+%token_type {TokenKind_t}
+
+// Main report structure
+turnReport ::= sections EOF .
+
+// Sections
+section ::= heading content .
+section ::= .
+
+heading ::= unitLine turnLine financeLine goodsTribeLine .
+
+// Unit line: Tribe 0987, note, Current Hex = QQ 1011, (Previous Hex = QQ 0805)
+unitLine ::= unitKeyword unitID COMMA optNote COMMA CURRENT HEX EQ coords COMMA LPAREN PREVIOUS HEX EQ coords RPAREN EOL .
+
+unitKeyword ::= COURIER .
+unitKeyword ::= ELEMENT .
+unitKeyword ::= FLEET .
+unitKeyword ::= GARRISON .
+unitKeyword ::= TRIBE .
+
+unitID ::= NUMBER .
+unitID ::= TEXT .
+
+optNote ::= TEXT .
+optNote ::= .
+
+coords         ::= gridCoords .
+coords         ::= naCoords .
+coords         ::= obscuredCoords .
+gridCoords     ::= TEXT NUMBER .
+naCoords       ::= TEXT SLASH TEXT .
+obscuredCoords ::= HASH HASH NUMBER .
+
+// Turn line: Current Turn 899-12 (#0), Winter, FINE	Next Turn 900-01 (#1), 28/11/2025
+turnLine ::= currentTurnInfo nextTurnInfo EOL .
+
+currentTurnInfo ::= TAB CURRENT TURN turnYearMonth turnNumber COMMA season COMMA weather .
+
+turnYearMonth ::= NUMBER DASH NUMBER .
+
+turnNumber ::= LPAREN HASH NUMBER RPAREN .
+
+season ::= WINTER .
+season ::= SPRING .
+season ::= SUMMER .
+season ::= FALL .
+
+weather ::= FINE .
+
+nextTurnInfo ::= TAB NEXT TURN turnYearMonth turnNumber COMMA reportDate .
+nextTurnInfo ::= .
+
+reportDate ::= NUMBER SLASH NUMBER SLASH NUMBER .
+
+// Finance line: Received: $0, Cost: $ 0	Credit: $ 30
+financeLine ::= TAB RECEIVED COLON amount COMMA COST COLON amount TAB CREDIT COLON amount EOL .
+financeLine ::= .
+
+amount ::= DOLLAR NUMBER DOT NUMBER .
+amount ::= DOLLAR NUMBER .
+
+// Goods tribe line: Goods Tribe: No GT
+goodsTribeLine ::= GOODS TRIBE COLON TEXT EOL .
+
+content ::= desiredCommoditiesLine
+            optEmptyLines
+            tribeActivitiesLine
+            optEmptyLines
+            finalActivities
+            optEmptyLines
+            transferGoodsLine
+            receiveGoodsLine
+            optEmptyLines
+            unitMovementLine
+            optEmptyLines
+            scoutMovementLine
+            optEmptyLines
+            unitStatusLine .
+
+// Desired commodities line: No commodities allocated
+desiredCommoditiesLine ::= TEXT EOL .
+desiredCommoditiesLine ::= .
+
+// Tribe activities line: Tribe Activities ...
+tribeActivitiesLine ::= TAB TRIBE ACTIVITIES COLON TEXT EOL .
+tribeActivitiesLine ::= .
+
+// Final activities line: Final Activities: Provs eaten: 8632 provs,
+finalActivitiesLine ::= TAB FINAL ACTIVITIES COLON TEXT EOL .
+finalActivitiesLine ::= .
+
+// Transfer goods line: Transfer goods to 0987e1: ....
+transferGoodsLine ::= TAB TRANSFER GOODS TO unitID COLON TEXT EOL .
+transferGoodsLine ::= .
+
+// Receive goods line: Receive goods from 0987: ...
+// Receive goods line: Receive goods from Seeking: ...
+receiveGoodsLine ::= TAB RECEIVE GOODS FROM sourceID COLON TEXT EOL .
+receiveGoodsLine ::= .
+
+sourceID ::= unitID .
+sourceID ::= SEEKING .
+
+unitMovementLine ::= tribeMovementLine .
+unitMovementLine ::= tribeGoesToLine .
+unitMovementLine ::= .
+
+// Tribe movement line: Tribe Movement: Move NW-PR ...
+tribeMovementLine ::= TAB TRIBE MOVEMENT COLON MOVE TEXT EOL .
+
+tribeGoesToLine ::= TAB TRIBE GOES TO COLON MOVE TEXT EOL .
+
+// Scout movement line: Scout 1:Scout NW-PR ...
+scoutMovementLine ::= TAB SCOUT NUMBER COLON SCOUT TEXT EOL .
+scoutMovementLine ::= .
+
+// Unit status line: 0987 Status: PRAIRIE, L NW 0987
+unitStatusLine ::= TAB TAB TAB TAB TAB TAB TAB TAB TAB TAB TAB TAB TAB unitID STATUS COLON TERRAIN TEXT EOL .
+
+// end of unit section
+
+// Census section with category headers and item lines
+censusSection        ::= censusCategoryHeader .
+censusSection        ::= censusSection censusLine .
+censusCategoryHeader ::= CENSUS_CATEGORY EOL .
+censusLine           ::= censusItemQty EOL .
+censusItemQty        ::= NONE .
+censusItemQty        ::= CENSUS_ITEM NUMBER .
+censusItemQty        ::= censusItemQty CENSUS_ITEM NUMBER .
+
+// Skills line: "Adm 9, Dip 2, ..."
+skillsSection ::= skillsHeader skillsLine .
+skillsHeader  ::= SKILLS COLON EOL .
+skillsList    ::= TAB skillList EOL .
+skillList     ::= skillList skillEntry .
+skillList     ::= .
+skillEntry    ::= SKILL_CD NUMBER COMMA .
+
+// Statistics section
+statisticsSection := moraleLine optEmptyLine weightLine walkingCcLine mountedCcLine .
+
+// Morale line: "Morale : 	1.01"
+moraleLine ::= MORALE COLON REAL_NUMBER EOL .
+
+// Weight line: "Weight: 431,770"
+weightLine ::= WEIGHT COLON COMMA_NUMBER EOL .
+
+// Walking CC line: Walking CC 985,490
+walkingCcLine ::= WALKING CC COLON COMMA_NUMBER EOL .
+
+// Mounted CC line: Mounted CC 35,100
+mountedCcLine ::= MOUNTED CC COLON COMMA_NUMBER EOL .
+
+// Transfers from to
+transfersFromTo ::= TRANSFERS EOL FROM EOL TO EOL ITEM EOL REQUESTED EOL ACTUAL EOL MESSAGE EOL transferFromToDetail emptyLine .
+transferFromToDetail ::= unitID EOL unitID EOL ITEM_UC EOL NUMBER EOL .
+
+// Transfer in same hex
+transferInSameHex ::= TRANSFER IN SAME HEX EOL unitID EOL unitID EOL ITEM_UC EOL NUMBER EOL .
+
+// Seeking section
+seekingSection ::= seekingSection SEEKING EOL unitID EOL unitID EOL ITEM_UC EOL NUMBER EOL .
+seekingSection ::= .
+
+// Settlements section
+settlements ::= SETTLEMENTS EOL HEX CODE EOL NAME EOL NOTE EOL TYPE EOL SUBTYPE EOL .
+
+// Scout report: "Scout 1:Scout ,Can't Move on Lake to NW of HEX, Nothing of interest found"
+scoutLine ::= SCOUT NUMBER COLON SCOUT scoutDetails EOL .
+scoutDetails ::= .
+scoutDetails ::= scoutDetails scoutElement .
+scoutElement ::= TEXT .
+scoutElement ::= COMMA .
+scoutElement ::= BACKSLASH .
+scoutElement ::= DASH .
+
+// Empty line
+emptyLine ::= EOL .
+

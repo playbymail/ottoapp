@@ -57,11 +57,11 @@ ClanSection <- loc:ClanLocationLine turn:CurrentTurnLine scoutLines:ScoutLine* {
     for _, scoutLine := range toAnySlice(scoutLines) {
         section.scoutLines = append(section.scoutLines, scoutLine.(*gScoutLine))
     }
-    if buf, err := json.MarshalIndent(section.scoutLines, "", "  "); err != nil {
-        log.Printf("scoutLines %v\n", err)
-    } else {
-        log.Printf("scoutLines %s\n", string(buf))
-    }
+    //if buf, err := json.MarshalIndent(section.scoutLines, "", "  "); err != nil {
+    //    log.Printf("scoutLines %v\n", err)
+    //} else {
+    //    log.Printf("scoutLines %s\n", string(buf))
+    //}
     return section, nil
 }
 
