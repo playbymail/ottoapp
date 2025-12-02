@@ -1,6 +1,6 @@
 # Unofficial TribeNet Turn Report Grammar
 
-```peg
+```ebnf
 TurnReport <- ClanSection EOF {
     ...
 }

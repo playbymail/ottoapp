@@ -346,9 +346,15 @@ func cmdRunParseReportFile() *cobra.Command {
 func cmdRunParseTurnReport() *cobra.Command {
 	rawExtractFile := ""
 	scrubbedFile := ""
+	showJson := false
+	showStats := false
+	showTiming := false
 	addFlags := func(cmd *cobra.Command) error {
-		cmd.Flags().StringVar(&rawExtractFile, "raw-report-extract", rawExtractFile, "path to save raw extract to")
+		cmd.Flags().StringVar(&rawExtractFile, "raw-extract", rawExtractFile, "path to save raw extract to")
 		cmd.Flags().StringVar(&scrubbedFile, "scrubbed-extract", scrubbedFile, "path to save scrubbed extract to")
+		cmd.Flags().BoolVar(&showJson, "show-json", showJson, "show json after extract")
+		cmd.Flags().BoolVar(&showStats, "show-stats", showStats, "show stats after extract")
+		cmd.Flags().BoolVar(&showTiming, "show-timing", showStats, "show timing after extract")
 		return nil
 	}
 
@@ -367,41 +373,60 @@ func cmdRunParseTurnReport() *cobra.Command {
 			} else if docx, err = parsers.ParseDocx(bytes.NewReader(data), false, false); err != nil {
 				return err
 			}
-			log.Printf("%s: %d bytes\n", args[0], len(docx.Text))
-			if cmd.Flags().Changed("raw-report-extract") {
+			if showTiming {
+				log.Printf("%s: %d bytes\n", args[0], len(docx.Text))
+			}
+			if rawExtractFile != "" {
 				err := os.WriteFile(rawExtractFile, docx.Text, 0o644)
 				if err != nil {
 					return err
 				}
-				log.Printf("%s: wrote raw extract\n", rawExtractFile)
+				if showTiming {
+					log.Printf("%s: wrote raw extract\n", rawExtractFile)
+				}
 			}
 
 			lines := scrubbers.Scrub(bytes.Split(docx.Text, []byte{'\n'}))
-			if cmd.Flags().Changed("scrubbed-extract") {
-				err := os.WriteFile(scrubbedFile, bytes.Join(lines, []byte{'\n'}), 0o644)
+			if scrubbedFile != "" {
+				output := bytes.Join(lines, []byte{'\n'})
+				if len(output) == 0 {
+					output = []byte{'\n'}
+				} else if output[len(output)-1] != '\n' {
+					output = append(output, '\n')
+				}
+				err := os.WriteFile(scrubbedFile, output, 0o644)
 				if err != nil {
 					return err
 				}
-				log.Printf("%s: wrote scrubbed extract\n", scrubbedFile)
+				if showTiming {
+					log.Printf("%s: wrote scrubbed extract\n", scrubbedFile)
+				}
 			}
 
 			stats := reports.Stats{}
-			rpt, err := reports.Parse(filepath.Base(docxFileName), lines, reports.Statistics(&stats, "no match"))
+			rpt, err := reports.Parse(filepath.Base(docxFileName), bytes.Join(lines, []byte{'\n'}), reports.Statistics(&stats, "no match"))
 			if err != nil {
 				return err
 			}
-			b, err := json.MarshalIndent(rpt, "", "  ")
-			if err != nil {
-				return err
+			if showJson {
+				b, err := json.MarshalIndent(rpt, "", "  ")
+				if err != nil {
+					return err
+				}
+				log.Printf("rpt: %s\n", string(b))
 			}
-			log.Printf("rpt: %s\n", string(b))
+			if showStats {
+				b, err := json.MarshalIndent(stats.ChoiceAltCnt, "", "  ")
+				if err != nil {
+					return err
+				}
+				log.Printf("rpt: %s\n", string(b))
+			}
 
-			b, err = json.MarshalIndent(stats.ChoiceAltCnt, "", "  ")
-			if err != nil {
-				return err
+			if showTiming {
+				log.Printf("parse: turn-report: completed in %v\n", time.Since(startedAt))
 			}
 
-			log.Printf("parse: turn-report: completed in %v\n", time.Since(startedAt))
 			return nil
 		},
 	}

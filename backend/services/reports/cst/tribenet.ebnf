@@ -1,0 +1,35 @@
+(* TribeNet Turn Report Grammar - EBNF                                          *)
+(* This grammar documents the structure of TribeNet turn reports.               *)
+(* It is intended as documentation for implementing a recursive descent parser. *)
+(* Terminals start with an upper-case letter and are defined in ../lexers pkg.  *)
+(* Spaces are significant in the grammar when called out with the SP terminal.  *)
+
+(* ============================================================================ *)
+(* Top-Level Structure *)
+(* ============================================================================ *)
+
+(* A cleaned turn report contains one or more unit sections *)
+turn_report     = unit_section, { unit_section }, EOF ;
+
+unit_section    = unit_line ;
+
+(* ============================================================================ *)
+(* Unit Line *)
+(* ============================================================================ *)
+
+(* Example: Tribe 0987, , Current Hex = QQ 1315, (Previous Hex = N/A) *)
+(* Example: Element 0987e1, , Current Hex = QQ 0303, (Previous Hex = ## 0203) *)
+(* Example: Fleet 0987f9, , Current Hex = QQ 0303, (Previous Hex = QQ 1315) *)
+unit_line       = unit_keyword, unit_id, Comma, [ Note ], Comma,
+                  Current, Hex, Equals, coords, Comma,
+                  LeftParen, Previous, Hex, Equals, coords, RightParen, EOL ;
+
+unit_keyword    = Courier | Element | Fleet | Garrison | Tribe ;
+
+unit_id = Number | Text ;
+
+coords          = grid_coords | na_coords | obscured_coords ;
+grid_coords     = Grid, Number ;                           (* e.g., QQ 1315 *)
+na_coords       = Text, Slash, Text ;                      (* N/A, not available *)
+obscured_coords = Hash, Hash, Number ;                     (* ## 1315, obscured location *)
+
