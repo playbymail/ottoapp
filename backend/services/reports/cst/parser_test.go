@@ -110,14 +110,14 @@ func TestParse_SingleUnitLine(t *testing.T) {
 			if unitLine.Keyword == nil {
 				t.Fatal("keyword is nil")
 			}
-			if got := string(unitLine.Keyword.Value.Bytes()); got != tc.wantKeyword {
+			if got := string(unitLine.Keyword.Bytes()); got != tc.wantKeyword {
 				t.Errorf("keyword: want %q, got %q", tc.wantKeyword, got)
 			}
 
 			if unitLine.UnitID == nil {
 				t.Fatal("unit id is nil")
 			}
-			if got := string(unitLine.UnitID.Value.Bytes()); got != tc.wantUnitID {
+			if got := string(unitLine.UnitID.Bytes()); got != tc.wantUnitID {
 				t.Errorf("unit id: want %q, got %q", tc.wantUnitID, got)
 			}
 
@@ -161,10 +161,10 @@ Garrison 0987g1, , Current Hex = QQ 1408, (Previous Hex = QQ 1408)
 			t.Errorf("section %d: keyword is nil", i)
 			continue
 		}
-		if got := string(section.UnitLine.Keyword.Value.Bytes()); got != exp.keyword {
+		if got := string(section.UnitLine.Keyword.Bytes()); got != exp.keyword {
 			t.Errorf("section %d: keyword: want %q, got %q", i, exp.keyword, got)
 		}
-		if got := string(section.UnitLine.UnitID.Value.Bytes()); got != exp.unitID {
+		if got := string(section.UnitLine.UnitID.Bytes()); got != exp.unitID {
 			t.Errorf("section %d: unit id: want %q, got %q", i, exp.unitID, got)
 		}
 	}
@@ -210,11 +210,11 @@ func TestParse_ReportFile(t *testing.T) {
 			t.Errorf("section %d: keyword is nil", i)
 			continue
 		}
-		if got := string(section.UnitLine.Keyword.Value.Bytes()); got != exp.keyword {
+		if got := string(section.UnitLine.Keyword.Bytes()); got != exp.keyword {
 			t.Errorf("section %d: keyword: want %q, got %q", i, exp.keyword, got)
 		}
 		if section.UnitLine.UnitID != nil {
-			if got := string(section.UnitLine.UnitID.Value.Bytes()); got != exp.unitID {
+			if got := string(section.UnitLine.UnitID.Bytes()); got != exp.unitID {
 				t.Errorf("section %d: unit id: want %q, got %q", i, exp.unitID, got)
 			}
 		}
@@ -284,6 +284,155 @@ func TestParse_ErrorRecovery(t *testing.T) {
 	}
 }
 
+func TestParseTurnLine(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		wantTurnYM1     string // first TurnYearMonth
+		wantTurnNum1    string // first turn number (just the number)
+		wantSeason      string
+		wantWeather     string
+		wantHasNextTurn bool
+		wantTurnYM2     string // second TurnYearMonth (if present)
+		wantTurnNum2    string // second turn number (if present)
+		wantReportDate  string // DD/MM/YYYY (if present)
+		wantErrors      int
+	}{
+		{
+			name:            "full turn line with next turn",
+			input:           "Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025\n",
+			wantTurnYM1:     "899-12",
+			wantTurnNum1:    "0",
+			wantSeason:      "Winter",
+			wantWeather:     "FINE",
+			wantHasNextTurn: true,
+			wantTurnYM2:     "900-01",
+			wantTurnNum2:    "1",
+			wantReportDate:  "28/11/2025",
+			wantErrors:      0,
+		},
+		{
+			name:            "turn line without next turn",
+			input:           "Current Turn 900-01 (#1), Spring, FINE\n",
+			wantTurnYM1:     "900-01",
+			wantTurnNum1:    "1",
+			wantSeason:      "Spring",
+			wantWeather:     "FINE",
+			wantHasNextTurn: false,
+			wantErrors:      0,
+		},
+		{
+			name:            "turn line from test file",
+			input:           "Current Turn 900-01 (#1), Spring, FINE Next Turn 900-02 (#2), 12/12/2025\n",
+			wantTurnYM1:     "900-01",
+			wantTurnNum1:    "1",
+			wantSeason:      "Spring",
+			wantWeather:     "FINE",
+			wantHasNextTurn: true,
+			wantTurnYM2:     "900-02",
+			wantTurnNum2:    "2",
+			wantReportDate:  "12/12/2025",
+			wantErrors:      0,
+		},
+		{
+			name:            "summer season",
+			input:           "Current Turn 900-06 (#6), Summer, FINE\n",
+			wantTurnYM1:     "900-06",
+			wantTurnNum1:    "6",
+			wantSeason:      "Summer",
+			wantWeather:     "FINE",
+			wantHasNextTurn: false,
+			wantErrors:      0,
+		},
+		{
+			name:            "fall/autumn season",
+			input:           "Current Turn 900-09 (#9), Fall, FINE\n",
+			wantTurnYM1:     "900-09",
+			wantTurnNum1:    "9",
+			wantSeason:      "Fall",
+			wantWeather:     "FINE",
+			wantHasNextTurn: false,
+			wantErrors:      0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := lexers.Scan([]byte(tc.input))
+			result := cst.ParseTurnLine(tokens)
+
+			if got := len(result.Errors()); got != tc.wantErrors {
+				t.Errorf("errors: want %d, got %d", tc.wantErrors, got)
+				for _, err := range result.Errors() {
+					t.Logf("  error: %v", err)
+				}
+				if tc.wantErrors == 0 {
+					return
+				}
+			}
+
+			if result.TurnYearMonth1 == nil {
+				t.Fatal("TurnYearMonth1 is nil")
+			}
+			if got := string(result.TurnYearMonth1.Bytes()); got != tc.wantTurnYM1 {
+				t.Errorf("TurnYearMonth1: want %q, got %q", tc.wantTurnYM1, got)
+			}
+
+			if result.TurnNumber1 == nil || result.TurnNumber1.Number == nil {
+				t.Fatal("TurnNumber1 or its Number is nil")
+			}
+			if got := string(result.TurnNumber1.Number.Bytes()); got != tc.wantTurnNum1 {
+				t.Errorf("TurnNumber1: want %q, got %q", tc.wantTurnNum1, got)
+			}
+
+			if result.Season == nil {
+				t.Fatal("Season is nil")
+			}
+			if got := string(result.Season.Bytes()); got != tc.wantSeason {
+				t.Errorf("Season: want %q, got %q", tc.wantSeason, got)
+			}
+
+			if result.Weather == nil {
+				t.Fatal("Weather is nil")
+			}
+			if got := string(result.Weather.Bytes()); got != tc.wantWeather {
+				t.Errorf("Weather: want %q, got %q", tc.wantWeather, got)
+			}
+
+			hasNextTurn := result.Next != nil
+			if hasNextTurn != tc.wantHasNextTurn {
+				t.Errorf("hasNextTurn: want %v, got %v", tc.wantHasNextTurn, hasNextTurn)
+			}
+
+			if tc.wantHasNextTurn {
+				if result.TurnYearMonth2 == nil {
+					t.Fatal("TurnYearMonth2 is nil")
+				}
+				if got := string(result.TurnYearMonth2.Bytes()); got != tc.wantTurnYM2 {
+					t.Errorf("TurnYearMonth2: want %q, got %q", tc.wantTurnYM2, got)
+				}
+
+				if result.TurnNumber2 == nil || result.TurnNumber2.Number == nil {
+					t.Fatal("TurnNumber2 or its Number is nil")
+				}
+				if got := string(result.TurnNumber2.Number.Bytes()); got != tc.wantTurnNum2 {
+					t.Errorf("TurnNumber2: want %q, got %q", tc.wantTurnNum2, got)
+				}
+
+				if result.ReportDate == nil {
+					t.Fatal("ReportDate is nil")
+				}
+				gotDate := string(result.ReportDate.Day.Bytes()) + "/" +
+					string(result.ReportDate.Month.Bytes()) + "/" +
+					string(result.ReportDate.Year.Bytes())
+				if gotDate != tc.wantReportDate {
+					t.Errorf("ReportDate: want %q, got %q", tc.wantReportDate, gotDate)
+				}
+			}
+		})
+	}
+}
+
 // formatCoords returns a string representation of coordinates for testing.
 func formatCoords(coords cst.CoordsNode) string {
 	if coords == nil {
@@ -294,17 +443,17 @@ func formatCoords(coords cst.CoordsNode) string {
 		if c.Grid == nil || c.Number == nil {
 			return "<incomplete grid>"
 		}
-		return string(c.Grid.Value.Bytes()) + " " + string(c.Number.Value.Bytes())
+		return string(c.Grid.Bytes()) + " " + string(c.Number.Bytes())
 	case *cst.NACoordsNode:
-		if c.Text1 == nil || c.Slash == nil || c.Text2 == nil {
+		if c.Text == nil {
 			return "<incomplete na>"
 		}
-		return string(c.Text1.Value.Bytes()) + "/" + string(c.Text2.Value.Bytes())
+		return string(c.Text.Bytes())
 	case *cst.ObscuredCoordsNode:
-		if c.Hash1 == nil || c.Hash2 == nil || c.Number == nil {
+		if c.Grid == nil || c.Number == nil {
 			return "<incomplete obscured>"
 		}
-		return "## " + string(c.Number.Value.Bytes())
+		return string(c.Grid.Bytes()) + " " + string(c.Number.Bytes())
 	case *cst.ErrorCoordsNode:
 		return "<error: " + c.Message + ">"
 	default:

@@ -26,10 +26,23 @@ unit_line       = unit_keyword, unit_id, Comma, [ Note ], Comma,
 
 unit_keyword    = Courier | Element | Fleet | Garrison | Tribe ;
 
-unit_id = Number | Text ;
+unit_id = Number | UnitId ;
 
 coords          = grid_coords | na_coords | obscured_coords ;
 grid_coords     = Grid, Number ;                           (* e.g., QQ 1315 *)
 na_coords       = Text, Slash, Text ;                      (* N/A, not available *)
 obscured_coords = Hash, Hash, Number ;                     (* ## 1315, obscured location *)
 
+(* ============================================================================ *)
+(* Turn Line *)
+(* We expect (but do not require) the Clan section to have the full turn info.  *)
+(* ============================================================================ *)
+
+(* Example: Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025 *)
+(* Example: Current Turn 900-01 (#1), Spring, FINE *)
+turn_line       = Current, Turn, TurnYearMonth, turn_number, Comma, Season, Comma, Weather,
+                  [ Next, Turn, TurnYearMonth, turn_number, Comma, report_date ],
+                  EOL ;
+
+turn_number     = LeftParen, Hash, Number, RightParen ;     (* e.g., (#0), (#1) *)
+report_date     = Number, Slash, Number, Slash, Number ;    (* DD/MM/YYYY *)

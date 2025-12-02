@@ -6,6 +6,7 @@
 package cst
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/playbymail/ottoapp/backend/services/reports/lexers"
@@ -18,6 +19,15 @@ func Parse(tokens []*lexers.Token) *TurnReportNode {
 		pos:    0,
 	}
 	return p.parseTurnReport()
+}
+
+// ParseTurnLine parses a single turn line from the token stream.
+func ParseTurnLine(tokens []*lexers.Token) *TurnLineNode {
+	p := &parser{
+		tokens: tokens,
+		pos:    0,
+	}
+	return p.parseTurnLine()
 }
 
 // parser holds the state for parsing.
@@ -39,9 +49,21 @@ func (p *parser) peek() *lexers.Token {
 // Returns EOF if at end of tokens.
 func (p *parser) peekKind() lexers.Kind {
 	if tok := p.peek(); tok != nil && tok.Value != nil {
-		return tok.Value.Kind
+		return tok.Kind
 	}
 	return lexers.EOF
+}
+
+// peekMatch returns true if the Kind of the current token matches.
+func (p *parser) peekMatch(kinds ...lexers.Kind) (lexers.Kind, bool) {
+	if tok := p.peek(); tok != nil && tok.Value != nil {
+		for _, kind := range kinds {
+			if tok.Kind == kind {
+				return tok.Kind, true
+			}
+		}
+	}
+	return lexers.EOF, false
 }
 
 // advance consumes and returns the current token.
@@ -99,7 +121,7 @@ func (p *parser) syncToNextLine() []*lexers.Token {
 	for !p.isAtEnd() {
 		tok := p.advance()
 		skipped = append(skipped, tok)
-		if tok.Value != nil && tok.Value.Kind == lexers.EOL {
+		if tok.Value != nil && tok.Kind == lexers.EOL {
 			break
 		}
 	}
@@ -178,8 +200,8 @@ func (p *parser) parseUnitLine() *UnitLineNode {
 		return node
 	}
 
-	// unit_id (Number or Text)
-	if tok := p.match(lexers.Number, lexers.Text); tok != nil {
+	// unit_id (Number or UnitId)
+	if tok := p.match(lexers.Number, lexers.UnitId); tok != nil {
 		node.UnitID = tok
 		node.tokens = append(node.tokens, tok)
 	} else {
@@ -200,10 +222,14 @@ func (p *parser) parseUnitLine() *UnitLineNode {
 		node.tokens = append(node.tokens, tok)
 	}
 
-	// Optional Note
-	if tok := p.match(lexers.Note); tok != nil {
-		node.Note = tok
+	// Optional Note - all tokens to first comma or end of line
+	var noteTokens []*lexers.Token
+	for _, ok := p.peekMatch(lexers.Comma, lexers.EOL); !ok; _, ok = p.peekMatch() {
+		tok := p.advance()
 		node.tokens = append(node.tokens, tok)
+	}
+	if len(noteTokens) != 0 {
+		node.Note = lexers.Merge(lexers.Note, noteTokens...)
 	}
 
 	// Comma
@@ -340,6 +366,259 @@ func (p *parser) parseUnitLine() *UnitLineNode {
 	return node
 }
 
+// parseTurnLine parses a turn line.
+// turn_line = Current, Turn, TurnYearMonth, turn_number, Comma, Season, Comma, Weather,
+//
+//	[ Next, Turn, TurnYearMonth, turn_number, Comma, report_date ],
+//	EOL ;
+func (p *parser) parseTurnLine() *TurnLineNode {
+	node := &TurnLineNode{}
+
+	// Current
+	if tok, err := p.expect(lexers.Current); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Current1 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Turn
+	if tok, err := p.expect(lexers.Turn); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Turn1 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// TurnYearMonth
+	if tok, err := p.expect(lexers.TurnYearMonth); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.TurnYearMonth1 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// turn_number
+	turnNum := p.parseTurnNumber()
+	node.TurnNumber1 = turnNum
+	node.tokens = append(node.tokens, turnNum.tokens...)
+	node.errors = append(node.errors, turnNum.errors...)
+
+	// Comma
+	if tok, err := p.expect(lexers.Comma); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Comma1 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Season
+	if tok, err := p.expect(lexers.Season); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Season = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Comma
+	if tok, err := p.expect(lexers.Comma); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Comma2 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Weather
+	if tok, err := p.expect(lexers.Weather); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Weather = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Optional: Next Turn TurnYearMonth turn_number Comma report_date
+	if p.peekKind() == lexers.Next {
+		node.Next = p.advance()
+		node.tokens = append(node.tokens, node.Next)
+
+		// Turn
+		if tok, err := p.expect(lexers.Turn); err != nil {
+			node.errors = append(node.errors, err)
+			skipped := p.syncToNextLine()
+			node.tokens = append(node.tokens, skipped...)
+			return node
+		} else {
+			node.Turn2 = tok
+			node.tokens = append(node.tokens, tok)
+		}
+
+		// TurnYearMonth
+		if tok, err := p.expect(lexers.TurnYearMonth); err != nil {
+			node.errors = append(node.errors, err)
+			skipped := p.syncToNextLine()
+			node.tokens = append(node.tokens, skipped...)
+			return node
+		} else {
+			node.TurnYearMonth2 = tok
+			node.tokens = append(node.tokens, tok)
+		}
+
+		// turn_number
+		turnNum2 := p.parseTurnNumber()
+		node.TurnNumber2 = turnNum2
+		node.tokens = append(node.tokens, turnNum2.tokens...)
+		node.errors = append(node.errors, turnNum2.errors...)
+
+		// Comma
+		if tok, err := p.expect(lexers.Comma); err != nil {
+			node.errors = append(node.errors, err)
+			skipped := p.syncToNextLine()
+			node.tokens = append(node.tokens, skipped...)
+			return node
+		} else {
+			node.Comma3 = tok
+			node.tokens = append(node.tokens, tok)
+		}
+
+		// report_date
+		reportDate := p.parseReportDate()
+		node.ReportDate = reportDate
+		node.tokens = append(node.tokens, reportDate.tokens...)
+		node.errors = append(node.errors, reportDate.errors...)
+	}
+
+	// EOL
+	if tok, err := p.expect(lexers.EOL); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.EOL = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	return node
+}
+
+// parseTurnNumber parses a turn number.
+// turn_number = LeftParen, Hash, Number, RightParen ;
+func (p *parser) parseTurnNumber() *TurnNumberNode {
+	node := &TurnNumberNode{}
+
+	// LeftParen
+	if tok, err := p.expect(lexers.LeftParen); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.LeftParen = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Hash
+	if tok, err := p.expect(lexers.Hash); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Hash = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Number
+	if tok, err := p.expect(lexers.Number); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Number = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// RightParen
+	if tok, err := p.expect(lexers.RightParen); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.RightParen = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	return node
+}
+
+// parseReportDate parses a report date.
+// report_date = Number, Slash, Number, Slash, Number ;
+func (p *parser) parseReportDate() *ReportDateNode {
+	node := &ReportDateNode{}
+
+	// Day (Number)
+	if tok, err := p.expect(lexers.Number); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Day = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Slash
+	if tok, err := p.expect(lexers.Slash); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Slash1 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Month (Number)
+	if tok, err := p.expect(lexers.Number); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Month = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Slash
+	if tok, err := p.expect(lexers.Slash); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Slash2 = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Year (Number)
+	if tok, err := p.expect(lexers.Number); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Year = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	return node
+}
+
 // parseCoords parses coordinates.
 // coords = grid_coords | na_coords | obscured_coords ;
 // grid_coords = Grid, Number ;
@@ -348,7 +627,22 @@ func (p *parser) parseUnitLine() *UnitLineNode {
 func (p *parser) parseCoords() CoordsNode {
 	switch p.peekKind() {
 	case lexers.Grid:
-		// grid_coords = Grid, Number
+		// grid_coords = Grid, Number, but lexer returns Grid for Hash Hash
+		if bytes.Equal(p.peek().Bytes(), []byte{'#', '#'}) {
+			// obscured_coords = Hash, Hash, Number (e.g., ## 1315)
+			node := &ObscuredCoordsNode{}
+			node.Grid = p.advance()
+			node.tokens = append(node.tokens, node.Grid)
+
+			if tok, err := p.expect(lexers.Number); err != nil {
+				node.errors = append(node.errors, err)
+			} else {
+				node.Number = tok
+				node.tokens = append(node.tokens, tok)
+			}
+			return node
+		}
+
 		node := &GridCoordsNode{}
 		node.Grid = p.advance()
 		node.tokens = append(node.tokens, node.Grid)
@@ -361,46 +655,11 @@ func (p *parser) parseCoords() CoordsNode {
 		}
 		return node
 
-	case lexers.Text:
+	case lexers.NA:
 		// na_coords = Text, Slash, Text (e.g., N/A)
 		node := &NACoordsNode{}
-		node.Text1 = p.advance()
-		node.tokens = append(node.tokens, node.Text1)
-
-		if tok, err := p.expect(lexers.Slash); err != nil {
-			node.errors = append(node.errors, err)
-		} else {
-			node.Slash = tok
-			node.tokens = append(node.tokens, tok)
-		}
-
-		if tok, err := p.expect(lexers.Text); err != nil {
-			node.errors = append(node.errors, err)
-		} else {
-			node.Text2 = tok
-			node.tokens = append(node.tokens, tok)
-		}
-		return node
-
-	case lexers.Hash:
-		// obscured_coords = Hash, Hash, Number (e.g., ## 1315)
-		node := &ObscuredCoordsNode{}
-		node.Hash1 = p.advance()
-		node.tokens = append(node.tokens, node.Hash1)
-
-		if tok, err := p.expect(lexers.Hash); err != nil {
-			node.errors = append(node.errors, err)
-		} else {
-			node.Hash2 = tok
-			node.tokens = append(node.tokens, tok)
-		}
-
-		if tok, err := p.expect(lexers.Number); err != nil {
-			node.errors = append(node.errors, err)
-		} else {
-			node.Number = tok
-			node.tokens = append(node.tokens, tok)
-		}
+		node.Text = p.advance()
+		node.tokens = append(node.tokens, node.Text)
 		return node
 
 	default:

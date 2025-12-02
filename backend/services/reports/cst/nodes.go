@@ -35,7 +35,7 @@ func (n *UnitSectionNode) Tokens() []*lexers.Token { return n.tokens }
 // Example: Tribe 0987, , Current Hex = QQ 1315, (Previous Hex = N/A)
 type UnitLineNode struct {
 	Keyword     *lexers.Token // Tribe | Courier | Element | Fleet | Garrison
-	UnitID      *lexers.Token // Number or Text
+	UnitID      *lexers.Token // Number or UnitId
 	Comma1      *lexers.Token
 	Note        *lexers.Token // optional
 	Comma2      *lexers.Token
@@ -78,9 +78,7 @@ func (n *GridCoordsNode) coordsNode()             {}
 
 // NACoordsNode represents "N/A" coordinates (not available).
 type NACoordsNode struct {
-	Text1  *lexers.Token // "N"
-	Slash  *lexers.Token // "/"
-	Text2  *lexers.Token // "A"
+	Text   *lexers.Token // "N/A"
 	errors []error
 	tokens []*lexers.Token
 }
@@ -91,8 +89,7 @@ func (n *NACoordsNode) coordsNode()             {}
 
 // ObscuredCoordsNode represents obscured coordinates (e.g., "## 1315").
 type ObscuredCoordsNode struct {
-	Hash1  *lexers.Token // first "#"
-	Hash2  *lexers.Token // second "#"
+	Grid   *lexers.Token // e.g., "##"
 	Number *lexers.Token // e.g., "1315"
 	errors []error
 	tokens []*lexers.Token
@@ -123,3 +120,57 @@ type ErrorCoordsNode struct {
 func (n *ErrorCoordsNode) Errors() []error         { return n.errors }
 func (n *ErrorCoordsNode) Tokens() []*lexers.Token { return n.tokens }
 func (n *ErrorCoordsNode) coordsNode()             {}
+
+// TurnLineNode represents a turn line.
+// Example: Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025
+// Example: Current Turn 900-01 (#1), Spring, FINE
+type TurnLineNode struct {
+	Current1       *lexers.Token   // Current
+	Turn1          *lexers.Token   // Turn
+	TurnYearMonth1 *lexers.Token   // e.g., 899-12
+	TurnNumber1    *TurnNumberNode // e.g., (#0)
+	Comma1         *lexers.Token
+	Season         *lexers.Token // e.g., Winter, Spring
+	Comma2         *lexers.Token
+	Weather        *lexers.Token // e.g., FINE
+	// Optional next turn info
+	Next           *lexers.Token   // Next (optional)
+	Turn2          *lexers.Token   // Turn (optional)
+	TurnYearMonth2 *lexers.Token   // e.g., 900-01 (optional)
+	TurnNumber2    *TurnNumberNode // e.g., (#1) (optional)
+	Comma3         *lexers.Token   // (optional)
+	ReportDate     *ReportDateNode // e.g., 28/11/2025 (optional)
+	EOL            *lexers.Token
+	errors         []error
+	tokens         []*lexers.Token
+}
+
+func (n *TurnLineNode) Errors() []error         { return n.errors }
+func (n *TurnLineNode) Tokens() []*lexers.Token { return n.tokens }
+
+// TurnNumberNode represents a turn number (e.g., (#0), (#1)).
+type TurnNumberNode struct {
+	LeftParen  *lexers.Token
+	Hash       *lexers.Token
+	Number     *lexers.Token
+	RightParen *lexers.Token
+	errors     []error
+	tokens     []*lexers.Token
+}
+
+func (n *TurnNumberNode) Errors() []error         { return n.errors }
+func (n *TurnNumberNode) Tokens() []*lexers.Token { return n.tokens }
+
+// ReportDateNode represents a report date (DD/MM/YYYY).
+type ReportDateNode struct {
+	Day    *lexers.Token
+	Slash1 *lexers.Token
+	Month  *lexers.Token
+	Slash2 *lexers.Token
+	Year   *lexers.Token
+	errors []error
+	tokens []*lexers.Token
+}
+
+func (n *ReportDateNode) Errors() []error         { return n.errors }
+func (n *ReportDateNode) Tokens() []*lexers.Token { return n.tokens }
