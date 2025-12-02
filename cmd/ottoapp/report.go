@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/parsers"
-	"github.com/playbymail/ottoapp/backend/parsers/office"
+	parsers "github.com/playbymail/ottoapp/backend/services/reports/docx"
+	"github.com/playbymail/ottoapp/backend/services/reports/office"
 	"github.com/spf13/cobra"
 )
 

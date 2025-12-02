@@ -54,18 +54,6 @@ func (p *parser) peekKind() lexers.Kind {
 	return lexers.EOF
 }
 
-// peekMatch returns true if the Kind of the current token matches.
-func (p *parser) peekMatch(kinds ...lexers.Kind) (lexers.Kind, bool) {
-	if tok := p.peek(); tok != nil && tok.Value != nil {
-		for _, kind := range kinds {
-			if tok.Kind == kind {
-				return tok.Kind, true
-			}
-		}
-	}
-	return lexers.EOF, false
-}
-
 // advance consumes and returns the current token.
 // Returns nil if at end of tokens.
 func (p *parser) advance() *lexers.Token {
@@ -75,6 +63,24 @@ func (p *parser) advance() *lexers.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	return tok
+}
+
+// runUpTo returns the tokens up to (but not including) a delimiter token.
+// Returns tokens, false if there were tokens but no delimiter.
+// Returns nil, true if there were no tokens found before a delimiter.
+// Returns nil, false when at EOF
+func (p *parser) runUpTo(delimiters ...lexers.Kind) ([]*lexers.Token, bool) {
+	var tokens []*lexers.Token
+	for tok := p.peek(); tok != nil; tok = p.peek() {
+		for _, delimiter := range delimiters {
+			if tok.Kind == delimiter {
+				return tokens, true
+			}
+		}
+		// consume the token
+		tokens = append(tokens, p.advance())
+	}
+	return tokens, false
 }
 
 // match checks if the current token matches any of the given kinds.
@@ -169,14 +175,44 @@ func (p *parser) parseTurnReport() *TurnReportNode {
 }
 
 // parseUnitSection parses a unit section.
-// unit_section = unit_line ;
+// unit_section = unit_line, turn_line, [ unit_movement_line ] ;
 func (p *parser) parseUnitSection() *UnitSectionNode {
 	node := &UnitSectionNode{}
 
 	unitLine := p.parseUnitLine()
 	node.UnitLine = unitLine
-	node.tokens = unitLine.tokens
-	node.errors = unitLine.errors
+	node.tokens = append(node.tokens, unitLine.tokens...)
+	node.errors = append(node.errors, unitLine.errors...)
+
+	// Parse turn_line if the next token is Current (start of turn line)
+	if p.peekKind() == lexers.Current {
+		turnLine := p.parseTurnLine()
+		node.TurnLine = turnLine
+		node.tokens = append(node.tokens, turnLine.tokens...)
+		node.errors = append(node.errors, turnLine.errors...)
+	}
+
+	// Parse optional unit_movement_line
+	// unit_movement_line = unit_goes_to_line | land_movement_line ;
+	// unit_goes_to_line starts with Tribe, Goes
+	// land_movement_line starts with Tribe, Movement
+	if p.peekKind() == lexers.Tribe && p.pos+1 < len(p.tokens) {
+		nextKind := p.tokens[p.pos+1].Kind
+		switch nextKind {
+		case lexers.Goes:
+			// unit_goes_to_line: Tribe Goes To ...
+			movementLine := p.parseUnitGoesToLine()
+			node.UnitMovementLine = movementLine
+			node.tokens = append(node.tokens, movementLine.tokens...)
+			node.errors = append(node.errors, movementLine.errors...)
+		case lexers.Movement:
+			// land_movement_line: Tribe Movement: Move ...
+			movementLine := p.parseLandMovementLine()
+			node.UnitMovementLine = movementLine
+			node.tokens = append(node.tokens, movementLine.tokens...)
+			node.errors = append(node.errors, movementLine.errors...)
+		}
+	}
 
 	return node
 }
@@ -223,12 +259,7 @@ func (p *parser) parseUnitLine() *UnitLineNode {
 	}
 
 	// Optional Note - all tokens to first comma or end of line
-	var noteTokens []*lexers.Token
-	for _, ok := p.peekMatch(lexers.Comma, lexers.EOL); !ok; _, ok = p.peekMatch() {
-		tok := p.advance()
-		node.tokens = append(node.tokens, tok)
-	}
-	if len(noteTokens) != 0 {
+	if noteTokens, _ := p.runUpTo(lexers.Comma, lexers.EOL); noteTokens != nil {
 		node.Note = lexers.Merge(lexers.Note, noteTokens...)
 	}
 
@@ -614,6 +645,208 @@ func (p *parser) parseReportDate() *ReportDateNode {
 	} else {
 		node.Year = tok
 		node.tokens = append(node.tokens, tok)
+	}
+
+	return node
+}
+
+// parseUnitGoesToLine parses a "Tribe Goes to" movement line.
+// unit_goes_to_line = Tribe, Goes, To, grid_coords, EOL ;
+func (p *parser) parseUnitGoesToLine() *UnitGoesToLineNode {
+	node := &UnitGoesToLineNode{}
+
+	// Tribe
+	if tok, err := p.expect(lexers.Tribe); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Tribe = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Goes
+	if tok, err := p.expect(lexers.Goes); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Goes = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// To
+	if tok, err := p.expect(lexers.To); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.To = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// grid_coords
+	coords := p.parseCoords()
+	node.tokens = append(node.tokens, coords.Tokens()...)
+	node.errors = append(node.errors, coords.Errors()...)
+	if gc, ok := coords.(*GridCoordsNode); ok {
+		node.Coords = gc
+	} else {
+		node.errors = append(node.errors, fmt.Errorf("expected grid coordinates"))
+	}
+
+	// EOL
+	if tok, err := p.expect(lexers.EOL); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.EOL = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	return node
+}
+
+// parseLandMovementLine parses a "Tribe Movement:" line.
+// land_movement_line = Tribe, Movement, Colon, land_movement, EOL ;
+func (p *parser) parseLandMovementLine() *LandMovementLineNode {
+	node := &LandMovementLineNode{}
+
+	// Tribe
+	if tok, err := p.expect(lexers.Tribe); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Tribe = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Movement
+	if tok, err := p.expect(lexers.Movement); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Movement = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// Colon
+	if tok, err := p.expect(lexers.Colon); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.Colon = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// land_movement
+	landMovement := p.parseLandMovement()
+	node.LandMovement = landMovement
+	node.tokens = append(node.tokens, landMovement.tokens...)
+	node.errors = append(node.errors, landMovement.errors...)
+
+	// EOL
+	if tok, err := p.expect(lexers.EOL); err != nil {
+		node.errors = append(node.errors, err)
+		skipped := p.syncToNextLine()
+		node.tokens = append(node.tokens, skipped...)
+		return node
+	} else {
+		node.EOL = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	return node
+}
+
+// parseLandMovement parses the movement portion.
+// land_movement = Move, land_step, { Backslash, land_step } ;
+func (p *parser) parseLandMovement() *LandMovementNode {
+	node := &LandMovementNode{}
+
+	// Move
+	if tok, err := p.expect(lexers.Move); err != nil {
+		node.errors = append(node.errors, err)
+		return node
+	} else {
+		node.Move = tok
+		node.tokens = append(node.tokens, tok)
+	}
+
+	// First land_step
+	step := p.parseLandStep()
+	node.Steps = append(node.Steps, step)
+	node.tokens = append(node.tokens, step.tokens...)
+	node.errors = append(node.errors, step.errors...)
+
+	// { Backslash, land_step }
+	for p.peekKind() == lexers.Backslash {
+		// consume the backslash
+		backslash := p.advance()
+		node.tokens = append(node.tokens, backslash)
+
+		// parse the next land_step
+		step := p.parseLandStep()
+		node.Steps = append(node.Steps, step)
+		node.tokens = append(node.tokens, step.tokens...)
+		node.errors = append(node.errors, step.errors...)
+	}
+
+	return node
+}
+
+// parseLandStep parses a single step.
+// land_step = [ [ land_step_movement ], land_step_result ];
+// land_step_movement = Direction, Dash, Terrain ;
+// land_step_result = Comma ;
+func (p *parser) parseLandStep() *LandStepNode {
+	node := &LandStepNode{}
+
+	// Check if we're at the end of the step sequence (EOL or next unit keyword)
+	// If so, return an empty step
+	if p.peekKind() == lexers.EOL || p.peekKind() == lexers.Backslash || p.isAtEnd() {
+		return node
+	}
+
+	// Try to parse land_step_movement: Direction, Dash, Terrain
+	if p.peekKind() == lexers.Direction {
+		node.Direction = p.advance()
+		node.tokens = append(node.tokens, node.Direction)
+
+		// Dash
+		if tok, err := p.expect(lexers.Dash); err != nil {
+			node.errors = append(node.errors, err)
+			return node
+		} else {
+			node.Dash = tok
+			node.tokens = append(node.tokens, tok)
+		}
+
+		// Terrain
+		if tok, err := p.expect(lexers.TerrainCode); err != nil {
+			node.errors = append(node.errors, err)
+			return node
+		} else {
+			node.Terrain = tok
+			node.tokens = append(node.tokens, tok)
+		}
+	}
+
+	// land_step_result = Comma (required if step content is present)
+	if p.peekKind() == lexers.Comma {
+		node.Comma = p.advance()
+		node.tokens = append(node.tokens, node.Comma)
 	}
 
 	return node

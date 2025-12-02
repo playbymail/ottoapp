@@ -1,5 +1,7 @@
 # Lexer Briefing Document
 
+Warning: Outdated.
+
 ## Goals of the Lexer
 
 The lexer’s job is to transform raw input text into a sequence of **tokens** that the parser can consume. Our lexer must support two primary goals:

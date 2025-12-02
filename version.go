@@ -9,7 +9,7 @@ var (
 	version = semver.Version{
 		Major:      0,
 		Minor:      39,
-		Patch:      4,
+		Patch:      12,
 		PreRelease: "alpha",
 		Build:      semver.Commit(),
 	}

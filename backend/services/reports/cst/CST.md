@@ -1,5 +1,7 @@
 # Parsing Strategy: CST → AST with Diagnostics
 
+Warning: Outdated.
+
 This document describes a parsing strategy where the parser first constructs a **Concrete Syntax Tree (CST)** that mirrors the grammar and retains *all* tokens (including punctuation, comments, and whitespace). A second pass then lowers the CST into a simplified **Abstract Syntax Tree (AST)** suitable for semantic analysis.
 
 This approach is designed to produce **excellent error diagnostics** while preserving the ability to continue parsing after errors.
@@ -28,8 +30,10 @@ This approach is designed to produce **excellent error diagnostics** while prese
 Example CST for a grammar rule:
 
 ```
+
 header := "Tribe" ID "."
-```
+
+````
 
 ```go
 type CST_Header_t struct {
@@ -38,14 +42,14 @@ type CST_Header_t struct {
     ID      Token_t
     Dot     Token_t
 }
-```
+````
 
 ### Abstract Syntax Tree (AST)
 
-- Simplified structure representing program meaning.
-- Drops punctuation and trivia.
-- Uses domain-specific types (`int`, `string`, etc.).
-- Diagnostics are carried forward from the CST.
+* Simplified structure representing program meaning.
+* Drops punctuation and trivia.
+* Uses domain-specific types (`int`, `string`, etc.).
+* Diagnostics are carried forward from the CST.
 
 Example AST node:
 
@@ -165,75 +169,23 @@ func LowerHeader(cst *CST_Header_t) *HeaderNode_t {
 
 ---
 
-## Worked Example
-
-### Input 1: Valid
-
-```
-Tribe 42.
-```
-
-**CST Result:**
-
-- `KwTribe`: Token("Tribe", KindTribe)
-- `ID`: Token("42", KindInt)
-- `Dot`: Token(".", KindDot)
-- Diagnostics: none
-
-**AST Result:**
-
-```json
-{
-  "type": "HeaderNode_t",
-  "Tribe": "Tribe",
-  "ID": 42,
-  "Diagnostics": []
-}
-```
-
-### Input 2: Invalid
-
-```
-Tribe X.
-```
-
-**CST Result:**
-
-- `KwTribe`: Token("Tribe", KindTribe)
-- `ID`: Token("X", KindBad)
-- Diagnostic: `"expected integer ID"` at line 1, col 7
-- `Dot`: Token(".", KindDot)
-
-**AST Result:**
-
-```json
-{
-  "type": "HeaderNode_t",
-  "Tribe": "Tribe",
-  "ID": 0,
-  "Diagnostics": [
-    {"Line": 1, "Col": 7, "Message": "expected integer ID"}
-  ]
-}
-```
-
----
-
 ## Benefits
 
-- **Robust error recovery:** parser continues after an error, inserting placeholders.
-- **High-quality diagnostics:** precise spans and multiple errors per parse.
-- **Round-tripping:** CST preserves original formatting and comments.
-- **Simplified AST:** second pass produces clean semantic nodes.
+* **Robust error recovery:** parser continues after an error, inserting placeholders.
+* **High-quality diagnostics:** precise spans and multiple errors per parse.
+* **Round-tripping:** CST preserves original formatting and comments.
+* **Simplified AST:** second pass produces clean semantic nodes.
 
 ---
 
 ## References
 
-- Aho, A.V., Sethi, R., Ullman, J.D. *Compilers: Principles, Techniques, and Tools* (Dragon Book), Ch. 4.3 Error Recovery.
-- Parr, T. *The Definitive ANTLR 4 Reference* (error strategy objects).
-- Grosch, J. (1992). *Efficient and Comfortable Error Recovery in Recursive Descent Parsers*.
-- Scott, E., Johnstone, A. (2000s). *Error Recovery for LR Parsers*.
-- Rust compiler internals: error recovery with spans and diagnostics.
-- TypeScript compiler architecture: “Missing” nodes in CST.
-- Go compiler source: `BadExpr`, `BadStmt`, `BadDecl` nodes in `go/ast`.
+* Aho, A.V., Sethi, R., Ullman, J.D. *Compilers: Principles, Techniques, and Tools* (Dragon Book), Ch. 4.3 Error Recovery.
+* Parr, T. *The Definitive ANTLR 4 Reference* (error strategy objects).
+* Grosch, J. (1992). *Efficient and Comfortable Error Recovery in Recursive Descent Parsers*.
+* Scott, E., Johnstone, A. (2000s). *Error Recovery for LR Parsers*.
+* Rust compiler internals: error recovery with spans and diagnostics.
+* TypeScript compiler architecture: “Missing” nodes in CST.
+* Go compiler source: `BadExpr`, `BadStmt`, `BadDecl` nodes in `go/ast`.
+
+---

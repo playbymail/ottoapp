@@ -21,11 +21,13 @@ type TurnReportNode struct {
 func (n *TurnReportNode) Errors() []error         { return n.errors }
 func (n *TurnReportNode) Tokens() []*lexers.Token { return n.tokens }
 
-// UnitSectionNode represents a unit section (currently just a unit line).
+// UnitSectionNode represents a unit section (unit line followed by turn line).
 type UnitSectionNode struct {
-	UnitLine *UnitLineNode
-	errors   []error
-	tokens   []*lexers.Token
+	UnitLine         *UnitLineNode
+	TurnLine         *TurnLineNode
+	UnitMovementLine UnitMovementLineNode // optional
+	errors           []error
+	tokens           []*lexers.Token
 }
 
 func (n *UnitSectionNode) Errors() []error         { return n.errors }
@@ -174,3 +176,75 @@ type ReportDateNode struct {
 
 func (n *ReportDateNode) Errors() []error         { return n.errors }
 func (n *ReportDateNode) Tokens() []*lexers.Token { return n.tokens }
+
+// UnitMovementLineNode is the interface for unit movement line nodes.
+// unit_movement_line = tribe_goes_to_line ;
+type UnitMovementLineNode interface {
+	Node
+	unitMovementLineNode() // marker method
+}
+
+// UnitGoesToLineNode represents a "Tribe Goes to" movement line.
+// Example: Tribe Goes to QQ 1612
+type UnitGoesToLineNode struct {
+	Tribe  *lexers.Token // Tribe keyword
+	Goes   *lexers.Token
+	To     *lexers.Token
+	Coords *GridCoordsNode
+	EOL    *lexers.Token
+	errors []error
+	tokens []*lexers.Token
+}
+
+func (n *UnitGoesToLineNode) Errors() []error         { return n.errors }
+func (n *UnitGoesToLineNode) Tokens() []*lexers.Token { return n.tokens }
+func (n *UnitGoesToLineNode) unitMovementLineNode()   {}
+
+// LandMovementLineNode represents a "Tribe Movement:" line.
+// Example: Tribe Movement: Move N-PR, \NE-GH,
+type LandMovementLineNode struct {
+	Tribe        *lexers.Token // Tribe keyword
+	Movement     *lexers.Token // Movement keyword
+	Colon        *lexers.Token
+	LandMovement *LandMovementNode
+	EOL          *lexers.Token
+	errors       []error
+	tokens       []*lexers.Token
+}
+
+func (n *LandMovementLineNode) Errors() []error         { return n.errors }
+func (n *LandMovementLineNode) Tokens() []*lexers.Token { return n.tokens }
+func (n *LandMovementLineNode) unitMovementLineNode()   {}
+
+// LandMovementNode represents the movement portion after "Move".
+// land_movement = Move, land_step, { Backslash, land_step } ;
+type LandMovementNode struct {
+	Move   *lexers.Token
+	Steps  []*LandStepNode // first step + additional steps after backslashes
+	errors []error
+	tokens []*lexers.Token
+}
+
+func (n *LandMovementNode) Errors() []error         { return n.errors }
+func (n *LandMovementNode) Tokens() []*lexers.Token { return n.tokens }
+
+// LandStepNode represents a single step in land movement.
+// land_step = [ [ land_step_movement ], land_step_result ];
+// An empty step has no movement or result.
+// A full step has optional movement and required result.
+type LandStepNode struct {
+	Direction *lexers.Token // optional: N, NE, SE, S, SW, NW
+	Dash      *lexers.Token // required if Direction present
+	Terrain   *lexers.Token // required if Direction present
+	Comma     *lexers.Token // required if step content is present
+	errors    []error
+	tokens    []*lexers.Token
+}
+
+func (n *LandStepNode) Errors() []error         { return n.errors }
+func (n *LandStepNode) Tokens() []*lexers.Token { return n.tokens }
+
+// IsEmpty returns true if the step has no content (empty step).
+func (n *LandStepNode) IsEmpty() bool {
+	return n.Direction == nil && n.Comma == nil
+}

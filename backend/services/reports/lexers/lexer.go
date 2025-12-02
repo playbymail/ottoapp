@@ -15,6 +15,7 @@ func Scan(input []byte) []*Token {
 	// todo: we implemented two tokens of look back for N/A. we updated
 	// the text branch to look ahead instead. we might be able to reduce
 	// this to a single token of look back
+	prevToken := &Token{}
 	prevKind := [2]Kind{EOF, EOF}
 
 	pos, line, col := 0, 1, 1
@@ -90,8 +91,13 @@ func Scan(input []byte) []*Token {
 					span.Kind = Grid
 				} else if reNumber.Match(text) {
 					span.Kind = Number
-					if prevKind[0] == Tribe && len(text) == 4 {
-						span.Kind = UnitId
+					if len(text) == 4 {
+						// context hacks for direction and tribe id conflicts
+						if prevToken.Kind == Direction && len(prevToken.Bytes()) == 2 {
+							span.Kind = Grid
+						} else if prevToken.Kind == Tribe {
+							span.Kind = UnitId
+						}
 					}
 				} else if reUnitId.Match(text) {
 					// warning - must be after the check for numbers since
@@ -118,7 +124,7 @@ func Scan(input []byte) []*Token {
 		}
 
 		tokens = append(tokens, &token)
-		prevKind[0], prevKind[1] = token.Kind, prevKind[0]
+		prevToken, prevKind[0], prevKind[1] = &token, token.Kind, prevKind[0]
 	}
 
 	return tokens
@@ -145,6 +151,7 @@ var (
 	isTrivia    = [256]bool{}
 
 	keywords = map[string]Kind{
+		// unit line keywords
 		"Tribe":    Tribe,
 		"Courier":  Courier,
 		"Element":  Element,
@@ -154,6 +161,7 @@ var (
 		"Hex":      Hex,
 		"Previous": Previous,
 
+		// turn line keywords
 		"Turn":   Turn,
 		"Spring": Season,
 		"Summer": Season,
@@ -161,6 +169,56 @@ var (
 		"Winter": Season,
 		"FINE":   Weather,
 		"Next":   Next,
+
+		// movement line keywords
+		"Goes":     Goes,
+		"to":       To,
+		"Movement": Movement,
+		"Move":     Move,
+
+		// directions
+		"N":  Direction,
+		"NE": Direction, // conflicts with Grid
+		"SE": Direction, // conflicts with Grid
+		"S":  Direction,
+		"SW": Direction, // conflicts with Grid and TerrainCode for Swamp
+		"NW": Direction, // conflicts with Grid
+
+		// terrain codes
+		"ALPS": TerrainCode,
+		"AH":   TerrainCode, // conflicts with Grid
+		"AR":   TerrainCode, // conflicts with Grid
+		"BF":   TerrainCode, // conflicts with Grid
+		"BH":   TerrainCode, // conflicts with Grid
+		"CH":   TerrainCode, // conflicts with Grid
+		"D":    TerrainCode,
+		"DH":   TerrainCode, // conflicts with Grid
+		"DE":   TerrainCode, // conflicts with Grid
+		"GH":   TerrainCode, // conflicts with Grid
+		"GHP":  TerrainCode,
+		"Hsm":  TerrainCode,
+		"JG":   TerrainCode, // conflicts with Grid
+		"JH":   TerrainCode, // conflicts with Grid
+		"L":    TerrainCode,
+		"Lam":  TerrainCode,
+		"Lcm":  TerrainCode,
+		"Ljm":  TerrainCode,
+		"Lsm":  TerrainCode,
+		"Lvm":  TerrainCode,
+		"O":    TerrainCode,
+		"PI":   TerrainCode, // conflicts with Grid
+		"PPR":  TerrainCode,
+		"PR":   TerrainCode, // conflicts with Grid
+		"RH":   TerrainCode, // conflicts with Grid
+		"SH":   TerrainCode, // conflicts with Grid
+		// SW conflicts with Direction and Grid
+		"TU": TerrainCode, // conflicts with Grid
+
+		// scout line keywords
+		"Scout": Scout,
+
+		// status line keywords
+		"Status": Status,
 	}
 
 	reGrid          = regexp.MustCompile(`^[A-Z]{2}$`)
