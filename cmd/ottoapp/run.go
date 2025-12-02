@@ -16,11 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/playbymail/ottoapp/backend/parsers"
 	"github.com/playbymail/ottoapp/backend/parsers/reports"
-	"github.com/playbymail/ottoapp/backend/parsers/reports/scrubbers"
 	"github.com/playbymail/ottoapp/backend/services/email"
 	"github.com/playbymail/ottoapp/backend/services/games"
+	parsers "github.com/playbymail/ottoapp/backend/services/reports/docx"
+	"github.com/playbymail/ottoapp/backend/services/reports/scrubbers"
 	"github.com/spf13/cobra"
 )
 

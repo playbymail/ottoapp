@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-// Package parsers implements parsers for TribeNet reports.
-package parsers
+// Package docx implements a parsers for Word (DOCX) documents.
+package docx
 
 import (
 	"bytes"

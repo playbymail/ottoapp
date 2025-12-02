@@ -3,6 +3,7 @@
 (* It is intended as documentation for implementing a recursive descent parser. *)
 (* Terminals start with an upper-case letter and are defined in ../lexers pkg.  *)
 (* Spaces are significant in the grammar when called out with the SP terminal.  *)
+(* The "_" glyph represents a "run up to" terminal.                             *)
 
 (* ============================================================================ *)
 (* Top-Level Structure *)
@@ -11,7 +12,9 @@
 (* A cleaned turn report contains one or more unit sections *)
 turn_report     = unit_section, { unit_section }, EOF ;
 
-unit_section    = unit_line ;
+unit_section    = unit_line,
+                  turn_line,
+                  [ unit_movement_line ];
 
 (* ============================================================================ *)
 (* Unit Line *)
@@ -46,3 +49,43 @@ turn_line       = Current, Turn, TurnYearMonth, turn_number, Comma, Season, Comm
 
 turn_number     = LeftParen, Hash, Number, RightParen ;     (* e.g., (#0), (#1) *)
 report_date     = Number, Slash, Number, Slash, Number ;    (* DD/MM/YYYY *)
+
+(* ============================================================================ *)
+(* Unit Movement *)
+(* ============================================================================ *)
+
+unit_movement_line = unit_goes_to_line |
+                     land_movement_line ;
+
+(* Example: Tribe Goes to QQ 1612 *)
+unit_goes_to_line = Tribe, Goes, To, grid_coords ;
+
+(* Example: Tribe Movement: Move S-PR, *)
+land_movement_line = Tribe, Movement, Colon, land_movement, EOL ;
+
+(* ============================================================================ *)
+(* Land Movement *)
+(* ============================================================================ *)
+
+(* Land Movement is a backslash-separated sequence of steps. *)
+(* Steps may be empty or full. *)
+(* An empty step is an artifact of the report generator but must be parsed *)
+(*   Example (empty step): Move *)
+(*   Example (empty step): \ *)
+(* A full step describes entering a hex: Direction Dash Terrain Comma *)
+(*   Example (full step): Move NE-PR, *)
+(*   Example (full step): \NE-PR, *)
+(*   Example (full step, full step): Move NE-PR, \NE-PR, *)
+(* Empty steps can appear anywhere in a movement line *)
+(*   Example (full step, empty step): Move NE-PR, \ *)
+(*   Example (full step, empty step, empty step): Move SE-PR, \\ *)
+(*   Example (empty step, full step, empty step): Move \SE-PR, \ *)
+land_movement  = Move, land_step, { Backslash , land_step } ;
+
+(* Land step movement is optional; result is required for a full step *)
+land_step = [ [ land_step_movement ], land_step_result ];
+
+land_step_movement = Direction, Dash, Terrain ;
+
+(* Grammar for results will be enhanced as we parse more complex turn results *)
+land_step_result = Comma ;

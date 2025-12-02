@@ -1,5 +1,7 @@
 # CST Parser: Developer Specification
 
+Warning: Outdated.
+
 ## Scope and Objectives
 
 * Build a **lossless CST** (concrete syntax tree) from tokens produced by `lexers.Lexer`.
@@ -19,7 +21,7 @@
 ```go
 package cst
 
-import "github.com/playbymail/ottoapp/backend/parsers/cst"
+import "github.com/playbymail/ottoapp/backend/services/reports/cst"
 
 // ParseFile is the main entry point for one logical input (e.g., a report file).
 func ParseFile(input []byte) (*File, []Diagnostic)

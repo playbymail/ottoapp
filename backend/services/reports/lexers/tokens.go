@@ -156,6 +156,7 @@ const (
 	Comma
 	Dash
 	Delimiter
+	Direction
 	Equals
 	EOL
 	EOF
@@ -168,10 +169,11 @@ const (
 	RightParen
 	Slash
 	Spaces
+	TerrainCode
 	TurnYearMonth
 	UnitId
 
-	// keywords
+	// unit line keywords
 	Tribe
 	Courier
 	Element
@@ -182,7 +184,20 @@ const (
 	Previous
 	Turn
 
+	// turn line keywords
 	Season
 	Next
 	Weather
+
+	// unit movement keywords
+	Goes
+	To
+	Movement
+	Move
+
+	// scout movement keywords
+	Scout
+
+	// status line keywords
+	Status
 )

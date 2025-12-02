@@ -174,6 +174,60 @@ Garrison 0987g1, , Current Hex = QQ 1408, (Previous Hex = QQ 1408)
 	}
 }
 
+func TestParse_UnitSectionWithTurnLine(t *testing.T) {
+	input := `Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)
+Current Turn 900-01 (#1), Spring, FINE Next Turn 900-02 (#2), 12/12/2025
+Element 0987e1, , Current Hex = QQ 1407, (Previous Hex = FF 1410)
+Current Turn 900-01 (#1), Spring, FINE
+`
+	tokens := lexers.Scan([]byte(input))
+	result := cst.Parse(tokens)
+
+	if got := len(result.Sections); got != 2 {
+		t.Fatalf("sections: want 2, got %d", got)
+	}
+
+	// First section: Tribe with turn line including next turn
+	section1 := result.Sections[0]
+	if got := string(section1.UnitLine.Keyword.Bytes()); got != "Tribe" {
+		t.Errorf("section 0: keyword: want %q, got %q", "Tribe", got)
+	}
+	if section1.TurnLine == nil {
+		t.Fatal("section 0: TurnLine is nil")
+	}
+	if got := string(section1.TurnLine.TurnYearMonth1.Bytes()); got != "900-01" {
+		t.Errorf("section 0: TurnYearMonth1: want %q, got %q", "900-01", got)
+	}
+	if got := string(section1.TurnLine.Season.Bytes()); got != "Spring" {
+		t.Errorf("section 0: Season: want %q, got %q", "Spring", got)
+	}
+	if section1.TurnLine.Next == nil {
+		t.Error("section 0: expected Next turn info")
+	}
+	if section1.TurnLine.ReportDate == nil {
+		t.Error("section 0: expected ReportDate")
+	}
+
+	// Second section: Element with turn line without next turn
+	section2 := result.Sections[1]
+	if got := string(section2.UnitLine.Keyword.Bytes()); got != "Element" {
+		t.Errorf("section 1: keyword: want %q, got %q", "Element", got)
+	}
+	if section2.TurnLine == nil {
+		t.Fatal("section 1: TurnLine is nil")
+	}
+	if got := string(section2.TurnLine.TurnYearMonth1.Bytes()); got != "900-01" {
+		t.Errorf("section 1: TurnYearMonth1: want %q, got %q", "900-01", got)
+	}
+	if section2.TurnLine.Next != nil {
+		t.Error("section 1: expected no Next turn info")
+	}
+
+	if len(result.Errors()) != 0 {
+		t.Errorf("unexpected errors: %v", result.Errors())
+	}
+}
+
 func TestParse_ReportFile(t *testing.T) {
 	input, err := os.ReadFile("../lexers/testdata/0900-01.0987.scrubbed.txt")
 	if err != nil {
@@ -183,21 +237,21 @@ func TestParse_ReportFile(t *testing.T) {
 	tokens := lexers.Scan(input)
 	result := cst.Parse(tokens)
 
-	// The file has lines starting with unit keywords on lines 1, 3, 8, 9, 15, 17, 18
-	// Lines 1, 8, 15, 17 are valid unit lines
-	// Lines 3, 9, 18 are "Tribe Movement:" lines that start with "Tribe" but fail to parse
+	// The file has 4 unit sections:
+	// - Tribe 0987 (line 1) with land movement (line 3)
+	// - Element 0987e1 (line 8) with land movement (line 9)
+	// - Garrison 0987g1 (line 15) - no movement
+	// - Tribe 1987 (line 17) with land movement (line 18)
 	expectedSections := []struct {
-		keyword   string
-		unitID    string
-		wantError bool
+		keyword      string
+		unitID       string
+		hasMovement  bool
+		movementType string // "land" or "goes_to"
 	}{
-		{"Tribe", "0987", false},      // line 1: valid unit line
-		{"Tribe", "Movement", true},   // line 3: "Tribe Movement:" - fails after Movement
-		{"Element", "0987e1", false},  // line 8: valid unit line
-		{"Tribe", "Movement", true},   // line 9: "Tribe Movement:" - fails after Movement
-		{"Garrison", "0987g1", false}, // line 15: valid unit line
-		{"Tribe", "1987", false},      // line 17: valid unit line
-		{"Tribe", "Movement", true},   // line 18: "Tribe Movement:" - fails after Movement
+		{"Tribe", "0987", true, "land"},
+		{"Element", "0987e1", true, "land"},
+		{"Garrison", "0987g1", false, ""},
+		{"Tribe", "1987", true, "land"},
 	}
 
 	if got := len(result.Sections); got != len(expectedSections) {
@@ -218,17 +272,24 @@ func TestParse_ReportFile(t *testing.T) {
 				t.Errorf("section %d: unit id: want %q, got %q", i, exp.unitID, got)
 			}
 		}
-		hasErrors := len(section.Errors()) > 0
-		if hasErrors != exp.wantError {
-			t.Errorf("section %d: wantError=%v, got errors=%v", i, exp.wantError, section.Errors())
+
+		hasMovement := section.UnitMovementLine != nil
+		if hasMovement != exp.hasMovement {
+			t.Errorf("section %d (%s): hasMovement: want %v, got %v", i, exp.unitID, exp.hasMovement, hasMovement)
+		}
+
+		if exp.hasMovement && exp.movementType == "land" {
+			if _, ok := section.UnitMovementLine.(*cst.LandMovementLineNode); !ok {
+				t.Errorf("section %d (%s): expected LandMovementLineNode, got %T", i, exp.unitID, section.UnitMovementLine)
+			}
 		}
 	}
 
-	// Expect errors for non-unit lines and failed "Tribe Movement" parses
+	// Expect errors for non-unit content (Scout lines, Status lines, etc.)
 	if len(result.Errors()) == 0 {
-		t.Error("expected errors for non-unit content and failed parses")
+		t.Error("expected errors for non-unit content")
 	} else {
-		t.Logf("errors (expected): %d", len(result.Errors()))
+		t.Logf("errors (expected for Scout/Status lines): %d", len(result.Errors()))
 	}
 }
 
@@ -427,6 +488,161 @@ func TestParseTurnLine(t *testing.T) {
 					string(result.ReportDate.Year.Bytes())
 				if gotDate != tc.wantReportDate {
 					t.Errorf("ReportDate: want %q, got %q", tc.wantReportDate, gotDate)
+				}
+			}
+		})
+	}
+}
+
+func TestParse_UnitGoesToLine(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantCoords string // "Grid Number"
+		wantErrors int
+	}{
+		{
+			name:       "basic unit goes to",
+			input:      "Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Goes to QQ 1612\n",
+			wantCoords: "QQ 1612",
+			wantErrors: 0,
+		},
+		{
+			name:       "unit goes to different grid",
+			input:      "Tribe 1234, , Current Hex = AA 0101, (Previous Hex = N/A)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Goes to BB 2222\n",
+			wantCoords: "BB 2222",
+			wantErrors: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := lexers.Scan([]byte(tc.input))
+			result := cst.Parse(tokens)
+
+			if got := len(result.Errors()); got != tc.wantErrors {
+				t.Errorf("errors: want %d, got %d", tc.wantErrors, got)
+				for _, err := range result.Errors() {
+					t.Logf("  error: %v", err)
+				}
+			}
+
+			if len(result.Sections) == 0 {
+				t.Fatal("expected at least one section")
+			}
+
+			section := result.Sections[0]
+			if section.UnitMovementLine == nil {
+				t.Fatal("UnitMovementLine is nil")
+			}
+
+			moveLine, ok := section.UnitMovementLine.(*cst.UnitGoesToLineNode)
+			if !ok {
+				t.Fatalf("expected UnitGoesToLineNode, got %T", section.UnitMovementLine)
+			}
+
+			if moveLine.Coords == nil {
+				t.Fatal("Coords is nil")
+			}
+
+			gotCoords := string(moveLine.Coords.Grid.Bytes()) + " " + string(moveLine.Coords.Number.Bytes())
+			if gotCoords != tc.wantCoords {
+				t.Errorf("coords: want %q, got %q", tc.wantCoords, gotCoords)
+			}
+		})
+	}
+}
+
+func TestParse_LandMovementLine(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantSteps  int
+		wantMoves  []string // "DIR-TERRAIN" or "" for empty steps
+		wantErrors int
+	}{
+		{
+			name:       "single step",
+			input:      "Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Movement: Move N-PR,\n",
+			wantSteps:  1,
+			wantMoves:  []string{"N-PR"},
+			wantErrors: 0,
+		},
+		{
+			name:       "two steps",
+			input:      "Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Movement: Move N-PR, \\NE-GH,\n",
+			wantSteps:  2,
+			wantMoves:  []string{"N-PR", "NE-GH"},
+			wantErrors: 0,
+		},
+		{
+			name:       "empty first step",
+			input:      "Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Movement: Move \\NE-PR,\n",
+			wantSteps:  2,
+			wantMoves:  []string{"", "NE-PR"},
+			wantErrors: 0,
+		},
+		{
+			name:       "trailing empty step",
+			input:      "Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Movement: Move N-PR, \\\n",
+			wantSteps:  2,
+			wantMoves:  []string{"N-PR", ""},
+			wantErrors: 0,
+		},
+		{
+			name:       "multiple empty steps",
+			input:      "Tribe 0987, , Current Hex = QQ 1509, (Previous Hex = QQ 1410)\nCurrent Turn 900-01 (#1), Spring, FINE\nTribe Movement: Move SE-PR, \\\\\n",
+			wantSteps:  3,
+			wantMoves:  []string{"SE-PR", "", ""},
+			wantErrors: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := lexers.Scan([]byte(tc.input))
+			result := cst.Parse(tokens)
+
+			if got := len(result.Errors()); got != tc.wantErrors {
+				t.Errorf("errors: want %d, got %d", tc.wantErrors, got)
+				for _, err := range result.Errors() {
+					t.Logf("  error: %v", err)
+				}
+			}
+
+			if len(result.Sections) == 0 {
+				t.Fatal("expected at least one section")
+			}
+
+			section := result.Sections[0]
+			if section.UnitMovementLine == nil {
+				t.Fatal("UnitMovementLine is nil")
+			}
+
+			moveLine, ok := section.UnitMovementLine.(*cst.LandMovementLineNode)
+			if !ok {
+				t.Fatalf("expected LandMovementLineNode, got %T", section.UnitMovementLine)
+			}
+
+			if moveLine.LandMovement == nil {
+				t.Fatal("LandMovement is nil")
+			}
+
+			if got := len(moveLine.LandMovement.Steps); got != tc.wantSteps {
+				t.Errorf("steps: want %d, got %d", tc.wantSteps, got)
+			}
+
+			for i, wantMove := range tc.wantMoves {
+				if i >= len(moveLine.LandMovement.Steps) {
+					break
+				}
+				step := moveLine.LandMovement.Steps[i]
+				gotMove := ""
+				if step.Direction != nil && step.Terrain != nil {
+					gotMove = string(step.Direction.Bytes()) + "-" + string(step.Terrain.Bytes())
+				}
+				if gotMove != wantMove {
+					t.Errorf("step %d: want %q, got %q", i, wantMove, gotMove)
 				}
 			}
 		})

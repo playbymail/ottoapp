@@ -13,12 +13,12 @@ import (
 	"strconv"
 
 	"github.com/playbymail/ottoapp/backend/domains"
-	"github.com/playbymail/ottoapp/backend/parsers"
-	"github.com/playbymail/ottoapp/backend/parsers/office"
 	"github.com/playbymail/ottoapp/backend/restapi"
 	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/documents"
 	"github.com/playbymail/ottoapp/backend/services/games"
+	parsers "github.com/playbymail/ottoapp/backend/services/reports/docx"
+	"github.com/playbymail/ottoapp/backend/services/reports/office"
 )
 
 // PostGamesTurnReportFiles creates a new turn report document for the clan specified
