@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-package cst
+package obsolete_cst
 
 func Parse(input []byte) *Node {
 	var tokens []*Token

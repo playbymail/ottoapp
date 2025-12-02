@@ -7,14 +7,48 @@ package lexers
 import "bytes"
 
 type Token struct {
+	Kind           Kind
 	LeadingTrivia  []*Span
-	Value          *Span
+	Value          []*Span
 	TrailingTrivia []*Span
 }
 
+// Position returns the line and column number of the token.
+func (t *Token) Position() (int, int) {
+	if t == nil {
+		return 0, 0
+	} else if len(t.Value) != 0 {
+		return t.Value[0].Line, t.Value[0].Col
+	} else if len(t.LeadingTrivia) != 0 {
+		return t.LeadingTrivia[0].Line, t.LeadingTrivia[0].Col
+	} else if len(t.TrailingTrivia) != 0 {
+		return t.TrailingTrivia[0].Line, t.TrailingTrivia[0].Col
+	}
+	return 0, 0
+}
+
+// Length returns the length of the token.
+func (t *Token) Length() int {
+	if t == nil {
+		return 0
+	}
+	length := 0
+	for _, span := range t.Value {
+		length += span.Length()
+	}
+	return length
+}
+
 // Bytes is a helper for diagnostics / debugging.
-func (t *Token) Bytes(src []byte) []byte {
-	return t.Value.Bytes()
+// Returns an empty slice if there is no value.
+func (t *Token) Bytes() []byte {
+	b := &bytes.Buffer{}
+	if t != nil {
+		for _, span := range t.Value {
+			b.Write(span.Bytes())
+		}
+	}
+	return b.Bytes()
 }
 
 // Source is a helper function to rebuild the input from the token stream.
@@ -23,7 +57,9 @@ func (t *Token) Source() []byte {
 	for _, span := range t.LeadingTrivia {
 		b.Write(span.Bytes())
 	}
-	b.Write(t.Value.Bytes())
+	for _, span := range t.Value {
+		b.Write(span.Bytes())
+	}
 	for _, span := range t.TrailingTrivia {
 		b.Write(span.Bytes())
 	}
@@ -45,6 +81,22 @@ func (s *Span) Length() int {
 	return len(s.Value)
 }
 
+// LineNo returns the line number of the start of the span
+func (s *Span) LineNo() int {
+	if s == nil {
+		return 0
+	}
+	return s.Line
+}
+
+// ColNo returns the column number of the start of the span
+func (s *Span) ColNo() int {
+	if s == nil {
+		return 0
+	}
+	return s.Col
+}
+
 // Bytes is a helper for diagnostics / debugging.
 func (s *Span) Bytes() []byte {
 	if s == nil {
@@ -53,14 +105,40 @@ func (s *Span) Bytes() []byte {
 	return s.Value
 }
 
-// ToSource is helper function to rebuild the source from the token stream.
+// Merge is a helper function to merge tokens tokens
+func (t *Token) Merge(tokens ...*Token) {
+	for _, tok := range tokens {
+		if tok.LeadingTrivia != nil {
+			t.Value = append(t.Value, tok.LeadingTrivia...)
+		}
+		if tok.Value != nil {
+			t.Value = append(t.Value, tok.Value...)
+		}
+		if tok.TrailingTrivia != nil {
+			t.Value = append(t.Value, tok.TrailingTrivia...)
+		}
+	}
+}
+
+// Merge is a helper function to merge tokens tokens
+func Merge(kind Kind, tokens ...*Token) *Token {
+	t := &Token{Kind: kind}
+	for _, tok := range tokens {
+		t.Merge(tok)
+	}
+	return t
+}
+
+// ToSource is a helper function to rebuild the source from the token stream.
 func ToSource(tokens ...*Token) []byte {
 	b := &bytes.Buffer{}
 	for _, t := range tokens {
 		for _, span := range t.LeadingTrivia {
 			b.Write(span.Bytes())
 		}
-		b.Write(t.Value.Bytes())
+		for _, span := range t.Value {
+			b.Write(span.Bytes())
+		}
 		for _, span := range t.TrailingTrivia {
 			b.Write(span.Bytes())
 		}
@@ -73,6 +151,8 @@ type Kind int
 const (
 	Text Kind = iota
 
+	Backslash
+	Colon
 	Comma
 	Dash
 	Delimiter
@@ -81,12 +161,15 @@ const (
 	EOF
 	Grid
 	Hash
+	NA
 	Note
 	Number
 	LeftParen
 	RightParen
 	Slash
 	Spaces
+	TurnYearMonth
+	UnitId
 
 	// keywords
 	Tribe
