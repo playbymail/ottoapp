@@ -12,10 +12,11 @@ type Node interface {
 
 // TurnReportNode is the root of the CST.
 type TurnReportNode struct {
-	Sections []*UnitSectionNode
-	EOF      *lexers.Token
-	errors   []error
-	tokens   []*lexers.Token
+	LineNo, ColNo int
+	Sections      []*UnitSectionNode
+	EOF           *lexers.Token
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *TurnReportNode) Errors() []error         { return n.errors }
@@ -23,6 +24,7 @@ func (n *TurnReportNode) Tokens() []*lexers.Token { return n.tokens }
 
 // UnitSectionNode represents a unit section (unit line followed by turn line).
 type UnitSectionNode struct {
+	LineNo, ColNo    int
 	UnitLine         *UnitLineNode
 	TurnLine         *TurnLineNode
 	UnitMovementLine UnitMovementLineNode // optional
@@ -36,25 +38,26 @@ func (n *UnitSectionNode) Tokens() []*lexers.Token { return n.tokens }
 // UnitLineNode represents a unit line.
 // Example: Tribe 0987, , Current Hex = QQ 1315, (Previous Hex = N/A)
 type UnitLineNode struct {
-	Keyword     *lexers.Token // Tribe | Courier | Element | Fleet | Garrison
-	UnitID      *lexers.Token // Number or UnitId
-	Comma1      *lexers.Token
-	Note        *lexers.Token // optional
-	Comma2      *lexers.Token
-	Current     *lexers.Token
-	Hex1        *lexers.Token
-	Equals1     *lexers.Token
-	CurrentHex  CoordsNode
-	Comma3      *lexers.Token
-	LeftParen   *lexers.Token
-	Previous    *lexers.Token
-	Hex2        *lexers.Token
-	Equals2     *lexers.Token
-	PreviousHex CoordsNode
-	RightParen  *lexers.Token
-	EOL         *lexers.Token
-	errors      []error
-	tokens      []*lexers.Token
+	LineNo, ColNo int
+	Keyword       *lexers.Token // Tribe | Courier | Element | Fleet | Garrison
+	UnitID        *lexers.Token // Number or UnitId
+	Comma1        *lexers.Token
+	Note          *lexers.Token // optional
+	Comma2        *lexers.Token
+	Current       *lexers.Token
+	Hex1          *lexers.Token
+	Equals1       *lexers.Token
+	CurrentHex    CoordsNode
+	Comma3        *lexers.Token
+	LeftParen     *lexers.Token
+	Previous      *lexers.Token
+	Hex2          *lexers.Token
+	Equals2       *lexers.Token
+	PreviousHex   CoordsNode
+	RightParen    *lexers.Token
+	EOL           *lexers.Token
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *UnitLineNode) Errors() []error         { return n.errors }
@@ -68,10 +71,11 @@ type CoordsNode interface {
 
 // GridCoordsNode represents grid coordinates (e.g., "QQ 1315").
 type GridCoordsNode struct {
-	Grid   *lexers.Token // e.g., "QQ"
-	Number *lexers.Token // e.g., "1315"
-	errors []error
-	tokens []*lexers.Token
+	LineNo, ColNo int
+	Grid          *lexers.Token // e.g., "QQ"
+	Number        *lexers.Token // e.g., "1315"
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *GridCoordsNode) Errors() []error         { return n.errors }
@@ -80,9 +84,10 @@ func (n *GridCoordsNode) coordsNode()             {}
 
 // NACoordsNode represents "N/A" coordinates (not available).
 type NACoordsNode struct {
-	Text   *lexers.Token // "N/A"
-	errors []error
-	tokens []*lexers.Token
+	LineNo, ColNo int
+	Text          *lexers.Token // "N/A"
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *NACoordsNode) Errors() []error         { return n.errors }
@@ -91,10 +96,11 @@ func (n *NACoordsNode) coordsNode()             {}
 
 // ObscuredCoordsNode represents obscured coordinates (e.g., "## 1315").
 type ObscuredCoordsNode struct {
-	Grid   *lexers.Token // e.g., "##"
-	Number *lexers.Token // e.g., "1315"
-	errors []error
-	tokens []*lexers.Token
+	LineNo, ColNo int
+	Grid          *lexers.Token // e.g., "##"
+	Number        *lexers.Token // e.g., "1315"
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *ObscuredCoordsNode) Errors() []error         { return n.errors }
@@ -104,9 +110,10 @@ func (n *ObscuredCoordsNode) coordsNode()             {}
 // ErrorNode represents a parsing error with recovery.
 // It captures tokens that couldn't be parsed.
 type ErrorNode struct {
-	Message string
-	errors  []error
-	tokens  []*lexers.Token // tokens consumed during error recovery
+	LineNo, ColNo int
+	Message       string
+	errors        []error
+	tokens        []*lexers.Token // tokens consumed during error recovery
 }
 
 func (n *ErrorNode) Errors() []error         { return n.errors }
@@ -114,9 +121,10 @@ func (n *ErrorNode) Tokens() []*lexers.Token { return n.tokens }
 
 // ErrorCoordsNode is an error node that satisfies CoordsNode.
 type ErrorCoordsNode struct {
-	Message string
-	errors  []error
-	tokens  []*lexers.Token
+	LineNo, ColNo int
+	Message       string
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *ErrorCoordsNode) Errors() []error         { return n.errors }
@@ -127,6 +135,7 @@ func (n *ErrorCoordsNode) coordsNode()             {}
 // Example: Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025
 // Example: Current Turn 900-01 (#1), Spring, FINE
 type TurnLineNode struct {
+	LineNo, ColNo  int
 	Current1       *lexers.Token   // Current
 	Turn1          *lexers.Token   // Turn
 	TurnYearMonth1 *lexers.Token   // e.g., 899-12
@@ -152,12 +161,13 @@ func (n *TurnLineNode) Tokens() []*lexers.Token { return n.tokens }
 
 // TurnNumberNode represents a turn number (e.g., (#0), (#1)).
 type TurnNumberNode struct {
-	LeftParen  *lexers.Token
-	Hash       *lexers.Token
-	Number     *lexers.Token
-	RightParen *lexers.Token
-	errors     []error
-	tokens     []*lexers.Token
+	LineNo, ColNo int
+	LeftParen     *lexers.Token
+	Hash          *lexers.Token
+	Number        *lexers.Token
+	RightParen    *lexers.Token
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *TurnNumberNode) Errors() []error         { return n.errors }
@@ -165,13 +175,14 @@ func (n *TurnNumberNode) Tokens() []*lexers.Token { return n.tokens }
 
 // ReportDateNode represents a report date (DD/MM/YYYY).
 type ReportDateNode struct {
-	Day    *lexers.Token
-	Slash1 *lexers.Token
-	Month  *lexers.Token
-	Slash2 *lexers.Token
-	Year   *lexers.Token
-	errors []error
-	tokens []*lexers.Token
+	LineNo, ColNo int
+	Day           *lexers.Token
+	Slash1        *lexers.Token
+	Month         *lexers.Token
+	Slash2        *lexers.Token
+	Year          *lexers.Token
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *ReportDateNode) Errors() []error         { return n.errors }
@@ -187,13 +198,14 @@ type UnitMovementLineNode interface {
 // UnitGoesToLineNode represents a "Tribe Goes to" movement line.
 // Example: Tribe Goes to QQ 1612
 type UnitGoesToLineNode struct {
-	Tribe  *lexers.Token // Tribe keyword
-	Goes   *lexers.Token
-	To     *lexers.Token
-	Coords *GridCoordsNode
-	EOL    *lexers.Token
-	errors []error
-	tokens []*lexers.Token
+	LineNo, ColNo int
+	Tribe         *lexers.Token // Tribe keyword
+	Goes          *lexers.Token
+	To            *lexers.Token
+	Coords        *GridCoordsNode
+	EOL           *lexers.Token
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *UnitGoesToLineNode) Errors() []error         { return n.errors }
@@ -203,13 +215,14 @@ func (n *UnitGoesToLineNode) unitMovementLineNode()   {}
 // LandMovementLineNode represents a "Tribe Movement:" line.
 // Example: Tribe Movement: Move N-PR, \NE-GH,
 type LandMovementLineNode struct {
-	Tribe        *lexers.Token // Tribe keyword
-	Movement     *lexers.Token // Movement keyword
-	Colon        *lexers.Token
-	LandMovement *LandMovementNode
-	EOL          *lexers.Token
-	errors       []error
-	tokens       []*lexers.Token
+	LineNo, ColNo int
+	Tribe         *lexers.Token // Tribe keyword
+	Movement      *lexers.Token // Movement keyword
+	Colon         *lexers.Token
+	LandMovement  *LandMovementNode
+	EOL           *lexers.Token
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *LandMovementLineNode) Errors() []error         { return n.errors }
@@ -219,10 +232,11 @@ func (n *LandMovementLineNode) unitMovementLineNode()   {}
 // LandMovementNode represents the movement portion after "Move".
 // land_movement = Move, land_step, { Backslash, land_step } ;
 type LandMovementNode struct {
-	Move   *lexers.Token
-	Steps  []*LandStepNode // first step + additional steps after backslashes
-	errors []error
-	tokens []*lexers.Token
+	LineNo, ColNo int
+	Move          *lexers.Token
+	Steps         []*LandStepNode // first step + additional steps after backslashes
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *LandMovementNode) Errors() []error         { return n.errors }
@@ -233,12 +247,13 @@ func (n *LandMovementNode) Tokens() []*lexers.Token { return n.tokens }
 // An empty step has no movement or result.
 // A full step has optional movement and required result.
 type LandStepNode struct {
-	Direction *lexers.Token // optional: N, NE, SE, S, SW, NW
-	Dash      *lexers.Token // required if Direction present
-	Terrain   *lexers.Token // required if Direction present
-	Comma     *lexers.Token // required if step content is present
-	errors    []error
-	tokens    []*lexers.Token
+	LineNo, ColNo int
+	Direction     *lexers.Token // optional: N, NE, SE, S, SW, NW
+	Dash          *lexers.Token // required if Direction present
+	Terrain       *lexers.Token // required if Direction present
+	Comma         *lexers.Token // required if step content is present
+	errors        []error
+	tokens        []*lexers.Token
 }
 
 func (n *LandStepNode) Errors() []error         { return n.errors }

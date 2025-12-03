@@ -101,9 +101,9 @@ func (db *DB) GetDatabaseVersion() (string, error) {
 	return db.q.GetDatabaseVersion(db.ctx)
 }
 
-func MigrateUp(ctx context.Context, path string, isInitializing, debug bool) error {
+func MigrateUp(ctx context.Context, path string, isInitializing, quiet, verbose, debug bool) error {
 	started := time.Now()
-	wdb, err := Open(ctx, path, false, debug)
+	wdb, err := Open(ctx, path, false, quiet, verbose, debug)
 	if err != nil {
 		return err
 	} else if wdb == nil || wdb.db == nil {

@@ -6,278 +6,184 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/parsers/reports"
 	"github.com/playbymail/ottoapp/backend/services/email"
 	"github.com/playbymail/ottoapp/backend/services/games"
+	"github.com/playbymail/ottoapp/backend/services/reports/cst"
+	"github.com/playbymail/ottoapp/backend/services/reports/cst2"
 	parsers "github.com/playbymail/ottoapp/backend/services/reports/docx"
+	"github.com/playbymail/ottoapp/backend/services/reports/lexers"
+	"github.com/playbymail/ottoapp/backend/services/reports/lexers/lemon"
+	"github.com/playbymail/ottoapp/backend/services/reports/lexers/tokens"
 	"github.com/playbymail/ottoapp/backend/services/reports/scrubbers"
 	"github.com/spf13/cobra"
 )
 
 func cmdRun() *cobra.Command {
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.PersistentFlags().Bool("show-timing", false, "time command")
+		return nil
+	}
 	var cmd = &cobra.Command{
 		Use:   "run",
 		Short: "Run utility commands",
 	}
-
-	cmd.AddCommand(cmdRunGenMake())
+	if err := addFlags(cmd); err != nil {
+		log.Fatal(err)
+	}
+	cmd.AddCommand(cmdRunLemon())
+	cmd.AddCommand(cmdRunLexer())
 	cmd.AddCommand(cmdRunParse())
 	cmd.AddCommand(cmdRunWelcomeEmail())
-
 	return cmd
 }
 
-func cmdRunGenMake() *cobra.Command {
-	makefileName := "maps.mk"
-	oldBehavior := false
+func cmdRunLemon() *cobra.Command {
 	addFlags := func(cmd *cobra.Command) error {
-		cmd.Flags().StringVar(&makefileName, "output", makefileName, "name of makefile to create")
-		cmd.Flags().BoolVar(&oldBehavior, "old-behavior", oldBehavior, "enable old behavior")
+		return nil
+	}
+	var cmd = &cobra.Command{
+		Use:   "lemon",
+		Short: "Run lemon commands",
+	}
+	cmd.AddCommand(cmdRunLemonLex())
+	cmd.AddCommand(cmdRunLemonParse())
+	if err := addFlags(cmd); err != nil {
+		log.Fatalf("%s: %v\n", cmd.Use, err)
+	}
+	return cmd
+}
+
+func cmdRunLemonLex() *cobra.Command {
+	addFlags := func(cmd *cobra.Command) error {
+		return nil
+	}
+	var cmd = &cobra.Command{
+		Use:   "lex <report-file>",
+		Short: "Run lemon lexer against report file",
+		Args:  cobra.ExactArgs(1), // require path to report file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			showTiming, _ := cmd.Flags().GetBool("show-timing")
+			reportFile := args[0]
+			if strings.ToLower(filepath.Ext(reportFile)) != ".docx" {
+				return fmt.Errorf("report file must be .docx")
+			}
+			var docx *parsers.Docx
+			if input, err := os.ReadFile(reportFile); err != nil {
+				log.Fatal(err)
+			} else if docx, err = parsers.ParseDocx(bytes.NewReader(input), true, true); err != nil {
+				log.Fatal(err)
+			}
+			startedAt := time.Now()
+			lexer := lemon.New(docx.Text)
+			totalTokens := 0
+			var tok tokens.Token
+			for {
+				tok, totalTokens = lexer.Next(), totalTokens+1
+				log.Printf("lemon: lexer: %5d: %5d: %-18s: %q\n", tok.Line, tok.Col, tok.Kind, tok.Value)
+				if tok.Kind == tokens.EOF {
+					break
+				}
+			}
+			if showTiming {
+				log.Printf("%s: lines %6d: tokens %7d: lexed in %v\n", reportFile, tok.Line, totalTokens, time.Since(startedAt))
+				return nil
+			}
+			return nil
+		},
+	}
+	if err := addFlags(cmd); err != nil {
+		log.Fatalf("%s: %v\n", cmd.Use, err)
+	}
+	return cmd
+}
+
+func cmdRunLemonParse() *cobra.Command {
+	addFlags := func(cmd *cobra.Command) error {
+		return nil
+	}
+	var cmd = &cobra.Command{
+		Use:   "parse <report-file>",
+		Short: "Run lemon parser against report file",
+		Args:  cobra.ExactArgs(1), // require path to report file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			showTiming, _ := cmd.Flags().GetBool("show-timing")
+			reportFile := args[0]
+			if strings.ToLower(filepath.Ext(reportFile)) != ".docx" {
+				return fmt.Errorf("report file must be .docx")
+			}
+			var docx *parsers.Docx
+			if input, err := os.ReadFile(reportFile); err != nil {
+				log.Fatal(err)
+			} else if docx, err = parsers.ParseDocx(bytes.NewReader(input), false, false); err != nil {
+				log.Fatal(err)
+			}
+			startedAt := time.Now()
+			lexer := lemon.New(docx.Text)
+			totalTokens := 0
+			var tok tokens.Token
+			for {
+				tok, totalTokens = lexer.Next(), totalTokens+1
+				//log.Printf("lemon: lexer: %5d: %5d: %-18s: %q\n", tok.Line, tok.Col, tok.Kind, tok.Value)
+				if tok.Kind == tokens.EOF {
+					break
+				}
+			}
+			if showTiming {
+				log.Printf("%s: lines %6d: tokens %7d: lexed in %v\n", reportFile, tok.Line, totalTokens, time.Since(startedAt))
+				return nil
+			}
+			return nil
+		},
+	}
+	if err := addFlags(cmd); err != nil {
+		log.Fatalf("%s: %v\n", cmd.Use, err)
+	}
+	return cmd
+}
+
+func cmdRunLexer() *cobra.Command {
+	showTiming := false
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().BoolVar(&showTiming, "show-timing", showTiming, "time lexer")
 		return nil
 	}
 
-	cmd := &cobra.Command{
-		Use:   "genmake",
-		Short: "Generate a Makefile for map generation",
-		Long:  `Scans the data directory for turn reports and generates a Makefile to build maps.`,
-		Args:  cobra.ExactArgs(1), // require path to TN3.1 root
+	var cmd = &cobra.Command{
+		Use:   "lexer",
+		Short: "Run lexer against file",
+		Args:  cobra.ExactArgs(1), // require path to file to lex
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Normalize root path
-			rootDir, err := filepath.Abs(args[0])
+			input := args[0]
+			data, err := os.ReadFile(input)
 			if err != nil {
-				return errors.Join(fmt.Errorf("invalid path"), err)
-			} else if sb, err := os.Stat(rootDir); err != nil {
-				return errors.Join(fmt.Errorf("invalid path"), err)
-			} else if !sb.IsDir() {
-				return fmt.Errorf("%s: not a directory", rootDir)
+				return err
 			}
-			log.Printf("%s: root\n", rootDir)
-
-			if filepath.Base(makefileName) != makefileName {
-				return fmt.Errorf("%s: not a filename", makefileName)
-			} else if filepath.Ext(makefileName) != ".mk" {
-				makefileName += ".mk"
-			}
-			makefileName = filepath.Join(rootDir, makefileName)
-			log.Printf("%s: make file\n", makefileName)
-
-			if !oldBehavior {
+			lines := len(bytes.Split(data, []byte{'\n'}))
+			startedAt := time.Now()
+			tokens := lexers.Scan(data)
+			if showTiming {
+				log.Printf("%s: lines %6d: tokens %7d: lexed in %v\n", input, lines, len(tokens), time.Since(startedAt))
 				return nil
 			}
-
-			// Regex to match clan directories (e.g., 0500)
-			clanDirRe := regexp.MustCompile(`^0\d{3}$`)
-			// Regex to match report files (e.g., 0899-12.0500.report.docx or .txt)
-			reportFileRe := regexp.MustCompile(`^(\d{4}-\d{2})\.(\d{4})\.report\.(docx|txt)$`)
-
-			type TurnData struct {
-				ID string
-				// Set of file clan IDs found for this turn (e.g., "0987", "0134")
-				FileClans map[string]bool
+			for i, token := range tokens {
+				line, col := token.Position()
+				fmt.Printf("%7d: %6d: %6d: %-20s: %q\n",
+					i, line, col, token.Kind.String(), string(token.Bytes()))
 			}
-
-			type ClanData struct {
-				ID    string
-				Turns map[string]*TurnData
-			}
-			clans := make(map[string]*ClanData)
-
-			// Walk the directory structure
-			entries, err := os.ReadDir(rootDir)
-			if err != nil {
-				return fmt.Errorf("reading root dir: %w", err)
-			}
-
-			for _, entry := range entries {
-				if !entry.IsDir() {
-					continue
-				}
-				clanID := entry.Name()
-				if !clanDirRe.MatchString(clanID) {
-					continue
-				}
-
-				// Check inside the clan directory for input data
-				inputDir := filepath.Join(rootDir, clanID, "data", "input")
-				files, err := os.ReadDir(inputDir)
-				if os.IsNotExist(err) {
-					continue
-				}
-				if err != nil {
-					return fmt.Errorf("reading input dir for clan %s: %w", clanID, err)
-				}
-
-				for _, file := range files {
-					if file.IsDir() {
-						continue
-					}
-					matches := reportFileRe.FindStringSubmatch(file.Name())
-					if matches == nil {
-						continue
-					}
-					turnID := matches[1]
-					fileClanID := matches[2]
-
-					// We accept files from any clan inside this directory now.
-					// The map will be generated for the folder's clanID (owner),
-					// but it depends on all these files.
-
-					if _, ok := clans[clanID]; !ok {
-						clans[clanID] = &ClanData{
-							ID:    clanID,
-							Turns: make(map[string]*TurnData),
-						}
-					}
-
-					if _, ok := clans[clanID].Turns[turnID]; !ok {
-						clans[clanID].Turns[turnID] = &TurnData{
-							ID:        turnID,
-							FileClans: make(map[string]bool),
-						}
-					}
-					clans[clanID].Turns[turnID].FileClans[fileClanID] = true
-				}
-			}
-
-			// Sort clans
-			var clanIDs []string
-			for id := range clans {
-				clanIDs = append(clanIDs, id)
-			}
-			sort.Strings(clanIDs)
-
-			// Open output file
-			f, err := os.Create(makefileName)
-			if err != nil {
-				return fmt.Errorf("creating output file: %w", err)
-			}
-			defer f.Close()
-
-			// Write Makefile header
-			fmt.Fprintf(f, "# Generated by ottoapp run genmake\n")
-			fmt.Fprintf(f, "# Root: %s\n\n", rootDir)
-
-			// Define tool paths - using relative paths from the makefile execution context
-			fmt.Fprintf(f, "OTTOAPP := %s/bin/ottoapp\n", rootDir)
-			fmt.Fprintf(f, "OTTOMAP := %s/bin/ottomap\n", rootDir)
-			fmt.Fprintf(f, "\n")
-
-			fmt.Fprintf(f, ".PHONY: all maps\n\n")
-			fmt.Fprintf(f, "all: maps\n\n")
-
-			// Collect all map targets for the 'maps' phony target
-			var allMaps []string
-
-			// Buffer specific rules to write them after the 'all' target
-			var specificRules strings.Builder
-
-			// Pattern rule for extracting text reports
-			fmt.Fprintf(f, "# Pattern rule to extract text report from docx\n")
-			fmt.Fprintf(f, "%%.report.txt: %%.report.docx\n")
-			fmt.Fprintf(f, "\t@echo \"Extracting $@...\"\n")
-			fmt.Fprintf(f, "\t@$(OTTOAPP) report extract $< --output $@\n\n")
-
-			// Collect validation errors
-			var validationErrors []string
-
-			for _, clanID := range clanIDs {
-				data := clans[clanID]
-
-				// Validate directories exist
-				basePath := filepath.Join(rootDir, clanID, "data")
-				outputDir := filepath.Join(basePath, "output")
-				logsDir := filepath.Join(basePath, "logs")
-
-				if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-					validationErrors = append(validationErrors, fmt.Sprintf("clan %s: output directory missing: %s", clanID, outputDir))
-				}
-				if _, err := os.Stat(logsDir); os.IsNotExist(err) {
-					validationErrors = append(validationErrors, fmt.Sprintf("clan %s: logs directory missing: %s", clanID, logsDir))
-				}
-
-				// Sort turns
-				var turns []string
-				for turn := range data.Turns {
-					turns = append(turns, turn)
-				}
-				sort.Strings(turns)
-
-				fmt.Fprintf(&specificRules, "# Clan %s\n", clanID)
-
-				var previousReports []string
-
-				for _, turnID := range turns {
-					turnData := data.Turns[turnID]
-
-					// Define paths relative to CWD (where make is run)
-					inputPath := filepath.Join(basePath, "input")
-					outputPath := filepath.Join(basePath, "output")
-
-					// Sort file clans for deterministic output
-					var fileClans []string
-					for fc := range turnData.FileClans {
-						fileClans = append(fileClans, fc)
-					}
-					sort.Strings(fileClans)
-
-					// Add dependencies for this turn
-					for _, fc := range fileClans {
-						txtFile := filepath.Join(inputPath, fmt.Sprintf("%s.%s.report.txt", turnID, fc))
-						previousReports = append(previousReports, txtFile)
-					}
-
-					mapFile := filepath.Join(outputPath, fmt.Sprintf("%s.%s.wxx", turnID, clanID))
-					allMaps = append(allMaps, mapFile)
-
-					// Map generation rule
-					fmt.Fprintf(&specificRules, "%s: %s\n", mapFile, strings.Join(previousReports, " "))
-					fmt.Fprintf(&specificRules, "\t@echo \"Rendering %s...\"\n", mapFile)
-
-					logPath := filepath.Join(basePath, "logs", fmt.Sprintf("%s.%s.log", turnID, clanID))
-					errPath := filepath.Join(basePath, "logs", fmt.Sprintf("%s.%s.err", turnID, clanID))
-
-					fmt.Fprintf(&specificRules, "\t@$(OTTOMAP) render --data %s --clan-id %s --max-turn %s --show-grid-coords --save-with-turn-id 2> %s || (mv %s %s && exit 1)\n\n",
-						filepath.Join(rootDir, clanID, "data"),
-						clanID,
-						turnID,
-						logPath,
-						logPath,
-						errPath,
-					)
-				}
-			}
-
-			if len(validationErrors) > 0 {
-				for _, errMsg := range validationErrors {
-					fmt.Fprintln(os.Stderr, errMsg)
-				}
-				// Clean up partial output file
-				f.Close()
-				os.Remove(makefileName)
-				return fmt.Errorf("validation failed with %d errors", len(validationErrors))
-			}
-
-			fmt.Fprintf(f, "maps: %s\n\n", strings.Join(allMaps, " "))
-			fmt.Fprintf(f, "%s", specificRules.String())
-
-			fmt.Printf("Generated Makefile at %s with %d map targets\n", makefileName, len(allMaps))
-
 			return nil
 		},
 	}
 
 	if err := addFlags(cmd); err != nil {
-		log.Fatalf("%s: %v\n", cmd.Use, err)
+		log.Fatal(err)
 	}
 
 	return cmd
@@ -289,8 +195,80 @@ func cmdRunParse() *cobra.Command {
 		Short: "Run parser commands",
 	}
 
+	cmd.AddCommand(cmdRunParseCst())
 	cmd.AddCommand(cmdRunParseReportFile())
 	cmd.AddCommand(cmdRunParseTurnReport())
+
+	return cmd
+}
+
+func cmdRunParseCst() *cobra.Command {
+	showLineNo := false
+	showColNo := false
+	showTiming := false
+	showTokenKind := false
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().BoolVar(&showColNo, "col", showColNo, "print column number")
+		cmd.Flags().BoolVar(&showLineNo, "line", showLineNo, "print line number")
+		cmd.Flags().BoolVar(&showTiming, "show-timing", showTiming, "time lexer")
+		cmd.Flags().BoolVar(&showTokenKind, "kind", showTokenKind, "print token kind")
+		return nil
+	}
+
+	var cmd = &cobra.Command{
+		Use:          "cst",
+		Short:        "Run cst parser against file",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1), // require path to file to parse
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input := args[0]
+			data, err := os.ReadFile(input)
+			if err != nil {
+				return err
+			}
+			lines := len(bytes.Split(data, []byte{'\n'}))
+			startedAt := time.Now()
+			tokens := lexers.Scan(data)
+			cnodes, err := cst2.Parse(tokens)
+			if err != nil {
+				return err
+			} else if cnodes != nil {
+				lineNo := 1
+				for _, line := range bytes.Split(cnodes.Source(), []byte{'\n'}) {
+					if bytes.HasSuffix(line, []byte{'-', '-', '>', '8'}) {
+						fmt.Printf("%s\n", line)
+						continue
+					}
+					fmt.Printf("%5d: %s\n", lineNo, line)
+					lineNo++
+				}
+				fmt.Printf("%s: lines %6d: tokens %7d: parsed in %v\n", input, lines, len(tokens), time.Since(startedAt))
+				return nil
+			}
+			result := cst.Parse(tokens)
+			if showTiming {
+				log.Printf("%s: lines %6d: tokens %7d: errors %7d: parsed in %v\n", input, lines, len(tokens), len(result.Errors()), time.Since(startedAt))
+				return nil
+			}
+			options := []cst.PrintOption{(cst.WithName(input))}
+			if showColNo {
+				options = append(options, cst.WithColumnNo(), cst.WithLineNo())
+			}
+			if showLineNo {
+				options = append(options, cst.WithLineNo())
+			}
+			if showTokenKind {
+				options = append(options, cst.WithTokenKind())
+			}
+			cst.PrettyPrint(os.Stdout, result, options...)
+
+			return nil
+		},
+	}
+
+	if err := addFlags(cmd); err != nil {
+		log.Fatal(err)
+	}
 
 	return cmd
 }
@@ -344,12 +322,14 @@ func cmdRunParseReportFile() *cobra.Command {
 }
 
 func cmdRunParseTurnReport() *cobra.Command {
+	patchNA := false
 	rawExtractFile := ""
 	scrubbedFile := ""
 	showJson := false
 	showStats := false
 	showTiming := false
 	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().BoolVar(&patchNA, "patch-na", patchNA, "patch N/A")
 		cmd.Flags().StringVar(&rawExtractFile, "raw-extract", rawExtractFile, "path to save raw extract to")
 		cmd.Flags().StringVar(&scrubbedFile, "scrubbed-extract", scrubbedFile, "path to save scrubbed extract to")
 		cmd.Flags().BoolVar(&showJson, "show-json", showJson, "show json after extract")
@@ -386,7 +366,7 @@ func cmdRunParseTurnReport() *cobra.Command {
 				}
 			}
 
-			lines := scrubbers.Scrub(bytes.Split(docx.Text, []byte{'\n'}))
+			lines := scrubbers.Scrub(bytes.Split(docx.Text, []byte{'\n'}), patchNA)
 			if scrubbedFile != "" {
 				output := bytes.Join(lines, []byte{'\n'})
 				if len(output) == 0 {

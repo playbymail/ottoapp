@@ -16,7 +16,7 @@ import (
 
 const (
 	// the version of the database this application expects
-	expectedSchemaVersion = "20251106_2132"
+	expectedSchemaVersion = "20251211_1812"
 )
 
 type DB struct {

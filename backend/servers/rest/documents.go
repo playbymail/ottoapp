@@ -3,6 +3,7 @@
 package rest
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -20,7 +21,7 @@ import (
 // Route: GET /api/documents/{id}
 //
 // Response type: documents.DocumentView
-func GetDocument(authzSvc *authz.Service, documentsSvc *documents.Service) http.HandlerFunc {
+func GetDocument(authzSvc *authz.Service, documentsSvc *documents.Service, quiet, verbose, debug bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, err := authzSvc.GetActor(r)
 		if err != nil {
@@ -40,7 +41,23 @@ func GetDocument(authzSvc *authz.Service, documentsSvc *documents.Service) http.
 			docId = domains.ID(value)
 		}
 
-		view, err := documentsSvc.GetDocument(actor, docId)
+		clan, err := documentsSvc.ReadDocumentOwner(docId, quiet, verbose, debug)
+		if err != nil {
+			if errors.Is(err, domains.ErrNotExists) {
+				// not found, return a 404 response structured as a JSON:API error object
+				restapi.WriteJsonApiError(w, http.StatusNotFound, "document_not_found",
+					"Resource Not Found",
+					fmt.Sprintf("Document with ID %d could not be found.", docId))
+				return
+			}
+			restapi.WriteJsonApiDatabaseError(w)
+			return
+		} else if clan.UserID != actor.ID {
+			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You are not allowed access to this document.")
+			return
+		}
+
+		view, err := documentsSvc.ReadDocument(actor, clan, docId, quiet, verbose, debug)
 		if err != nil {
 			log.Printf("%s %s: restapi: GetDocument: %v\n", r.Method, r.URL.Path, err)
 			restapi.WriteJsonApiDatabaseError(w)
@@ -52,8 +69,10 @@ func GetDocument(authzSvc *authz.Service, documentsSvc *documents.Service) http.
 				fmt.Sprintf("Document with ID %d could not be found.", docId))
 			return
 		}
-		//b, _ := json.MarshalIndent(view, "", "  ")
-		//log.Printf("json %s\n", string(b))
+		if debug {
+			b, _ := json.MarshalIndent(view, "", "  ")
+			log.Printf("json %s\n", string(b))
+		}
 		restapi.WriteJsonApiData(w, http.StatusOK, view)
 	}
 }
@@ -63,7 +82,7 @@ func GetDocument(authzSvc *authz.Service, documentsSvc *documents.Service) http.
 // Route: GET /api/documents/{id}/contents
 //
 // Response type: depends on the content type
-func GetDocumentContents(authzSvc *authz.Service, documentsSvc *documents.Service) http.HandlerFunc {
+func GetDocumentContents(authzSvc *authz.Service, documentsSvc *documents.Service, quiet, verbose, debug bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, err := authzSvc.GetActor(r)
 		if err != nil {
@@ -83,7 +102,23 @@ func GetDocumentContents(authzSvc *authz.Service, documentsSvc *documents.Servic
 			docId = domains.ID(value)
 		}
 
-		doc, err := documentsSvc.GetDocumentContents(actor, docId)
+		clan, err := documentsSvc.ReadDocumentOwner(docId, quiet, verbose, debug)
+		if err != nil {
+			if errors.Is(err, domains.ErrNotExists) {
+				// not found, return a 404 response structured as a JSON:API error object
+				restapi.WriteJsonApiError(w, http.StatusNotFound, "document_not_found",
+					"Resource Not Found",
+					fmt.Sprintf("Document with ID %d could not be found.", docId))
+				return
+			}
+			restapi.WriteJsonApiDatabaseError(w)
+			return
+		} else if clan.UserID != actor.ID {
+			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You are not allowed access to this document.")
+			return
+		}
+
+		doc, err := documentsSvc.ReadDocumentContents(actor, clan, docId, quiet, verbose, debug)
 		if err != nil {
 			log.Printf("%s %s: restapi: GetDocumentContents: %v\n", r.Method, r.URL.Path, err)
 			restapi.WriteJsonApiDatabaseError(w)
@@ -95,7 +130,7 @@ func GetDocumentContents(authzSvc *authz.Service, documentsSvc *documents.Servic
 				fmt.Sprintf("Document with ID %d could not be found.", docId))
 			return
 		}
-		w.Header().Set("Content-Type", string(doc.MimeType))
+		w.Header().Set("Content-Type", doc.ContentType)
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", doc.Path))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(doc.Contents)
@@ -110,7 +145,7 @@ func GetDocumentContents(authzSvc *authz.Service, documentsSvc *documents.Servic
 //   - page[number], page[size] – standard pagination if needed
 //
 // Response type: []documents.DocumentView
-func GetDocumentList(authzSvc *authz.Service, documentsSvc *documents.Service) http.HandlerFunc {
+func GetDocumentList(authzSvc *authz.Service, documentsSvc *documents.Service, quiet, verbose, debug bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		filterKind := domains.DocumentType(r.URL.Query().Get("filter[kind]"))
 		//log.Printf("%s %s: filterKind %q: %v\n", r.Method, r.URL.Path, filterKind, filterKind.IsValid())
@@ -141,8 +176,9 @@ func GetDocumentList(authzSvc *authz.Service, documentsSvc *documents.Service) h
 			return
 		}
 		//log.Printf("%s %s: actor %d\n", r.Method, r.URL.Path, actor.ID)
+		userId := actor.ID
 
-		view, err := documentsSvc.GetAllDocumentsForUserAcrossGames(actor, filterKind, pageNumber, pageSize)
+		view, err := documentsSvc.ReadDocumentsByUser(actor, userId, filterKind, pageNumber, pageSize, quiet, verbose, debug)
 		if err != nil {
 			log.Printf("%s %s: restapi: GetDocuments: %v\n", r.Method, r.URL.Path, err)
 			restapi.WriteJsonApiInternalServerError(w)

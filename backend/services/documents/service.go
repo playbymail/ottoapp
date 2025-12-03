@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
+	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
@@ -29,16 +31,30 @@ type Service struct {
 	usersSvc *users.Service
 }
 
-func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service) *Service {
-	return &Service{db: db, authzSvc: authzSvc, usersSvc: usersSvc}
+func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service) (*Service, error) {
+	if authzSvc == nil {
+		authzSvc = authz.New(db)
+	}
+	if usersSvc == nil {
+		authnSvc := authn.New(db, authzSvc)
+		ianaSvc, err := iana.New(db)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("new iana service"), err)
+		}
+		usersSvc = users.New(db, authnSvc, authzSvc, ianaSvc)
+	}
+	return &Service{db: db, authzSvc: authzSvc, usersSvc: usersSvc}, nil
 }
 
 // CreateDocument creates a document.
+// Returns ErrExists if the document name already exists for the clan.
 //
-// Actor is the user/service requesting the creation.
-// Owner is the user that will own the new document.
-func (s *Service) CreateDocument(actor *domains.Actor, clan *domains.Clan, doc *domains.Document) (domains.ID, error) {
-	log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) d:%v r:%v s:%v w:%v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, doc.CanDelete, doc.CanRead, doc.CanShare, doc.CanWrite)
+// Actor is the user/service creating the document.
+// Owner is the clan will own the new document.
+func (s *Service) CreateDocument(actor *domains.Actor, owner *domains.Clan, doc *domains.Document, quiet, verbose, debug bool) (domains.ID, error) {
+	if debug {
+		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q)\n", actor.ID, owner.GameID, owner.UserID, doc.Path, doc.Type)
+	}
 	if doc.Path != html.EscapeString(doc.Path) {
 		return domains.InvalidID, ErrInvalidPath
 	}
@@ -47,240 +63,262 @@ func (s *Service) CreateDocument(actor *domains.Actor, clan *domains.Clan, doc *
 	}
 
 	// don't trust the caller on important metadata
-	contentLength := len(doc.Contents)
-	contentsHash, err := hashContents(doc.Contents)
+	contentLength, contentsHash, err := Hash(doc.Contents)
 	if err != nil {
 		return domains.InvalidID, errors.Join(domains.ErrHashFailed, err)
 	}
-
-	ctx := s.db.Context()
+	var documentType string
+	switch doc.Type {
+	case domains.TurnReportFile:
+		documentType = "docx"
+	case domains.TurnReportExtract:
+		documentType = "txt"
+	case domains.WorldographerMap:
+		documentType = "wxx"
+	default:
+		return domains.InvalidID, fmt.Errorf("%q: unknown type", doc.Type)
+	}
 
 	// start transaction
+	ctx := s.db.Context()
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
 		return domains.InvalidID, err
 	}
 	defer tx.Rollback() // rollback if we return early; harmless after commit
-
 	qtx := s.db.Queries().WithTx(tx)
-	now := time.Now().UTC().Unix()
+	now := time.Now().UTC()
+	createdAt, updatedAt := now.Unix(), now.Unix()
 
-	err = qtx.CreateDocumentContents(ctx, sqlc.CreateDocumentContentsParams{
-		ContentsHash:  contentsHash,
-		ContentLength: int64(contentLength),
-		MimeType:      string(doc.MimeType),
-		Contents:      doc.Contents,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+	// return ErrExists if the clan already has a document with this name
+	_, err = qtx.ReadDocumentByClanAndName(ctx, sqlc.ReadDocumentByClanAndNameParams{
+		ClanID:       int64(owner.ClanID),
+		DocumentName: doc.Path,
 	})
-	log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, err)
 	if err != nil {
-		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, fmt.Errorf("CreateDocumentContents(%q)", contentsHash), err)
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[documents] CreateDocument(%d, (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+		// document does not exist; okay to create
+	} else {
+		// document exists
+		return domains.InvalidID, ErrExists
 	}
 
-	id, err := qtx.CreateDocument(ctx, sqlc.CreateDocumentParams{
-		ClanID:       int64(clan.ClanID),
-		CanRead:      doc.CanRead,
-		CanWrite:     doc.CanWrite,
-		CanDelete:    doc.CanDelete,
-		CanShare:     doc.CanShare,
+	// create the document
+	documentId, err := qtx.CreateDocument(ctx, sqlc.CreateDocumentParams{
+		ClanID:       int64(owner.ClanID),
 		DocumentName: doc.Path,
-		DocumentType: string(doc.Type),
-		ContentsHash: contentsHash,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		DocumentType: documentType,
+		ModifiedAt:   doc.ModifiedAt.Unix(),
+		CreatedAt:    createdAt,
+		UpdatedAt:    updatedAt,
 	})
-	log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %d %v", actor.ID, clan.GameID, clan.UserID, doc.Path, doc.Type, id, err)
 	if err != nil {
-		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, fmt.Errorf("CreateDocument(%d)", clan.ClanID), err)
+		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	// upload the contents
+	err = qtx.CreateDocumentContents(ctx, sqlc.CreateDocumentContentsParams{
+		DocumentID:    documentId,
+		ContentLength: int64(contentLength),
+		ContentsHash:  contentsHash,
+		Contents:      doc.Contents,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	})
+	if err != nil {
+		log.Printf("[documents] CreateDocument(%d, (%q, %d), (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, owner.GameID, owner.UserID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return domains.InvalidID, err
+		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
-	return domains.ID(id), nil
+	if debug {
+		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %d\n", actor.ID, owner.GameID, owner.UserID, doc.Path, doc.Type, documentId)
+	}
+
+	return domains.ID(documentId), nil
 }
 
-// DeleteDocument will return nil if the document doesn't exist.
-// Returns an error if the actor is not authorized to delete it.
-func (s *Service) DeleteDocument(actor *domains.Actor, documentId domains.ID) error {
-	// todo: should verify that actor is allowed to delete the target
-	ctx := s.db.Context()
-
+// ReadDocument will
+func (s *Service) ReadDocument(actor *domains.Actor, owner *domains.Clan, documentId domains.ID, quiet, verbose, debug bool) (*DocumentView, error) {
 	// start transaction
+	if debug {
+		log.Printf("[documents] ReadDocument(%d, (%d, %d) %q) %d\n", actor.ID, owner.GameID, owner.ClanID, documentId)
+	}
+	ctx := s.db.Context()
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
 	defer tx.Rollback() // rollback if we return early; harmless after commit
-
 	qtx := s.db.Queries().WithTx(tx)
-
-	// fetch the document
-	doc, err := qtx.GetDocumentById(ctx, int64(documentId))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return errors.Join(domains.ErrDatabaseError, err)
-	}
-	// we have to look up the clan to determine if the actor owns it or if it is shared
-	clan, err := qtx.GetClan(ctx, doc.ClanID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // should never happen
-			log.Printf("[documents] DeleteDocument(%d, %d): GetClan(%d): does not exist", actor.ID, documentId, doc.ClanID)
-			return nil
-		}
-		return errors.Join(domains.ErrDatabaseError, err)
-	}
-	isOwner := actor.ID == domains.ID(clan.UserID)
-	if isOwner {
-		if !doc.CanDelete {
-			return domains.ErrNotAuthorized
-		}
-		err = qtx.DeleteDocumentAuthorized(ctx, sqlc.DeleteDocumentAuthorizedParams{
-			DocumentID: int64(documentId),
-			ClanID:     clan.ClanID,
-		})
-		if err != nil {
-			return errors.Join(domains.ErrDatabaseError, err)
-		}
-		return nil
-	}
-
-	err = qtx.DeleteSharedDocumentById(ctx, sqlc.DeleteSharedDocumentByIdParams{
-		DocumentID: int64(documentId),
-		ClanID:     int64(doc.ClanID),
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // should never happen
-			log.Printf("[documents] DeleteDocument(%d, %d): DeleteSharedDocumentById(%d, %d): does not exist", actor.ID, documentId, doc.ClanID)
-			return nil
-		}
-		return err
-	}
-
-	return tx.Commit()
-}
-
-// GetDocument returns nil, nil if no data found
-func (s *Service) GetDocument(actor *domains.Actor, documentId domains.ID) (*DocumentView, error) {
-	log.Printf("[documents] GetDocument(%d, %d)\n", actor.ID, documentId)
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	doc, err := q.GetDocumentForUserAuthorized(ctx, sqlc.GetDocumentForUserAuthorizedParams{
-		DocumentID: int64(documentId),
-		UserID:     int64(actor.ID),
-	})
-	log.Printf("[documents] GetDocumentForUserAuthorized(%d, %d) %v\n", actor.ID, documentId, err)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("[documents] GetDocument(%d, %d): not authorized\n", actor.ID, documentId)
-			return nil, domains.ErrNotFound
-		}
-		return nil, errors.Join(domains.ErrDatabaseError, err)
-	}
-
-	actorHandle, err := q.GetUserHandle(ctx, int64(actor.ID))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // should never happen
-			log.Printf("[documents] GetDocument(%d, %d): GetUserHandle(%d): does not exist", actor.ID, documentId, actor.ID)
-			return nil, domains.ErrNotFound
-		}
-		return nil, errors.Join(domains.ErrDatabaseError, err)
-	}
-	var ownerHandle string
-	if actor.ID == domains.ID(doc.OwnerID) {
-		ownerHandle = actorHandle
-	} else if ownerHandle, err = q.GetUserHandle(ctx, doc.OwnerID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // should never happen
-			log.Printf("[documents] GetDocument(%d, %d): GetUserHandle(%d): does not exist", actor.ID, documentId, doc.OwnerID)
-			return nil, domains.ErrNotFound
-		}
-		return nil, errors.Join(domains.ErrDatabaseError, err)
-	}
-
-	return &DocumentView{
-		ID:           fmt.Sprintf("%d", doc.DocumentID),
-		OwnerHandle:  ownerHandle,
-		UserHandle:   actorHandle,
-		GameId:       doc.GameID,
-		ClanNo:       fmt.Sprintf("%04d", doc.ClanID),
-		DocumentName: doc.DocumentName,
-		DocumentType: doc.DocumentType,
-		CanRead:      doc.CanRead,
-		CanWrite:     doc.CanWrite,
-		CanDelete:    doc.CanDelete,
-		CanShare:     doc.CanShare,
-		IsShared:     doc.IsShared,
-		CreatedAt:    time.Unix(doc.CreatedAt, 0).UTC(),
-		UpdatedAt:    time.Unix(doc.UpdatedAt, 0).UTC(),
-	}, nil
-}
-
-// GetDocumentContents returns nil, nil if no data found
-func (s *Service) GetDocumentContents(actor *domains.Actor, documentId domains.ID) (*domains.Document, error) {
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	doc, err := q.GetDocumentForUserAuthorized(ctx, sqlc.GetDocumentForUserAuthorizedParams{
-		DocumentID: int64(documentId),
-		UserID:     int64(actor.ID),
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, errors.Join(domains.ErrDatabaseError, err)
-	}
-	if !doc.CanRead {
-		return nil, domains.ErrNotAuthorized
-	}
-
-	content, err := s.db.Queries().GetDocumentContents(s.db.Context(), doc.ContentsHash)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // should never happen
-			log.Printf("[documents] GetDocumentContents(%d, %d): GetDocumentContents(%q): does not exist", actor.ID, documentId, doc.ContentsHash)
-			return nil, nil
-		}
-		return nil, errors.Join(domains.ErrDatabaseError, err)
-	}
-	return &domains.Document{
-		ID:            domains.ID(doc.DocumentID),
-		Path:          doc.DocumentName,
-		Type:          domains.DocumentType(doc.DocumentType),
-		MimeType:      domains.MimeType(content.MimeType),
-		ContentLength: content.ContentLength,
-		Contents:      content.Contents,
-		ContentsHash:  doc.ContentsHash,
-		CreatedAt:     time.Unix(doc.CreatedAt, 0).UTC(),
-		UpdatedAt:     time.Unix(doc.UpdatedAt, 0).UTC(),
-	}, nil
-}
-
-// GetAllDocumentsForUserAcrossGames returns an unsorted list of documents that the actor has permissions to view.
-// Returns an empty list (not a nil list) if there are no documents.
-func (s *Service) GetAllDocumentsForUserAcrossGames(actor *domains.Actor, docType domains.DocumentType, pageNumber, pageSize int) ([]*DocumentView, error) {
-	//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d, %q)\n", actor.ID, docType)
-
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	docs, err := q.GetAllDocumentsForUserAcrossGames(ctx, int64(actor.ID))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, errors.Join(domains.ErrDatabaseError, fmt.Errorf("GetAllDocumentsForUserAcrossGames(%d)", actor.ID), err)
-	}
-	//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d): %d docs\n", actor.ID, len(docs))
 
 	// cache handles by user_id to avoid repeated database calls
 	handles := map[domains.ID]string{}
-	actorHandle, err := q.GetUserHandle(ctx, int64(actor.ID))
+	for _, id := range []domains.ID{actor.ID, owner.UserID} {
+		if _, ok := handles[id]; ok {
+			continue
+		}
+		handle, err := qtx.GetUserHandle(ctx, int64(id))
+		if err != nil {
+			log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+			return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", id), err)
+		}
+		handles[id] = handle
+	}
+
+	d, err := qtx.ReadDocumentContentsByIdAuthorized(s.db.Context(), sqlc.ReadDocumentContentsByIdAuthorizedParams{
+		DocumentID: int64(documentId),
+		ClanID:     int64(owner.ClanID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domains.ErrNotAuthorized
+		}
+		log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	view := &DocumentView{
+		ID:           fmt.Sprintf("%d", d.DocumentID),
+		OwnerHandle:  handles[owner.UserID],
+		UserHandle:   handles[owner.UserID],
+		GameId:       d.GameID,
+		ClanNo:       fmt.Sprintf("%04d", owner.ClanNo),
+		DocumentName: d.DocumentName,
+		DocumentType: d.DocumentType,
+		ModifiedAt:   time.Unix(d.ModifiedAt, 0).UTC(),
+		CreatedAt:    time.Unix(d.CreatedAt, 0).UTC(),
+		UpdatedAt:    time.Unix(d.UpdatedAt, 0).UTC(),
+	}
+
+	return view, nil
+}
+
+// ReadDocumentContents will
+func (s *Service) ReadDocumentContents(actor *domains.Actor, owner *domains.Clan, documentId domains.ID, quiet, verbose, debug bool) (*domains.Document, error) {
+	// start transaction
+	if debug {
+		log.Printf("[documents] ReadDocumentContents(%d, (%d, %d) %q) %d\n", actor.ID, owner.GameID, owner.ClanID, documentId)
+	}
+	ctx := s.db.Context()
+	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
+	}
+	defer tx.Rollback() // rollback if we return early; harmless after commit
+	qtx := s.db.Queries().WithTx(tx)
+
+	// cache handles by user_id to avoid repeated database calls
+	handles := map[domains.ID]string{}
+	for _, id := range []domains.ID{actor.ID, owner.UserID} {
+		if _, ok := handles[id]; ok {
+			continue
+		}
+		handle, err := qtx.GetUserHandle(ctx, int64(id))
+		if err != nil {
+			log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+			return nil, errors.Join(domains.ErrDatabaseError, err)
+		}
+		handles[id] = handle
+	}
+
+	d, err := qtx.ReadDocumentContentsByIdAuthorized(s.db.Context(), sqlc.ReadDocumentContentsByIdAuthorizedParams{
+		DocumentID: int64(documentId),
+		ClanID:     int64(owner.ClanID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domains.ErrNotAuthorized
+		}
+		log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
+	}
+	var documentType domains.DocumentType
+	switch d.DocumentType {
+	case "turn-report-file":
+		documentType = domains.TurnReportFile
+	case "turn-report-extract":
+		documentType = domains.TurnReportExtract
+	case "worldographer-map":
+		documentType = domains.WorldographerMap
+	default:
+		return nil, fmt.Errorf("%q: unknown type", d.DocumentType)
+	}
+
+	return &domains.Document{
+		ID:             domains.ID(d.DocumentID),
+		GameID:         domains.GameID(d.GameID),
+		ClanId:         domains.ID(d.ClanID),
+		ClanNo:         int(d.Clan),
+		Path:           d.DocumentName,
+		Type:           documentType,
+		ContentsLength: len(d.Contents),
+		ContentType:    d.ContentType,
+		Contents:       d.Contents,
+		ModifiedAt:     time.Unix(d.ModifiedAt, 0).UTC(),
+		CreatedAt:      time.Unix(d.CreatedAt, 0).UTC(),
+		UpdatedAt:      time.Unix(d.UpdatedAt, 0).UTC(),
+	}, nil
+}
+
+// ReadDocumentsByUser returns an unsorted list of documents that the actor has permissions to view.
+// Returns an empty list (not a nil list) if there are no documents.
+func (s *Service) ReadDocumentsByUser(actor *domains.Actor, userId domains.ID, docType domains.DocumentType, pageNumber, pageSize int, quiet, verbose, debug bool) ([]*DocumentView, error) {
+	var documentType string
+	if docType == "" {
+		documentType = "*"
+	} else {
+		switch docType {
+		case domains.TurnReportFile:
+			documentType = string(domains.TurnReportFile)
+		case domains.TurnReportExtract:
+			documentType = string(domains.TurnReportExtract)
+		case domains.WorldographerMap:
+			documentType = string(domains.WorldographerMap)
+		default:
+			return nil, fmt.Errorf("%q: unknown type", docType)
+		}
+	}
+
+	// start transaction
+	if debug {
+		log.Printf("[documents] ReadDocumentsByUser(%d, %d, %q) %q\n", actor.ID, userId, docType, documentType)
+	}
+	ctx := s.db.Context()
+	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("[documents] ReadDocumentsByUser(%d, %d, %q) %v\n", actor.ID, userId, docType, err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
+	}
+	defer tx.Rollback() // rollback if we return early; harmless after commit
+	qtx := s.db.Queries().WithTx(tx)
+
+	docs, err := qtx.ReadDocumentsByUser(ctx, int64(userId))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return []*DocumentView{}, nil
+		}
+		log.Printf("[documents] ReadDocumentsByUser(%d, %d, %q) %v\n", actor.ID, userId, docType, err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
+	}
+	if debug {
+		log.Printf("[documents] ReadDocumentsByUser(%d, %d, %q) %d docs\n", actor.ID, userId, docType, len(docs))
+	}
+
+	// cache handles by user_id to avoid repeated database calls
+	handles := map[domains.ID]string{}
+	actorHandle, err := qtx.GetUserHandle(ctx, int64(actor.ID))
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", actor.ID), err)
 	}
@@ -292,27 +330,25 @@ func (s *Service) GetAllDocumentsForUserAcrossGames(actor *domains.Actor, docTyp
 
 	var list []*DocumentView
 	for _, doc := range docs {
-		//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d): doc %d: game_id %q\n", actor.ID, doc.DocumentID, doc.GameID)
-		//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d): doc %d: user_id %d\n", actor.ID, doc.DocumentID, doc.UserID)
-		//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d): doc %d: clan_id %d\n", actor.ID, doc.DocumentID, doc.ClanID)
-		//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d): doc %d: owner   %d\n", actor.ID, doc.DocumentID, doc.OwnerID)
-		//log.Printf("doc %+v\n", doc)
-		if docType != "" && !(string(docType) == doc.DocumentType) {
-			//log.Printf("doc kind %q != %q\n", doc.DocumentType, docType)
+		if debug {
+			log.Printf("[documents] ReadDocumentsByUser(%d, %d, %q) %q\n", actor.ID, userId, docType, doc.DocumentName)
+		}
+		matchedType := documentType == "*" || documentType == doc.DocumentType
+		if !matchedType {
 			continue
 		}
 
-		ownerClan, ok := clans[domains.ID(doc.OwnerID)]
+		ownerClan, ok := clans[domains.ID(doc.ClanID)]
 		if !ok {
-			clan, err := q.GetClan(ctx, doc.OwnerID)
+			clan, err := qtx.GetClan(ctx, doc.ClanID)
 			if err != nil {
-				return nil, errors.Join(fmt.Errorf("GetClan(%d)", doc.OwnerID), err)
+				return nil, errors.Join(fmt.Errorf("GetClan(%d)", doc.ClanID), err)
 			}
 			ownerClan = &domains.Clan{GameID: clan.GameID, UserID: domains.ID(clan.UserID), ClanID: domains.ID(clan.ClanID), ClanNo: int(clan.Clan)}
 		}
 		var ownerHandle string
 		if ownerHandle, ok = handles[ownerClan.UserID]; !ok {
-			ownerHandle, err = q.GetUserHandle(ctx, int64(ownerClan.UserID))
+			ownerHandle, err = qtx.GetUserHandle(ctx, int64(ownerClan.UserID))
 			if err != nil {
 				return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", ownerClan.UserID), err)
 			}
@@ -321,20 +357,15 @@ func (s *Service) GetAllDocumentsForUserAcrossGames(actor *domains.Actor, docTyp
 		view := &DocumentView{
 			ID:           fmt.Sprintf("%d", doc.DocumentID),
 			OwnerHandle:  ownerHandle,
-			UserHandle:   actorHandle,
+			UserHandle:   ownerHandle,
 			GameId:       doc.GameID,
 			ClanNo:       fmt.Sprintf("%04d", ownerClan.ClanNo),
 			DocumentName: doc.DocumentName,
 			DocumentType: doc.DocumentType,
-			CanRead:      doc.CanRead,
-			CanWrite:     doc.CanWrite,
-			CanDelete:    doc.CanDelete,
-			CanShare:     doc.CanShare,
-			IsShared:     doc.IsShared,
+			ModifiedAt:   time.Unix(doc.ModifiedAt, 0).UTC(),
 			CreatedAt:    time.Unix(doc.CreatedAt, 0).UTC(),
 			UpdatedAt:    time.Unix(doc.UpdatedAt, 0).UTC(),
 		}
-		//log.Printf("view %+v\n", *view)
 		list = append(list, view)
 	}
 	if list == nil {
@@ -343,66 +374,391 @@ func (s *Service) GetAllDocumentsForUserAcrossGames(actor *domains.Actor, docTyp
 	return list, nil
 }
 
-// ShareDocumentById shares a document.
-//
-// Actor is the user requesting the share. The actor must own the
-// document and have permission to read and share it.
-//
-// Ally is the user that will own the shared document.
-func (s *Service) ShareDocumentById(actor, ally *domains.Actor, documentId domains.ID, canRead, canDelete bool) error {
-	q := s.db.Queries()
-	ctx := s.db.Context()
+// ReadDocumentOwner returns the clan that owns the document.
+func (s *Service) ReadDocumentOwner(documentId domains.ID, quiet, verbose, debug bool) (*domains.Clan, error) {
+	clan, err := s.db.Queries().ReadDocumentOwner(s.db.Context(), int64(documentId))
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[documents] ReadDocumentOwner(%d) %v\n", documentId, err)
+			return nil, errors.Join(domains.ErrDatabaseError, err)
+		}
+		return nil, domains.ErrNotExists
+	}
+	return &domains.Clan{
+		GameID:   clan.GameID,
+		UserID:   domains.ID(clan.UserID),
+		ClanID:   domains.ID(clan.ClanID),
+		ClanNo:   int(clan.Clan),
+		IsActive: clan.IsActive,
+	}, nil
+}
 
-	doc, err := q.GetDocumentForUserAuthorized(ctx, sqlc.GetDocumentForUserAuthorizedParams{
-		DocumentID: int64(documentId),
-		UserID:     int64(actor.ID),
+// ReplaceDocument overwrites a document by deleting (if it exists) and creating a new one
+func (s *Service) ReplaceDocument(actor *domains.Actor, owner *domains.Clan, doc *domains.Document, quiet, verbose, debug bool) (domains.ID, error) {
+	if doc.Path != html.EscapeString(doc.Path) {
+		return domains.InvalidID, ErrInvalidPath
+	}
+	if !s.authzSvc.CanCreateDocuments(actor) {
+		return domains.InvalidID, domains.ErrNotAuthorized
+	}
+
+	// don't trust the caller on important metadata
+	contentLength, contentsHash, err := Hash(doc.Contents)
+	if err != nil {
+		return domains.InvalidID, errors.Join(domains.ErrHashFailed, err)
+	}
+	var documentType string
+	switch doc.Type {
+	case domains.TurnReportFile:
+		documentType = string(domains.TurnReportFile)
+	case domains.TurnReportExtract:
+		documentType = string(domains.TurnReportExtract)
+	case domains.WorldographerMap:
+		documentType = string(domains.WorldographerMap)
+	default:
+		return domains.InvalidID, fmt.Errorf("%q: unknown type", doc.Type)
+	}
+
+	// start transaction
+	ctx := s.db.Context()
+	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+	defer tx.Rollback() // rollback if we return early; harmless after commit
+	qtx := s.db.Queries().WithTx(tx)
+	now := time.Now().UTC()
+	createdAt, updatedAt := now.Unix(), now.Unix()
+
+	err = qtx.DeleteDocumentByClanAndNameAuthorized(ctx, sqlc.DeleteDocumentByClanAndNameAuthorizedParams{
+		ClanID:       int64(owner.ClanID),
+		DocumentName: doc.Path,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 		}
-		return errors.Join(domains.ErrDatabaseError, fmt.Errorf("GetDocumentForUserAuthorized(%d, %d)", documentId, actor.ID), err)
 	}
-	if actor.ID != domains.ID(doc.OwnerID) || doc.IsShared || !doc.CanShare {
+
+	// create the document
+	documentId, err := qtx.CreateDocument(ctx, sqlc.CreateDocumentParams{
+		ClanID:       int64(owner.ClanID),
+		DocumentName: doc.Path,
+		DocumentType: documentType,
+		ModifiedAt:   doc.ModifiedAt.Unix(),
+		CreatedAt:    createdAt,
+		UpdatedAt:    updatedAt,
+	})
+	if err != nil {
+		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	// upload the contents
+	err = qtx.CreateDocumentContents(ctx, sqlc.CreateDocumentContentsParams{
+		DocumentID:    documentId,
+		ContentLength: int64(contentLength),
+		ContentsHash:  contentsHash,
+		Contents:      doc.Contents,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	})
+	if err != nil {
+		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	if debug {
+		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %d\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, documentId)
+	}
+
+	return domains.ID(documentId), nil
+}
+
+// SyncDocument will create the document if it does not exist; otherwise it will
+// update it if it has changed.
+func (s *Service) SyncDocument(actor *domains.Actor, owner *domains.Clan, doc *domains.Document, quiet, verbose, debug bool) (domains.ID, error) {
+	if doc.Path != html.EscapeString(doc.Path) {
+		return domains.InvalidID, ErrInvalidPath
+	}
+	if !s.authzSvc.CanCreateDocuments(actor) {
+		return domains.InvalidID, domains.ErrNotAuthorized
+	}
+
+	// don't trust the caller on important metadata
+	contentLength, contentsHash, err := Hash(doc.Contents)
+	if err != nil {
+		return domains.InvalidID, errors.Join(domains.ErrHashFailed, err)
+	}
+	var documentType string
+	switch doc.Type {
+	case domains.TurnReportFile:
+		documentType = string(domains.TurnReportFile)
+	case domains.TurnReportExtract:
+		documentType = string(domains.TurnReportExtract)
+	case domains.WorldographerMap:
+		documentType = string(domains.WorldographerMap)
+	default:
+		return domains.InvalidID, fmt.Errorf("%q: unknown type", doc.Type)
+	}
+
+	// start transaction
+	ctx := s.db.Context()
+	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+	defer tx.Rollback() // rollback if we return early; harmless after commit
+	qtx := s.db.Queries().WithTx(tx)
+	now := time.Now().UTC()
+	createdAt, updatedAt := now.Unix(), now.Unix()
+
+	d, err := qtx.ReadDocumentByClanAndName(ctx, sqlc.ReadDocumentByClanAndNameParams{
+		ClanID:       int64(owner.ClanID),
+		DocumentName: doc.Path,
+	})
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+
+		// create the document
+		documentId, err := qtx.CreateDocument(ctx, sqlc.CreateDocumentParams{
+			ClanID:       int64(owner.ClanID),
+			DocumentName: doc.Path,
+			DocumentType: documentType,
+			ModifiedAt:   doc.ModifiedAt.Unix(),
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
+		})
+		if err != nil {
+			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+		doc.ID = domains.ID(documentId)
+
+		// upload the contents
+		err = qtx.CreateDocumentContents(ctx, sqlc.CreateDocumentContentsParams{
+			DocumentID:    documentId,
+			ContentLength: int64(contentLength),
+			ContentsHash:  contentsHash,
+			Contents:      doc.Contents,
+			CreatedAt:     createdAt,
+			UpdatedAt:     updatedAt,
+		})
+		if err != nil {
+			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+		return domains.ID(documentId), nil
+	}
+	doc.ID = domains.ID(d.DocumentID)
+
+	// do we need to update the document contents and meta-data?
+	if doc.ContentsHash != d.ContentsHash {
+		err = qtx.UpdateDocumentContentsById(ctx, sqlc.UpdateDocumentContentsByIdParams{
+			DocumentID:    d.DocumentID,
+			ContentLength: int64(contentLength),
+			ContentsHash:  contentsHash,
+			Contents:      doc.Contents,
+			UpdatedAt:     updatedAt,
+		})
+		if err != nil {
+			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+
+		err = qtx.UpdateDocumentById(ctx, sqlc.UpdateDocumentByIdParams{
+			ClanID:       d.ClanID,
+			DocumentID:   d.DocumentID,
+			DocumentName: d.DocumentName,
+			DocumentType: d.DocumentType,
+			ModifiedAt:   doc.ModifiedAt.Unix(),
+			UpdatedAt:    updatedAt,
+		})
+		if err != nil {
+			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	if debug {
+		log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %d\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, doc.ID)
+	}
+
+	return doc.ID, nil
+}
+
+// UpdateDocument will update the document if it exists and the contents have changed.
+func (s *Service) UpdateDocument(actor *domains.Actor, owner *domains.Clan, doc *domains.Document, quiet, verbose, debug bool) error {
+	if doc.Path != html.EscapeString(doc.Path) {
+		return ErrInvalidPath
+	}
+	if !s.authzSvc.CanCreateDocuments(actor) {
 		return domains.ErrNotAuthorized
 	}
 
-	allyClan, err := q.GetClanByGameUser(ctx, sqlc.GetClanByGameUserParams{
-		GameID: doc.GameID,
-		UserID: int64(ally.ID),
+	// don't trust the caller on important metadata
+	contentLength, contentsHash, err := Hash(doc.Contents)
+	if err != nil {
+		return errors.Join(domains.ErrHashFailed, err)
+	}
+	var documentType string
+	switch doc.Type {
+	case domains.TurnReportFile:
+		documentType = string(domains.TurnReportFile)
+	case domains.TurnReportExtract:
+		documentType = string(domains.TurnReportExtract)
+	case domains.WorldographerMap:
+		documentType = string(domains.WorldographerMap)
+	default:
+		return fmt.Errorf("%q: unknown type", doc.Type)
+	}
+
+	// start transaction
+	ctx := s.db.Context()
+	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("[documents] UpdateDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return errors.Join(domains.ErrDatabaseError, err)
+	}
+	defer tx.Rollback() // rollback if we return early; harmless after commit
+	qtx := s.db.Queries().WithTx(tx)
+	now := time.Now().UTC()
+	updatedAt := now.Unix()
+
+	d, err := qtx.ReadDocumentByClanAndName(ctx, sqlc.ReadDocumentByClanAndNameParams{
+		ClanID:       int64(owner.ClanID),
+		DocumentName: doc.Path,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) { // should never happen
-			log.Printf("[documents] ShareDocumentById(%d, %d, %d): GetClanByGameUser(%q, %d): does not exist", actor.ID, ally.ID, documentId, doc.GameID, ally.ID)
-			return nil
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[documents] UpdateDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return errors.Join(domains.ErrDatabaseError, err)
+		}
+		return domains.ErrNotExists
+	}
+	doc.ID = domains.ID(d.DocumentID)
+
+	// do we need to update the document contents?
+	updatedContents := false
+	if doc.ContentsHash != d.ContentsHash {
+		err = qtx.UpdateDocumentContentsById(ctx, sqlc.UpdateDocumentContentsByIdParams{
+			DocumentID:    d.DocumentID,
+			ContentLength: int64(contentLength),
+			ContentsHash:  contentsHash,
+			Contents:      doc.Contents,
+			UpdatedAt:     updatedAt,
+		})
+		if err != nil {
+			log.Printf("[documents] UpdateDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return errors.Join(domains.ErrDatabaseError, err)
+		}
+		updatedContents = true
+	}
+
+	// do we need to update the document meta-data?
+	if updatedContents || doc.Path != d.DocumentName || documentType != d.DocumentType {
+		err = qtx.UpdateDocumentById(ctx, sqlc.UpdateDocumentByIdParams{
+			ClanID:       d.ClanID,
+			DocumentID:   d.DocumentID,
+			DocumentName: doc.Path,
+			DocumentType: documentType,
+			ModifiedAt:   doc.ModifiedAt.Unix(),
+			UpdatedAt:    updatedAt,
+		})
+		if err != nil {
+			log.Printf("[documents] UpdateDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			return errors.Join(domains.ErrDatabaseError, err)
 		}
 	}
 
-	now := time.Now().UTC().Unix()
-	err = s.db.Queries().ShareDocumentById(s.db.Context(), sqlc.ShareDocumentByIdParams{
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("[documents] UpdateDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		return errors.Join(domains.ErrDatabaseError, err)
+	}
+
+	if debug {
+		log.Printf("[documents] UpdateDocument(%d, (%q, %d), %q) %d\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, doc.ID)
+	}
+
+	return nil
+}
+
+// DeleteDocument will return nil if the document doesn't exist.
+// Returns an error if the actor is not authorized to delete it.
+func (s *Service) DeleteDocument(actor *domains.Actor, owner *domains.Clan, documentId domains.ID) error {
+	err := s.db.Queries().DeleteDocumentByIdAuthorized(s.db.Context(), sqlc.DeleteDocumentByIdAuthorizedParams{
 		DocumentID: int64(documentId),
-		ClanID:     allyClan.ClanID,
-		CanRead:    canRead,
-		CanDelete:  canDelete,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ClanID:     int64(owner.ClanID),
 	})
 	if err != nil {
-		return errors.Join(domains.ErrDatabaseError, fmt.Errorf("ShareDocumentById(%d)", documentId), err)
+		if errors.Is(err, sql.ErrNoRows) {
+			// no document, so not an error
+			return nil
+		}
+		log.Printf("[documents] DeleteDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		return errors.Join(domains.ErrDatabaseError, err)
 	}
 	return nil
 }
 
-func hashContents(b []byte) (string, error) {
-	h := sha256.New()
-	if _, err := h.Write(b); err != nil {
-		return "", err
+func (s *Service) ReadReportExtractContents(documentId domains.ID) ([]byte, error) {
+	return s.db.Queries().ReadDocumentContents(s.db.Context(), int64(documentId))
+}
+
+func (s *Service) ReadReportExtractMeta() ([]*domains.Document, error) {
+	rows, err := s.db.Queries().ReadReportExtracts(s.db.Context())
+	if err != nil {
+		log.Printf("[documents] ReadReportExtractMeta:\n", err)
+		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+
+	var docs []*domains.Document
+	for _, d := range rows {
+		docs = append(docs, &domains.Document{
+			ID:         domains.ID(d.DocumentID),
+			GameID:     domains.GameID(d.GameID),
+			ClanId:     domains.InvalidID,
+			ClanNo:     int(d.Clan),
+			Path:       d.DocumentName,
+			Type:       domains.TurnReportExtract,
+			ModifiedAt: time.Unix(d.ModifiedAt, 0).UTC(),
+			CreatedAt:  time.Unix(d.CreatedAt, 0).UTC(),
+			UpdatedAt:  time.Unix(d.UpdatedAt, 0).UTC(),
+		})
+	}
+	if docs == nil {
+		docs = []*domains.Document{}
+	}
+	return docs, nil
 }
 
 // loadFromFS loads a file, creates a Document, and returns the document ID.
-func (s *Service) loadFromFS(actor *domains.Actor, clan *domains.Clan, path, name string, canDelete, canRead, canShare, canWrite bool, mimeType domains.MimeType, docType domains.DocumentType) (domains.ID, error) {
+func (s *Service) loadFromFS(actor *domains.Actor, clan *domains.Clan, path, name string, docType domains.DocumentType, quiet, verbose, debug bool) (domains.ID, error) {
 	//log.Printf("[documents] loadFromFS(%d, (%q, %d, %d), %q, %q, _, %q) read %v", actor.ID, clan.GameID, clan.UserID, clan.ClanNo, path, name, docType, canRead)
 	if name == "" {
 		return domains.InvalidID, errors.Join(domains.ErrBadInput, fmt.Errorf("missing name"))
@@ -420,6 +776,7 @@ func (s *Service) loadFromFS(actor *domains.Actor, clan *domains.Clan, path, nam
 		// keep ErrInvalidPath but add context so logs make sense
 		return domains.InvalidID, errors.Join(domains.ErrInvalidPath, fmt.Errorf("%q: not a regular file", path))
 	}
+	createdAt, updatedAt := sb.ModTime().UTC(), sb.ModTime().UTC()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -430,15 +787,12 @@ func (s *Service) loadFromFS(actor *domains.Actor, clan *domains.Clan, path, nam
 		Path:      name,
 		ClanId:    clan.ClanID,
 		Type:      docType,
-		MimeType:  mimeType,
 		Contents:  data,
-		CanDelete: canDelete,
-		CanRead:   canRead,
-		CanShare:  canShare,
-		CanWrite:  canWrite,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
 	}
 
-	return s.CreateDocument(actor, clan, doc)
+	return s.CreateDocument(actor, clan, doc, quiet, verbose, debug)
 }
 
 // loadFromRequest loads a document from an http.Request.
@@ -463,4 +817,12 @@ func (s *Service) FindClanByGameAndNumber(gameID string, clanNo int) (*domains.C
 		ClanID: domains.ID(row.ClanID),
 		ClanNo: int(row.Clan),
 	}, nil
+}
+
+func Hash(contents []byte) (length int, hash string, err error) {
+	h := sha256.New()
+	if _, err := h.Write(contents); err != nil {
+		return 0, "", errors.Join(domains.ErrHashFailed, err)
+	}
+	return len(contents), hex.EncodeToString(h.Sum(nil)), nil
 }

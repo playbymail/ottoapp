@@ -14,7 +14,8 @@ turn_report     = unit_section, { unit_section }, EOF ;
 
 unit_section    = unit_line,
                   turn_line,
-                  [ unit_movement_line ];
+                  [ unit_movement_line ]
+                  { scout_movement_line };
 
 (* ============================================================================ *)
 (* Unit Line *)
@@ -88,4 +89,35 @@ land_step = [ [ land_step_movement ], land_step_result ];
 land_step_movement = Direction, Dash, Terrain ;
 
 (* Grammar for results will be enhanced as we parse more complex turn results *)
-land_step_result = Comma ;
+land_step_result = Comma, ( visible_neighbor | unit_exhausted, [ Comma, found_nothing ] );
+
+(* Visible neighbor is terrain followed by list comma separated directions *)
+(* Example: L NE, SW *)
+visible_neighbor = Terrain, Direction, { Comma, Direction } ;
+
+(* Visible unit is a list of space separated units *)
+(* Example: 0987 1987 *)
+(* Bugs: the list is not always preceded by a Comma *)
+(*   Example: 0987e1 Status: CONIFER HILLS, L NE, SE, N 0987e1 *)
+(*   Example: 1987 Status: LOW CONIFER MOUNTAINS, Lcm SW, NW, N, 1987 *)
+visible_unit = UnitId, { UnitId };
+
+empty_result = Comma ;
+
+(* ============================================================================ *)
+(* Scout Movement *)
+(* ============================================================================ *)
+
+scout_movement_line = Scout, ScoutId, Colon, Scout  ;
+
+scout_movement = Scout, scout_step, { Backslash, scout_step };
+
+scout_step = [ scout_step_movement, scout_step_result ];
+
+scout_step_movement = Direction, Dash, Terrain ;
+
+(* Grammar for results will be enhanced as we parse more complex turn results *)
+scout_step_result = Comma ;
+
+unit_exhausted = Not, Enough, MPs, To, Move, To, Direction, Into, Terrain ;
+found_nothing = Nothing, Of, Interest, Found ;

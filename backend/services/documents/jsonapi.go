@@ -19,11 +19,7 @@ type DocumentView struct {
 	ClanNo       string    `jsonapi:"attr,clan"`          // clan for this document
 	DocumentName string    `jsonapi:"attr,document-name"` // untainted name of document
 	DocumentType string    `jsonapi:"attr,document-type"` // for categorizing on the dashboards
-	CanRead      bool      `jsonapi:"attr,can-read"`
-	CanWrite     bool      `jsonapi:"attr,can-write"`
-	CanDelete    bool      `jsonapi:"attr,can-delete"`
-	CanShare     bool      `jsonapi:"attr,can-share"`
-	IsShared     bool      `jsonapi:"attr,is-shared"`
+	ModifiedAt   time.Time `jsonapi:"attr,modified-at,iso8601"`
 	CreatedAt    time.Time `jsonapi:"attr,created-at,iso8601"`
 	UpdatedAt    time.Time `jsonapi:"attr,updated-at,iso8601"`
 }

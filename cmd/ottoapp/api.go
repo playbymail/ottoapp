@@ -29,9 +29,16 @@ var cmdApiServe = &cobra.Command{
 	Short:        "start the API server",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = true
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
+		}
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
 		}
 
 		var options []rest.Option
@@ -85,7 +92,7 @@ var cmdApiServe = &cobra.Command{
 			// server has the ability to use a temporary database for testing.
 			db, err = sqlite.OpenTempDB(ctx)
 		} else {
-			db, err = sqlite.Open(ctx, path, true, false)
+			db, err = sqlite.Open(ctx, path, checkVersion, quiet, verbose, debug)
 		}
 		if err != nil {
 			return errors.Join(fmt.Errorf("db.open"), err)
@@ -102,12 +109,18 @@ var cmdApiServe = &cobra.Command{
 			return errors.Join(fmt.Errorf("iana.new"), err)
 		}
 		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc) // uses sqlite + domains
-		documentsSvc := documents.New(db, authzSvc, usersSvc)
+		documentsSvc, err := documents.New(db, authzSvc, usersSvc)
+		if err != nil {
+			return errors.Join(fmt.Errorf("sessions.new"), err)
+		}
 		sessionsSvc, err := sessions.New(db, authnSvc, authzSvc, usersSvc, 24*time.Hour, 15*time.Minute)
 		if err != nil {
 			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
-		gamesSvc := games.New(db, authnSvc, authzSvc, usersSvc)
+		gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc)
+		if err != nil {
+			return err
+		}
 		versionSvc := versions.New(ottoapp.Version())
 
 		// Import test users for in-memory database

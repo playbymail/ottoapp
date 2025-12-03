@@ -36,6 +36,11 @@ SELECT game_id,
 FROM games
 WHERE game_id = :game_id;
 
+-- name: GetGamesList :many
+SELECT game_id,
+       description,
+       is_active
+FROM games;
 
 -- UpsertGameUserClan has two business rules
 --  user can have at most one clan per game.
@@ -84,6 +89,13 @@ SELECT game_id,
 FROM clans
 WHERE game_id = :game_id
   AND clan = :clan_no;
+
+-- name: ReadClansByGame :many
+SELECT game_id, user_id, clan_id, clan
+FROM clans
+WHERE game_id = :game_id
+  AND is_active = 1
+ORDER BY clans.clan;
 
 -- name: RemoveClan :exec
 DELETE

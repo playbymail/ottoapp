@@ -26,6 +26,14 @@ var cmdUserCreate = &cobra.Command{
 	Long:  `Create a new user.`,
 	Args:  cobra.ExactArgs(1), // require handle
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = true
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
@@ -78,7 +86,7 @@ var cmdUserCreate = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		db, err := sqlite.Open(ctx, path, true, false)
+		db, err := sqlite.Open(ctx, path, checkVersion, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: open: %v\n", err)
 		}
@@ -124,12 +132,20 @@ var cmdUserUpdate = &cobra.Command{
 	Args:         cobra.ExactArgs(1), // require username
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = true
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
 		ctx := context.Background()
-		db, err := sqlite.Open(ctx, dbPath, true, false)
+		db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: open: %v\n", err)
 		}
@@ -230,6 +246,14 @@ var cmdUserRole = &cobra.Command{
 	Args:         cobra.ExactArgs(1), // require handle
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = true
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
@@ -253,7 +277,7 @@ var cmdUserRole = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		db, err := sqlite.Open(ctx, dbPath, true, false)
+		db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: open: %v\n", err)
 		}

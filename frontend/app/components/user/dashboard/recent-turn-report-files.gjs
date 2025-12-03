@@ -27,7 +27,7 @@ export default class RecentTurnReportFiles extends Component {
               <div class="flex items-center justify-between gap-4">
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-gray-900 dark:text-white">
-                    <a href={{file.links.self}}
+                    <a href={{file.links.contents.href}}
                        class="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300">
                       {{file.documentName}}
                     </a>

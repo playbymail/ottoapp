@@ -19,9 +19,9 @@ import (
 // If outputPath is provided, it must exist (will not be created).
 //
 // It's safest if the server is not running during the backup.
-func Backup(ctx context.Context, path string, outputPath string, debug bool) (string, error) {
+func Backup(ctx context.Context, path string, outputPath string, quiet, verbose, debug bool) (string, error) {
 	started := time.Now()
-	wdb, err := Open(ctx, path, false, debug)
+	wdb, err := Open(ctx, path, false, quiet, verbose, debug)
 	if err != nil {
 		return "", err
 	} else if wdb == nil || wdb.db == nil {

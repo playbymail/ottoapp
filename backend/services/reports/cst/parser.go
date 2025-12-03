@@ -152,6 +152,7 @@ func (p *parser) syncToUnitKeyword() []*lexers.Token {
 // turn_report = unit_section, { unit_section }, EOF ;
 func (p *parser) parseTurnReport() *TurnReportNode {
 	node := &TurnReportNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Parse one or more unit sections
 	for !p.isAtEnd() {
@@ -178,6 +179,7 @@ func (p *parser) parseTurnReport() *TurnReportNode {
 // unit_section = unit_line, turn_line, [ unit_movement_line ] ;
 func (p *parser) parseUnitSection() *UnitSectionNode {
 	node := &UnitSectionNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	unitLine := p.parseUnitLine()
 	node.UnitLine = unitLine
@@ -224,6 +226,7 @@ func (p *parser) parseUnitSection() *UnitSectionNode {
 //	LeftParen, Previous, Hex, Equals, coords, RightParen, EOL ;
 func (p *parser) parseUnitLine() *UnitLineNode {
 	node := &UnitLineNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// unit_keyword
 	if tok := p.match(lexers.Courier, lexers.Element, lexers.Fleet, lexers.Garrison, lexers.Tribe); tok != nil {
@@ -404,6 +407,7 @@ func (p *parser) parseUnitLine() *UnitLineNode {
 //	EOL ;
 func (p *parser) parseTurnLine() *TurnLineNode {
 	node := &TurnLineNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Current
 	if tok, err := p.expect(lexers.Current); err != nil {
@@ -557,6 +561,7 @@ func (p *parser) parseTurnLine() *TurnLineNode {
 // turn_number = LeftParen, Hash, Number, RightParen ;
 func (p *parser) parseTurnNumber() *TurnNumberNode {
 	node := &TurnNumberNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// LeftParen
 	if tok, err := p.expect(lexers.LeftParen); err != nil {
@@ -601,6 +606,7 @@ func (p *parser) parseTurnNumber() *TurnNumberNode {
 // report_date = Number, Slash, Number, Slash, Number ;
 func (p *parser) parseReportDate() *ReportDateNode {
 	node := &ReportDateNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Day (Number)
 	if tok, err := p.expect(lexers.Number); err != nil {
@@ -654,6 +660,7 @@ func (p *parser) parseReportDate() *ReportDateNode {
 // unit_goes_to_line = Tribe, Goes, To, grid_coords, EOL ;
 func (p *parser) parseUnitGoesToLine() *UnitGoesToLineNode {
 	node := &UnitGoesToLineNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Tribe
 	if tok, err := p.expect(lexers.Tribe); err != nil {
@@ -716,6 +723,7 @@ func (p *parser) parseUnitGoesToLine() *UnitGoesToLineNode {
 // land_movement_line = Tribe, Movement, Colon, land_movement, EOL ;
 func (p *parser) parseLandMovementLine() *LandMovementLineNode {
 	node := &LandMovementLineNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Tribe
 	if tok, err := p.expect(lexers.Tribe); err != nil {
@@ -774,6 +782,7 @@ func (p *parser) parseLandMovementLine() *LandMovementLineNode {
 // land_movement = Move, land_step, { Backslash, land_step } ;
 func (p *parser) parseLandMovement() *LandMovementNode {
 	node := &LandMovementNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Move
 	if tok, err := p.expect(lexers.Move); err != nil {
@@ -812,6 +821,7 @@ func (p *parser) parseLandMovement() *LandMovementNode {
 // land_step_result = Comma ;
 func (p *parser) parseLandStep() *LandStepNode {
 	node := &LandStepNode{}
+	node.LineNo, node.ColNo = p.peek().Position()
 
 	// Check if we're at the end of the step sequence (EOL or next unit keyword)
 	// If so, return an empty step
@@ -864,6 +874,8 @@ func (p *parser) parseCoords() CoordsNode {
 		if bytes.Equal(p.peek().Bytes(), []byte{'#', '#'}) {
 			// obscured_coords = Hash, Hash, Number (e.g., ## 1315)
 			node := &ObscuredCoordsNode{}
+			node.LineNo, node.ColNo = p.peek().Position()
+
 			node.Grid = p.advance()
 			node.tokens = append(node.tokens, node.Grid)
 
@@ -877,6 +889,8 @@ func (p *parser) parseCoords() CoordsNode {
 		}
 
 		node := &GridCoordsNode{}
+		node.LineNo, node.ColNo = p.peek().Position()
+
 		node.Grid = p.advance()
 		node.tokens = append(node.tokens, node.Grid)
 
@@ -891,6 +905,8 @@ func (p *parser) parseCoords() CoordsNode {
 	case lexers.NA:
 		// na_coords = Text, Slash, Text (e.g., N/A)
 		node := &NACoordsNode{}
+		node.LineNo, node.ColNo = p.peek().Position()
+
 		node.Text = p.advance()
 		node.tokens = append(node.tokens, node.Text)
 		return node
@@ -900,6 +916,8 @@ func (p *parser) parseCoords() CoordsNode {
 		node := &ErrorCoordsNode{
 			Message: fmt.Sprintf("expected coordinates, got %s", p.peekKind()),
 		}
+		node.LineNo, node.ColNo = p.peek().Position()
+
 		node.errors = append(node.errors, fmt.Errorf("%s", node.Message))
 		return node
 	}

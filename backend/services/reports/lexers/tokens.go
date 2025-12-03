@@ -167,6 +167,7 @@ const (
 	Number
 	LeftParen
 	RightParen
+	ScoutId
 	Slash
 	Spaces
 	TerrainCode

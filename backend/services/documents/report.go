@@ -9,8 +9,8 @@ import (
 )
 
 // LoadReportFromFS loads the file, creates a Document, and returns the document ID.
-func (s *Service) LoadReportFromFS(actor *domains.Actor, clan *domains.Clan, path, name string, canDelete, canRead, canShare, canWrite bool) (domains.ID, error) {
-	return s.loadFromFS(actor, clan, path, name, canDelete, canRead, canShare, canWrite, domains.ReportMimeType, domains.TurnReportExtract)
+func (s *Service) LoadReportFromFS(actor *domains.Actor, clan *domains.Clan, path, name string, quiet, verbose, debug bool) (domains.ID, error) {
+	return s.loadFromFS(actor, clan, path, name, domains.TurnReportExtract, quiet, verbose, debug)
 }
 
 // LoadReportFromRequest loads a document from an http.Request.

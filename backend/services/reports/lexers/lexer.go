@@ -87,11 +87,16 @@ func Scan(input []byte) []*Token {
 				text := span.Bytes()
 				if kw, ok := keywords[string(text)]; ok {
 					span.Kind = kw
+					if span.Kind == Status && prevToken.Kind == Number {
+						prevToken.Kind = UnitId
+					}
 				} else if len(text) == 2 && reGrid.Match(text) {
 					span.Kind = Grid
 				} else if reNumber.Match(text) {
 					span.Kind = Number
-					if len(text) == 4 {
+					if len(text) == 1 && ('1' <= text[0] && text[0] <= '8') && prevToken.Kind == Scout {
+						span.Kind = ScoutId
+					} else if len(text) == 4 {
 						// context hacks for direction and tribe id conflicts
 						if prevToken.Kind == Direction && len(prevToken.Bytes()) == 2 {
 							span.Kind = Grid

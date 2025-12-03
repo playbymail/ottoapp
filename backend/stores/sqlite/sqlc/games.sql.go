@@ -157,6 +157,85 @@ func (q *Queries) GetGame(ctx context.Context, gameID string) (GetGameRow, error
 	return i, err
 }
 
+const getGamesList = `-- name: GetGamesList :many
+SELECT game_id,
+       description,
+       is_active
+FROM games
+`
+
+type GetGamesListRow struct {
+	GameID      string
+	Description string
+	IsActive    bool
+}
+
+func (q *Queries) GetGamesList(ctx context.Context) ([]GetGamesListRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGamesList)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGamesListRow
+	for rows.Next() {
+		var i GetGamesListRow
+		if err := rows.Scan(&i.GameID, &i.Description, &i.IsActive); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readClansByGame = `-- name: ReadClansByGame :many
+SELECT game_id, user_id, clan_id, clan
+FROM clans
+WHERE game_id = ?1
+  AND is_active = 1
+ORDER BY clans.clan
+`
+
+type ReadClansByGameRow struct {
+	GameID string
+	UserID int64
+	ClanID int64
+	Clan   int64
+}
+
+func (q *Queries) ReadClansByGame(ctx context.Context, gameID string) ([]ReadClansByGameRow, error) {
+	rows, err := q.db.QueryContext(ctx, readClansByGame, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadClansByGameRow
+	for rows.Next() {
+		var i ReadClansByGameRow
+		if err := rows.Scan(
+			&i.GameID,
+			&i.UserID,
+			&i.ClanID,
+			&i.Clan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeClan = `-- name: RemoveClan :exec
 DELETE
 FROM clans

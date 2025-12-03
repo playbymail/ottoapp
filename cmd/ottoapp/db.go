@@ -18,6 +18,13 @@ var cmdDbBackup = &cobra.Command{
 	Long:         `Backup the database.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
@@ -27,7 +34,7 @@ var cmdDbBackup = &cobra.Command{
 			return err
 		}
 
-		name, err := sqlite.Backup(context.Background(), path, outputPath, false)
+		name, err := sqlite.Backup(context.Background(), path, outputPath, quiet, verbose, debug)
 		if err != nil {
 			return fmt.Errorf("backup failed: %w", err)
 		}
@@ -43,13 +50,20 @@ var cmdDbClone = &cobra.Command{
 	SilenceUsage: true,
 	Args:         cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		path, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
 		outputPath := args[0]
 
-		clonePath, err := sqlite.Clone(context.Background(), path, outputPath, false)
+		clonePath, err := sqlite.Clone(context.Background(), path, outputPath, quiet, verbose, debug)
 		if err != nil {
 			return fmt.Errorf("clone failed: %w", err)
 		}
@@ -63,11 +77,18 @@ var cmdDbCompact = &cobra.Command{
 	Short: "Compact the database",
 	Long:  `Compact the database.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		err = sqlite.Compact(context.Background(), dbPath, false)
+		err = sqlite.Compact(context.Background(), dbPath, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: compact: %v\n", err)
 		}
@@ -115,16 +136,20 @@ var cmdDbMigrateUp = &cobra.Command{
 	Short: "Run database migration up",
 	Long:  `Apply schema migrations to upgrade the database.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion, isInitializing = false, false
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		started := time.Now()
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		debug, err := cmd.Flags().GetBool("debug")
-		if err != nil {
-			return err
-		}
-		err = sqlite.MigrateUp(context.Background(), dbPath, false, debug)
+		err = sqlite.MigrateUp(context.Background(), dbPath, isInitializing, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: migrate: up: %v\n", err)
 		}
@@ -137,16 +162,20 @@ var cmdDbMigrateStatus = &cobra.Command{
 	Use:   "status",
 	Short: "show status of migrations",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = false
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		debug, err := cmd.Flags().GetBool("debug")
-		if err != nil {
-			return err
-		}
 		ctx := context.Background()
-		db, err := sqlite.Open(ctx, dbPath, false, debug)
+		db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: open: %v\n", err)
 		}
@@ -181,16 +210,20 @@ var cmdDbVersion = &cobra.Command{
 	Use:   "version",
 	Short: "show database version",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = false
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		dbPath, err := cmd.Flags().GetString("db")
 		if err != nil {
 			return err
 		}
-		debug, err := cmd.Flags().GetBool("debug")
-		if err != nil {
-			return err
-		}
 		ctx := context.Background()
-		db, err := sqlite.Open(ctx, dbPath, false, debug)
+		db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
 		if err != nil {
 			log.Fatalf("db: open: %v\n", err)
 		}

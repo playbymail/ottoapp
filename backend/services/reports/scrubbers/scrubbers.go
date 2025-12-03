@@ -12,15 +12,18 @@ var (
 	reRunOfTabs   = regexp.MustCompile(`\t+`)
 )
 
-func Scrub(input [][]byte) [][]byte {
+func Scrub(input [][]byte, patchNA bool) [][]byte {
 	var lines [][]byte
 	for _, line := range input {
 		line = bytes.TrimSpace(line)
 		line = reRunOfTabs.ReplaceAll(line, []byte{' '})
 		line = reRunOfSpaces.ReplaceAll(line, []byte{' '})
 		if acceptUnitLocationLine(line) {
-			// todo - this introduces a bug if the unit has movement
-			lines = append(lines, rePatchNA.ReplaceAll(line, []byte(`Current Hex = $1, (Previous Hex = $1)`)))
+			if patchNA {
+				// todo - this introduces a bug if the unit has movement
+				line = rePatchNA.ReplaceAll(line, []byte(`Current Hex = $1, (Previous Hex = $1)`))
+			}
+			lines = append(lines, line)
 		} else if acceptCurrentTurnLine(line) {
 			lines = append(lines, line)
 		} else if acceptUnitMovementLine(line) {
@@ -74,6 +77,7 @@ func acceptCurrentTurnLine(line []byte) bool {
 }
 
 var (
+	reTribeFollows = regexp.MustCompile(`^Tribe Follows`)
 	// Tribe Movement: Move
 	// Tribe Movement: Move \
 	// Tribe Movement: Move failed due to Insufficient capacity to carry
@@ -83,6 +87,9 @@ var (
 )
 
 func acceptUnitMovementLine(line []byte) bool {
+	if reTribeFollows.Match(line) {
+		return true
+	}
 	return reTribeMovement.Match(line)
 }
 

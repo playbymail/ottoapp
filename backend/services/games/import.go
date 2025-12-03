@@ -64,6 +64,10 @@ type ImportPlayer struct {
 	generatedPassword bool
 }
 
+func (player ImportPlayer) ChangedPassword() bool {
+	return player.generatedPassword
+}
+
 type ImportPlayerConfig struct {
 	EmailOptIn      bool `json:"email-opt-in,omitempty"`
 	SendWelcomeMail bool `json:"send-welcome-mail,omitempty"`

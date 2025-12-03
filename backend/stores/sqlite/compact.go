@@ -12,10 +12,10 @@ import (
 
 // Compact runs a checkpoint and truncates the WAL files. This reduces
 // the file size and sets up the database file to be copied.
-func Compact(ctx context.Context, path string, debug bool) error {
+func Compact(ctx context.Context, path string, quiet, verbose, debug bool) error {
 	started := time.Now()
 
-	dbw, err := Open(ctx, path, false, debug)
+	dbw, err := Open(ctx, path, false, quiet, verbose, debug)
 	if err != nil {
 		return err
 	} else if dbw == nil || dbw.db == nil {
