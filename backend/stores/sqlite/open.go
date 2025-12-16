@@ -33,7 +33,7 @@ func (db *DB) Close() error {
 //
 // Returns an error if the path is not a directory, or if the database does not exist.
 // Caller must call Close() when done.
-func Open(ctx context.Context, path string, checkVersion, debug bool) (*DB, error) {
+func Open(ctx context.Context, path string, checkVersion, quiet, verbose, debug bool) (*DB, error) {
 	// it is an error if the path does not already exist and is not a directory.
 	if sb, err := os.Stat(path); err != nil {
 		log.Printf("[sqldb] %q: %s\n", path, err)

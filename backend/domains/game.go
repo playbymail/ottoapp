@@ -8,6 +8,12 @@ const (
 	InvalidGameID GameID = ""
 )
 
+type Game struct {
+	ID          GameID
+	Description string
+	IsActive    bool
+}
+
 type TurnNo string // YYYY-MM
 
 type Clan struct {

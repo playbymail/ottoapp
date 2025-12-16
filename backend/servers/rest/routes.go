@@ -4,7 +4,7 @@ package rest
 
 import "net/http"
 
-func Routes(s *Server) http.Handler {
+func Routes(s *Server, quiet, verbose, debug bool) http.Handler {
 	mux := http.NewServeMux()
 
 	// Public routes (no authentication required)
@@ -23,10 +23,10 @@ func Routes(s *Server) http.Handler {
 	// Protected routes (authentication required)
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /api/cookies/delete", s.services.sessionsSvc.DeleteCookie)
-	protected.Handle("GET /api/documents", GetDocumentList(s.services.authzSvc, s.services.documentsSvc))
-	protected.Handle("GET /api/documents/{id}", GetDocument(s.services.authzSvc, s.services.documentsSvc))
-	protected.Handle("GET /api/documents/{id}/contents", GetDocumentContents(s.services.authzSvc, s.services.documentsSvc))
-	protected.Handle("POST /api/games/{id}/turn-report-files", PostGamesTurnReportFiles(s.services.authzSvc, s.services.documentsSvc, s.services.gamesSvc))
+	protected.Handle("GET /api/documents", GetDocumentList(s.services.authzSvc, s.services.documentsSvc, quiet, verbose, debug))
+	protected.Handle("GET /api/documents/{id}", GetDocument(s.services.authzSvc, s.services.documentsSvc, quiet, verbose, debug))
+	protected.Handle("GET /api/documents/{id}/contents", GetDocumentContents(s.services.authzSvc, s.services.documentsSvc, quiet, verbose, debug))
+	protected.Handle("POST /api/games/{id}/turn-report-files", PostGamesTurnReportFiles(s.services.authzSvc, s.services.documentsSvc, s.services.gamesSvc, quiet, verbose, debug))
 	protected.HandleFunc("POST /api/logout", s.services.sessionsSvc.HandlePostLogout)
 	protected.HandleFunc("GET /api/my/profile", s.services.usersSvc.HandleGetMyProfile)
 	protected.HandleFunc("GET /api/profile", s.handleGetProfile)

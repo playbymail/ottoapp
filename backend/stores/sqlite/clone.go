@@ -18,7 +18,7 @@ import (
 // This is a safety measure to prevent accidentally overwriting existing instances.
 //
 // It's safest if the server is not running during the clone.
-func Clone(ctx context.Context, path string, outputPath string, debug bool) (string, error) {
+func Clone(ctx context.Context, path string, outputPath string, quiet, verbose, debug bool) (string, error) {
 	started := time.Now()
 
 	// Validate output path
@@ -58,7 +58,7 @@ func Clone(ctx context.Context, path string, outputPath string, debug bool) (str
 	}
 
 	// Open source database
-	wdb, err := Open(ctx, path, false, debug)
+	wdb, err := Open(ctx, path, false, quiet, verbose, debug)
 	if err != nil {
 		return "", err
 	} else if wdb == nil || wdb.db == nil {

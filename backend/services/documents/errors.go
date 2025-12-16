@@ -9,5 +9,6 @@ func (e Error) Error() string {
 }
 
 const (
+	ErrExists      = Error("document already exists")
 	ErrInvalidPath = Error("invalid path")
 )

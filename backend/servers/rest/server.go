@@ -65,6 +65,8 @@ func New(
 	usersSvc *users.Service,
 	versionsSvc *versions.Service,
 	options ...Option) (*Server, error) {
+	quiet, verbose, debug := false, false, false
+
 	s := &Server{
 		Server: http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -123,7 +125,7 @@ func New(
 	s.Addr = net.JoinHostPort(s.network.host, s.network.port)
 	log.Printf("[server] address %q\n", s.Addr)
 
-	s.Handler = Routes(s)
+	s.Handler = Routes(s, quiet, verbose, debug)
 
 	return s, nil
 }

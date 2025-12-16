@@ -11,36 +11,21 @@ import (
 
 const createDocument = `-- name: CreateDocument :one
 INSERT INTO documents (clan_id,
-                       can_read, can_write, can_delete, can_share,
-                       document_name,
-                       document_type,
-                       contents_hash,
+                       document_name, document_type,
+                       modified_at,
                        created_at, updated_at)
 VALUES (?1,
-        ?2, ?3, ?4, ?5,
-        ?6,
-        ?7,
-        ?8,
-        ?9, ?10)
-ON CONFLICT (clan_id, contents_hash) DO UPDATE
-    SET can_read      = excluded.can_read,
-        can_write     = excluded.can_write,
-        can_delete    = excluded.can_delete,
-        can_share     = excluded.can_share,
-        document_name = excluded.document_name,
-        updated_at    = excluded.updated_at
+        ?2, ?3,
+        ?4,
+        ?5, ?6)
 RETURNING document_id
 `
 
 type CreateDocumentParams struct {
 	ClanID       int64
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CanShare     bool
 	DocumentName string
 	DocumentType string
-	ContentsHash string
+	ModifiedAt   int64
 	CreatedAt    int64
 	UpdatedAt    int64
 }
@@ -48,13 +33,9 @@ type CreateDocumentParams struct {
 func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createDocument,
 		arg.ClanID,
-		arg.CanRead,
-		arg.CanWrite,
-		arg.CanDelete,
-		arg.CanShare,
 		arg.DocumentName,
 		arg.DocumentType,
-		arg.ContentsHash,
+		arg.ModifiedAt,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -64,28 +45,34 @@ func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) 
 }
 
 const createDocumentContents = `-- name: CreateDocumentContents :exec
-
-INSERT INTO document_contents(contents_hash, content_length, mime_type, contents, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-ON CONFLICT (contents_hash) DO UPDATE
-    SET updated_at = excluded.updated_at
+INSERT INTO document_contents(document_id,
+                              content_length,
+                              contents_hash,
+                              contents,
+                              created_at,
+                              updated_at)
+VALUES (?1,
+        ?2,
+        ?3,
+        ?4,
+        ?5,
+        ?6)
 `
 
 type CreateDocumentContentsParams struct {
-	ContentsHash  string
+	DocumentID    int64
 	ContentLength int64
-	MimeType      string
+	ContentsHash  string
 	Contents      []byte
 	CreatedAt     int64
 	UpdatedAt     int64
 }
 
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
 func (q *Queries) CreateDocumentContents(ctx context.Context, arg CreateDocumentContentsParams) error {
 	_, err := q.db.ExecContext(ctx, createDocumentContents,
-		arg.ContentsHash,
+		arg.DocumentID,
 		arg.ContentLength,
-		arg.MimeType,
+		arg.ContentsHash,
 		arg.Contents,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -93,632 +80,591 @@ func (q *Queries) CreateDocumentContents(ctx context.Context, arg CreateDocument
 	return err
 }
 
-const deleteDocument = `-- name: DeleteDocument :exec
+const deleteDocumentByClanAndNameAuthorized = `-- name: DeleteDocumentByClanAndNameAuthorized :exec
 DELETE
 FROM documents
-WHERE document_id = ?1
+WHERE clan_id = ?1
+  AND document_name = ?2
+`
+
+type DeleteDocumentByClanAndNameAuthorizedParams struct {
+	ClanID       int64
+	DocumentName string
+}
+
+func (q *Queries) DeleteDocumentByClanAndNameAuthorized(ctx context.Context, arg DeleteDocumentByClanAndNameAuthorizedParams) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentByClanAndNameAuthorized, arg.ClanID, arg.DocumentName)
+	return err
+}
+
+const deleteDocumentById = `-- name: DeleteDocumentById :exec
+DELETE
+FROM documents
+WHERE documents.document_id = ?1
+`
+
+func (q *Queries) DeleteDocumentById(ctx context.Context, documentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentById, documentID)
+	return err
+}
+
+const deleteDocumentByIdAuthorized = `-- name: DeleteDocumentByIdAuthorized :exec
+DELETE
+FROM documents
+WHERE documents.document_id = ?1
   AND clan_id = ?2
 `
 
-type DeleteDocumentParams struct {
+type DeleteDocumentByIdAuthorizedParams struct {
 	DocumentID int64
 	ClanID     int64
 }
 
-func (q *Queries) DeleteDocument(ctx context.Context, arg DeleteDocumentParams) error {
-	_, err := q.db.ExecContext(ctx, deleteDocument, arg.DocumentID, arg.ClanID)
+func (q *Queries) DeleteDocumentByIdAuthorized(ctx context.Context, arg DeleteDocumentByIdAuthorizedParams) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentByIdAuthorized, arg.DocumentID, arg.ClanID)
 	return err
 }
 
-const deleteDocumentAuthorized = `-- name: DeleteDocumentAuthorized :exec
-DELETE
-FROM documents
-WHERE document_id = ?1
-  AND clan_id = ?2
-  AND can_delete = 1
-`
-
-type DeleteDocumentAuthorizedParams struct {
-	DocumentID int64
-	ClanID     int64
-}
-
-func (q *Queries) DeleteDocumentAuthorized(ctx context.Context, arg DeleteDocumentAuthorizedParams) error {
-	_, err := q.db.ExecContext(ctx, deleteDocumentAuthorized, arg.DocumentID, arg.ClanID)
-	return err
-}
-
-const deleteDocumentContents = `-- name: DeleteDocumentContents :exec
+const deleteDocumentContentsById = `-- name: DeleteDocumentContentsById :exec
 DELETE
 FROM document_contents
-WHERE contents_hash = ?1
-  AND NOT EXISTS (SELECT 1
-                  FROM documents
-                  WHERE contents_hash = :contents_hash)
+WHERE document_contents.document_id = ?1
 `
 
-func (q *Queries) DeleteDocumentContents(ctx context.Context, contentsHash string) error {
-	_, err := q.db.ExecContext(ctx, deleteDocumentContents, contentsHash)
+func (q *Queries) DeleteDocumentContentsById(ctx context.Context, documentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentContentsById, documentID)
 	return err
 }
 
-const deleteSharedDocumentById = `-- name: DeleteSharedDocumentById :exec
-DELETE
-FROM document_shares
-WHERE document_id = ?1
-  AND clan_id = ?2
+const readDocumentByClanAndName = `-- name: ReadDocumentByClanAndName :one
+SELECT clans.game_id,
+       clans.user_id,
+       clans.clan,
+       documents.document_id,
+       documents.clan_id,
+       documents.document_name,
+       documents.document_type,
+       document_contents.contents_hash,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+FROM clans,
+     documents,
+     document_contents
+WHERE clans.clan_id = ?1
+  AND documents.clan_id = clans.clan_id
+  AND documents.document_name = ?2
+  AND document_contents.document_id = documents.document_id
 `
 
-type DeleteSharedDocumentByIdParams struct {
-	DocumentID int64
-	ClanID     int64
+type ReadDocumentByClanAndNameParams struct {
+	ClanID       int64
+	DocumentName string
 }
 
-func (q *Queries) DeleteSharedDocumentById(ctx context.Context, arg DeleteSharedDocumentByIdParams) error {
-	_, err := q.db.ExecContext(ctx, deleteSharedDocumentById, arg.DocumentID, arg.ClanID)
-	return err
-}
-
-const getAllDocumentsForClan = `-- name: GetAllDocumentsForClan :many
-SELECT d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clan_documents_vw AS d
-WHERE d.clan_id = ?1
-   OR d.owner_id = ?1
-`
-
-func (q *Queries) GetAllDocumentsForClan(ctx context.Context, clanID int64) ([]ClanDocumentsVw, error) {
-	rows, err := q.db.QueryContext(ctx, getAllDocumentsForClan, clanID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ClanDocumentsVw
-	for rows.Next() {
-		var i ClanDocumentsVw
-		if err := rows.Scan(
-			&i.DocumentID,
-			&i.ClanID,
-			&i.CanRead,
-			&i.CanWrite,
-			&i.CanDelete,
-			&i.CanShare,
-			&i.DocumentName,
-			&i.DocumentType,
-			&i.ContentsHash,
-			&i.OwnerID,
-			&i.IsShared,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAllDocumentsForGameAcrossUsers = `-- name: GetAllDocumentsForGameAcrossUsers :many
-SELECT c.user_id,
-       c.game_id,
-       d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clans AS c,
-     clan_documents_vw AS d
-WHERE c.game_id = ?1
-  AND (d.clan_id = c.clan_id OR d.owner_id = c.clan_id)
-`
-
-type GetAllDocumentsForGameAcrossUsersRow struct {
-	UserID       int64
+type ReadDocumentByClanAndNameRow struct {
 	GameID       string
+	UserID       int64
+	Clan         int64
 	DocumentID   int64
 	ClanID       int64
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CanShare     bool
 	DocumentName string
 	DocumentType string
 	ContentsHash string
-	OwnerID      int64
-	IsShared     bool
+	ModifiedAt   int64
 	CreatedAt    int64
 	UpdatedAt    int64
 }
 
-func (q *Queries) GetAllDocumentsForGameAcrossUsers(ctx context.Context, gameID string) ([]GetAllDocumentsForGameAcrossUsersRow, error) {
-	rows, err := q.db.QueryContext(ctx, getAllDocumentsForGameAcrossUsers, gameID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllDocumentsForGameAcrossUsersRow
-	for rows.Next() {
-		var i GetAllDocumentsForGameAcrossUsersRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.GameID,
-			&i.DocumentID,
-			&i.ClanID,
-			&i.CanRead,
-			&i.CanWrite,
-			&i.CanDelete,
-			&i.CanShare,
-			&i.DocumentName,
-			&i.DocumentType,
-			&i.ContentsHash,
-			&i.OwnerID,
-			&i.IsShared,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) ReadDocumentByClanAndName(ctx context.Context, arg ReadDocumentByClanAndNameParams) (ReadDocumentByClanAndNameRow, error) {
+	row := q.db.QueryRowContext(ctx, readDocumentByClanAndName, arg.ClanID, arg.DocumentName)
+	var i ReadDocumentByClanAndNameRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.Clan,
+		&i.DocumentID,
+		&i.ClanID,
+		&i.DocumentName,
+		&i.DocumentType,
+		&i.ContentsHash,
+		&i.ModifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
-const getAllDocumentsForUserAcrossGames = `-- name: GetAllDocumentsForUserAcrossGames :many
-SELECT c.user_id,
-       c.game_id,
-       d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clans AS c,
-     clan_documents_vw AS d
-WHERE c.user_id = ?1
-  AND (d.clan_id = c.clan_id OR d.owner_id = c.clan_id)
+const readDocumentById = `-- name: ReadDocumentById :one
+SELECT documents.document_id,
+       documents.clan_id,
+       documents.document_name,
+       documents.document_type,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+FROM documents
+WHERE documents.document_id = ?1
 `
 
-type GetAllDocumentsForUserAcrossGamesRow struct {
-	UserID       int64
-	GameID       string
-	DocumentID   int64
-	ClanID       int64
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CanShare     bool
-	DocumentName string
-	DocumentType string
-	ContentsHash string
-	OwnerID      int64
-	IsShared     bool
-	CreatedAt    int64
-	UpdatedAt    int64
-}
-
-func (q *Queries) GetAllDocumentsForUserAcrossGames(ctx context.Context, userID int64) ([]GetAllDocumentsForUserAcrossGamesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getAllDocumentsForUserAcrossGames, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllDocumentsForUserAcrossGamesRow
-	for rows.Next() {
-		var i GetAllDocumentsForUserAcrossGamesRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.GameID,
-			&i.DocumentID,
-			&i.ClanID,
-			&i.CanRead,
-			&i.CanWrite,
-			&i.CanDelete,
-			&i.CanShare,
-			&i.DocumentName,
-			&i.DocumentType,
-			&i.ContentsHash,
-			&i.OwnerID,
-			&i.IsShared,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAllDocumentsForUserInGame = `-- name: GetAllDocumentsForUserInGame :many
-SELECT c.user_id,
-       c.game_id,
-       d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clans AS c,
-     clan_documents_vw AS d
-WHERE c.user_id = ?1
-  AND c.game_id = ?2
-  AND (d.clan_id = c.clan_id OR d.owner_id = c.clan_id)
-`
-
-type GetAllDocumentsForUserInGameParams struct {
-	UserID int64
-	GameID string
-}
-
-type GetAllDocumentsForUserInGameRow struct {
-	UserID       int64
-	GameID       string
-	DocumentID   int64
-	ClanID       int64
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CanShare     bool
-	DocumentName string
-	DocumentType string
-	ContentsHash string
-	OwnerID      int64
-	IsShared     bool
-	CreatedAt    int64
-	UpdatedAt    int64
-}
-
-func (q *Queries) GetAllDocumentsForUserInGame(ctx context.Context, arg GetAllDocumentsForUserInGameParams) ([]GetAllDocumentsForUserInGameRow, error) {
-	rows, err := q.db.QueryContext(ctx, getAllDocumentsForUserInGame, arg.UserID, arg.GameID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllDocumentsForUserInGameRow
-	for rows.Next() {
-		var i GetAllDocumentsForUserInGameRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.GameID,
-			&i.DocumentID,
-			&i.ClanID,
-			&i.CanRead,
-			&i.CanWrite,
-			&i.CanDelete,
-			&i.CanShare,
-			&i.DocumentName,
-			&i.DocumentType,
-			&i.ContentsHash,
-			&i.OwnerID,
-			&i.IsShared,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getDocumentAcl = `-- name: GetDocumentAcl :many
-SELECT d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clan_documents_vw AS d
-WHERE d.document_id = ?1
-`
-
-// GetDocumentAcl returns the list of the users with access to the document.
-func (q *Queries) GetDocumentAcl(ctx context.Context, documentID int64) ([]ClanDocumentsVw, error) {
-	rows, err := q.db.QueryContext(ctx, getDocumentAcl, documentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ClanDocumentsVw
-	for rows.Next() {
-		var i ClanDocumentsVw
-		if err := rows.Scan(
-			&i.DocumentID,
-			&i.ClanID,
-			&i.CanRead,
-			&i.CanWrite,
-			&i.CanDelete,
-			&i.CanShare,
-			&i.DocumentName,
-			&i.DocumentType,
-			&i.ContentsHash,
-			&i.OwnerID,
-			&i.IsShared,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getDocumentById = `-- name: GetDocumentById :one
-SELECT d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.created_at,
-       d.updated_at
-FROM documents AS d
-WHERE d.document_id = ?1
-`
-
-func (q *Queries) GetDocumentById(ctx context.Context, documentID int64) (Document, error) {
-	row := q.db.QueryRowContext(ctx, getDocumentById, documentID)
+func (q *Queries) ReadDocumentById(ctx context.Context, documentID int64) (Document, error) {
+	row := q.db.QueryRowContext(ctx, readDocumentById, documentID)
 	var i Document
 	err := row.Scan(
 		&i.DocumentID,
 		&i.ClanID,
-		&i.CanRead,
-		&i.CanWrite,
-		&i.CanDelete,
-		&i.CanShare,
 		&i.DocumentName,
 		&i.DocumentType,
-		&i.ContentsHash,
+		&i.ModifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getDocumentByIdAuthorized = `-- name: GetDocumentByIdAuthorized :one
-SELECT d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clan_documents_vw AS d
-WHERE d.document_id = ?1
-  AND d.clan_id = ?2
+const readDocumentContents = `-- name: ReadDocumentContents :one
+SELECT contents
+FROM document_contents
+WHERE document_id = ?1
 `
 
-type GetDocumentByIdAuthorizedParams struct {
+func (q *Queries) ReadDocumentContents(ctx context.Context, documentID int64) ([]byte, error) {
+	row := q.db.QueryRowContext(ctx, readDocumentContents, documentID)
+	var contents []byte
+	err := row.Scan(&contents)
+	return contents, err
+}
+
+const readDocumentContentsByIdAuthorized = `-- name: ReadDocumentContentsByIdAuthorized :one
+SELECT clans.game_id,
+       clans.user_id,
+       clans.clan,
+       documents.document_id,
+       documents.clan_id,
+       documents.document_name,
+       documents.document_type,
+       document_types.content_type,
+       document_contents.contents,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+FROM documents,
+     document_types,
+     document_contents,
+     clans
+WHERE documents.document_id = ?1
+  AND documents.clan_id = ?2
+  AND document_types.document_type = documents.document_type
+  AND document_contents.document_id = documents.document_id
+  AND clans.clan_id = documents.clan_id
+`
+
+type ReadDocumentContentsByIdAuthorizedParams struct {
 	DocumentID int64
 	ClanID     int64
 }
 
-func (q *Queries) GetDocumentByIdAuthorized(ctx context.Context, arg GetDocumentByIdAuthorizedParams) (ClanDocumentsVw, error) {
-	row := q.db.QueryRowContext(ctx, getDocumentByIdAuthorized, arg.DocumentID, arg.ClanID)
-	var i ClanDocumentsVw
-	err := row.Scan(
-		&i.DocumentID,
-		&i.ClanID,
-		&i.CanRead,
-		&i.CanWrite,
-		&i.CanDelete,
-		&i.CanShare,
-		&i.DocumentName,
-		&i.DocumentType,
-		&i.ContentsHash,
-		&i.OwnerID,
-		&i.IsShared,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getDocumentContents = `-- name: GetDocumentContents :one
-SELECT content_length,
-       contents_hash,
-       mime_type,
-       contents,
-       created_at,
-       updated_at
-FROM document_contents
-WHERE contents_hash = ?1
-`
-
-type GetDocumentContentsRow struct {
-	ContentLength int64
-	ContentsHash  string
-	MimeType      string
-	Contents      []byte
-	CreatedAt     int64
-	UpdatedAt     int64
-}
-
-func (q *Queries) GetDocumentContents(ctx context.Context, contentsHash string) (GetDocumentContentsRow, error) {
-	row := q.db.QueryRowContext(ctx, getDocumentContents, contentsHash)
-	var i GetDocumentContentsRow
-	err := row.Scan(
-		&i.ContentLength,
-		&i.ContentsHash,
-		&i.MimeType,
-		&i.Contents,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getDocumentForUserAuthorized = `-- name: GetDocumentForUserAuthorized :one
-SELECT c.user_id,
-       c.game_id,
-       d.document_id,
-       d.clan_id,
-       d.can_read,
-       d.can_write,
-       d.can_delete,
-       d.can_share,
-       d.document_name,
-       d.document_type,
-       d.contents_hash,
-       d.owner_id,
-       d.is_shared,
-       d.created_at,
-       d.updated_at
-FROM clans AS c,
-     clan_documents_vw AS d
-WHERE c.user_id = ?1
-  AND c.clan_id = d.clan_id
-  AND d.document_id = ?2
-`
-
-type GetDocumentForUserAuthorizedParams struct {
-	UserID     int64
-	DocumentID int64
-}
-
-type GetDocumentForUserAuthorizedRow struct {
-	UserID       int64
+type ReadDocumentContentsByIdAuthorizedRow struct {
 	GameID       string
+	UserID       int64
+	Clan         int64
 	DocumentID   int64
 	ClanID       int64
-	CanRead      bool
-	CanWrite     bool
-	CanDelete    bool
-	CanShare     bool
 	DocumentName string
 	DocumentType string
-	ContentsHash string
-	OwnerID      int64
-	IsShared     bool
+	ContentType  string
+	Contents     []byte
+	ModifiedAt   int64
 	CreatedAt    int64
 	UpdatedAt    int64
 }
 
-func (q *Queries) GetDocumentForUserAuthorized(ctx context.Context, arg GetDocumentForUserAuthorizedParams) (GetDocumentForUserAuthorizedRow, error) {
-	row := q.db.QueryRowContext(ctx, getDocumentForUserAuthorized, arg.UserID, arg.DocumentID)
-	var i GetDocumentForUserAuthorizedRow
+func (q *Queries) ReadDocumentContentsByIdAuthorized(ctx context.Context, arg ReadDocumentContentsByIdAuthorizedParams) (ReadDocumentContentsByIdAuthorizedRow, error) {
+	row := q.db.QueryRowContext(ctx, readDocumentContentsByIdAuthorized, arg.DocumentID, arg.ClanID)
+	var i ReadDocumentContentsByIdAuthorizedRow
 	err := row.Scan(
-		&i.UserID,
 		&i.GameID,
+		&i.UserID,
+		&i.Clan,
 		&i.DocumentID,
 		&i.ClanID,
-		&i.CanRead,
-		&i.CanWrite,
-		&i.CanDelete,
-		&i.CanShare,
 		&i.DocumentName,
 		&i.DocumentType,
-		&i.ContentsHash,
-		&i.OwnerID,
-		&i.IsShared,
+		&i.ContentType,
+		&i.Contents,
+		&i.ModifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const shareDocumentById = `-- name: ShareDocumentById :exec
-INSERT INTO document_shares (document_id, clan_id, can_read, can_delete, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+const readDocumentOwner = `-- name: ReadDocumentOwner :one
+SELECT clans.game_id,
+       clans.user_id,
+       clans.clan_id,
+       clans.clan,
+       clans.setup_turn_no,
+       clans.is_active
+FROM documents,
+     clans
+WHERE documents.document_id = ?1
+  AND clans.clan_id = documents.clan_id
 `
 
-type ShareDocumentByIdParams struct {
-	DocumentID int64
-	ClanID     int64
-	CanRead    bool
-	CanDelete  bool
-	CreatedAt  int64
-	UpdatedAt  int64
+type ReadDocumentOwnerRow struct {
+	GameID      string
+	UserID      int64
+	ClanID      int64
+	Clan        int64
+	SetupTurnNo int64
+	IsActive    bool
 }
 
-func (q *Queries) ShareDocumentById(ctx context.Context, arg ShareDocumentByIdParams) error {
-	_, err := q.db.ExecContext(ctx, shareDocumentById,
+func (q *Queries) ReadDocumentOwner(ctx context.Context, documentID int64) (ReadDocumentOwnerRow, error) {
+	row := q.db.QueryRowContext(ctx, readDocumentOwner, documentID)
+	var i ReadDocumentOwnerRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.ClanID,
+		&i.Clan,
+		&i.SetupTurnNo,
+		&i.IsActive,
+	)
+	return i, err
+}
+
+const readDocumentsByGameAndClanNo = `-- name: ReadDocumentsByGameAndClanNo :many
+SELECT clans.game_id,
+       clans.user_id,
+       clans.clan,
+       documents.document_id,
+       documents.clan_id,
+       documents.document_name,
+       documents.document_type,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+FROM clans,
+     documents
+WHERE clans.game_id = ?1
+  AND clans.clan_id = ?2
+  AND documents.document_id = ?3
+  AND documents.clan_id = clans.clan_id
+`
+
+type ReadDocumentsByGameAndClanNoParams struct {
+	GameID     string
+	ClanNo     int64
+	DocumentID int64
+}
+
+type ReadDocumentsByGameAndClanNoRow struct {
+	GameID       string
+	UserID       int64
+	Clan         int64
+	DocumentID   int64
+	ClanID       int64
+	DocumentName string
+	DocumentType string
+	ModifiedAt   int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) ReadDocumentsByGameAndClanNo(ctx context.Context, arg ReadDocumentsByGameAndClanNoParams) ([]ReadDocumentsByGameAndClanNoRow, error) {
+	rows, err := q.db.QueryContext(ctx, readDocumentsByGameAndClanNo, arg.GameID, arg.ClanNo, arg.DocumentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadDocumentsByGameAndClanNoRow
+	for rows.Next() {
+		var i ReadDocumentsByGameAndClanNoRow
+		if err := rows.Scan(
+			&i.GameID,
+			&i.UserID,
+			&i.Clan,
+			&i.DocumentID,
+			&i.ClanID,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ModifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readDocumentsByHash = `-- name: ReadDocumentsByHash :one
+SELECT clans.game_id,
+       clans.user_id,
+       clans.clan,
+       documents.document_id,
+       documents.clan_id,
+       documents.document_name,
+       documents.document_type,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+FROM document_contents,
+     documents,
+     clans
+WHERE document_contents.contents_hash = ?1
+  AND documents.document_id = document_contents.document_id
+  AND clans.clan_id = documents.clan_id
+`
+
+type ReadDocumentsByHashRow struct {
+	GameID       string
+	UserID       int64
+	Clan         int64
+	DocumentID   int64
+	ClanID       int64
+	DocumentName string
+	DocumentType string
+	ModifiedAt   int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) ReadDocumentsByHash(ctx context.Context, contentsHash string) (ReadDocumentsByHashRow, error) {
+	row := q.db.QueryRowContext(ctx, readDocumentsByHash, contentsHash)
+	var i ReadDocumentsByHashRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.Clan,
+		&i.DocumentID,
+		&i.ClanID,
+		&i.DocumentName,
+		&i.DocumentType,
+		&i.ModifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const readDocumentsByUser = `-- name: ReadDocumentsByUser :many
+SELECT clans.game_id,
+       clans.user_id,
+       clans.clan,
+       documents.document_id,
+       documents.clan_id,
+       documents.document_name,
+       documents.document_type,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+FROM clans,
+     documents
+WHERE clans.user_id = ?1
+  AND documents.clan_id = clans.clan_id
+`
+
+type ReadDocumentsByUserRow struct {
+	GameID       string
+	UserID       int64
+	Clan         int64
+	DocumentID   int64
+	ClanID       int64
+	DocumentName string
+	DocumentType string
+	ModifiedAt   int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) ReadDocumentsByUser(ctx context.Context, userID int64) ([]ReadDocumentsByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, readDocumentsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadDocumentsByUserRow
+	for rows.Next() {
+		var i ReadDocumentsByUserRow
+		if err := rows.Scan(
+			&i.GameID,
+			&i.UserID,
+			&i.Clan,
+			&i.DocumentID,
+			&i.ClanID,
+			&i.DocumentName,
+			&i.DocumentType,
+			&i.ModifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readReportExtracts = `-- name: ReadReportExtracts :many
+select documents.document_id,
+       clans.game_id  as game_id,
+       substr(documents.document_name, 6, 7)  as turn_no,
+       clans.clan as clan,
+       substr(documents.document_name, 6)     as document_name,
+       documents.modified_at,
+       documents.created_at,
+       documents.updated_at
+from documents, clans
+where documents.document_type = 'txt'
+and clans.clan_id = documents.clan_id
+order by game_id, turn_no, clan
+`
+
+type ReadReportExtractsRow struct {
+	DocumentID   int64
+	GameID       string
+	TurnNo       string
+	Clan         int64
+	DocumentName string
+	ModifiedAt   int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+func (q *Queries) ReadReportExtracts(ctx context.Context) ([]ReadReportExtractsRow, error) {
+	rows, err := q.db.QueryContext(ctx, readReportExtracts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadReportExtractsRow
+	for rows.Next() {
+		var i ReadReportExtractsRow
+		if err := rows.Scan(
+			&i.DocumentID,
+			&i.GameID,
+			&i.TurnNo,
+			&i.Clan,
+			&i.DocumentName,
+			&i.ModifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateDocumentById = `-- name: UpdateDocumentById :exec
+UPDATE documents
+SET document_name = ?1,
+    document_type = ?2,
+    modified_at   = ?3,
+    updated_at    = ?4
+WHERE document_id = ?5
+  AND clan_id = ?6
+`
+
+type UpdateDocumentByIdParams struct {
+	DocumentName string
+	DocumentType string
+	ModifiedAt   int64
+	UpdatedAt    int64
+	DocumentID   int64
+	ClanID       int64
+}
+
+func (q *Queries) UpdateDocumentById(ctx context.Context, arg UpdateDocumentByIdParams) error {
+	_, err := q.db.ExecContext(ctx, updateDocumentById,
+		arg.DocumentName,
+		arg.DocumentType,
+		arg.ModifiedAt,
+		arg.UpdatedAt,
 		arg.DocumentID,
 		arg.ClanID,
-		arg.CanRead,
-		arg.CanDelete,
-		arg.CreatedAt,
+	)
+	return err
+}
+
+const updateDocumentByIdAuthorized = `-- name: UpdateDocumentByIdAuthorized :exec
+UPDATE documents
+SET document_name = ?1,
+    document_type = ?2,
+    modified_at   = ?3,
+    updated_at    = ?4
+WHERE document_id = ?5
+  AND clan_id = ?6
+`
+
+type UpdateDocumentByIdAuthorizedParams struct {
+	DocumentName string
+	DocumentType string
+	ModifiedAt   int64
+	UpdatedAt    int64
+	DocumentID   int64
+	ClanID       int64
+}
+
+func (q *Queries) UpdateDocumentByIdAuthorized(ctx context.Context, arg UpdateDocumentByIdAuthorizedParams) error {
+	_, err := q.db.ExecContext(ctx, updateDocumentByIdAuthorized,
+		arg.DocumentName,
+		arg.DocumentType,
+		arg.ModifiedAt,
 		arg.UpdatedAt,
+		arg.DocumentID,
+		arg.ClanID,
+	)
+	return err
+}
+
+const updateDocumentContentsById = `-- name: UpdateDocumentContentsById :exec
+UPDATE document_contents
+SET content_length = ?1,
+    contents_hash  = ?2,
+    contents       = ?3,
+    updated_at     = ?4
+WHERE document_contents.document_id = ?5
+`
+
+type UpdateDocumentContentsByIdParams struct {
+	ContentLength int64
+	ContentsHash  string
+	Contents      []byte
+	UpdatedAt     int64
+	DocumentID    int64
+}
+
+func (q *Queries) UpdateDocumentContentsById(ctx context.Context, arg UpdateDocumentContentsByIdParams) error {
+	_, err := q.db.ExecContext(ctx, updateDocumentContentsById,
+		arg.ContentLength,
+		arg.ContentsHash,
+		arg.Contents,
+		arg.UpdatedAt,
+		arg.DocumentID,
 	)
 	return err
 }

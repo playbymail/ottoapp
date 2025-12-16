@@ -62,6 +62,14 @@ func cmdGameImport() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1), // require path
 		RunE: func(cmd *cobra.Command, args []string) error {
+			const checkVersion = true
+			quiet, _ := cmd.Flags().GetBool("quiet")
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			debug, _ := cmd.Flags().GetBool("debug")
+			if quiet {
+				verbose = false
+			}
+
 			started := time.Now()
 			path := args[0]
 			if sb, err := os.Stat(path); err != nil {
@@ -86,12 +94,8 @@ func cmdGameImport() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			debug, err := cmd.Flags().GetBool("debug")
-			if err != nil {
-				return err
-			}
 			ctx := context.Background()
-			db, err := sqlite.Open(ctx, dbPath, false, debug)
+			db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
 			if err != nil {
 				log.Fatalf("db: open: %v\n", err)
 			}
@@ -99,18 +103,13 @@ func cmdGameImport() *cobra.Command {
 				_ = db.Close()
 			}()
 
-			authzSvc := authz.New(db)
-			authnSvc := authn.New(db, authzSvc)
-			tzSvc, err := iana.New(db)
+			gameSvc, err := games.New(db, nil, nil, nil)
 			if err != nil {
-				return errors.Join(fmt.Errorf("import: new tz service"), err)
+				return fmt.Errorf("games: new service %w", err)
 			}
-			usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
-			gameSvc := games.New(db, authnSvc, authzSvc, usersSvc)
 			err = gameSvc.Import(&data)
 			if err != nil {
-				return errors.Join(fmt.Errorf("import: game"), err)
-				return err
+				return fmt.Errorf("games: import %w", err)
 			}
 
 			fmt.Printf("%s: imported in %v\n", path, time.Since(started))
@@ -127,13 +126,17 @@ var cmdGameUpload = &cobra.Command{
 	Long:  `Upload game documents to the server.`,
 	Args:  cobra.ExactArgs(1), // require path to document to upload
 	RunE: func(cmd *cobra.Command, args []string) error {
+		const checkVersion = true
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		debug, _ := cmd.Flags().GetBool("debug")
+		if quiet {
+			verbose = false
+		}
+
 		startedAt := time.Now()
 
 		dbPath, err := cmd.Flags().GetString("db")
-		if err != nil {
-			return err
-		}
-		debug, err := cmd.Flags().GetBool("debug")
 		if err != nil {
 			return err
 		}
@@ -168,10 +171,6 @@ var cmdGameUpload = &cobra.Command{
 			return err
 		}
 		//log.Printf("game: upload: game %q\n", gameId)
-		canDelete, _ := cmd.Flags().GetBool("can-delete")
-		canRead, _ := cmd.Flags().GetBool("can-read")
-		canShare, _ := cmd.Flags().GetBool("can-share")
-		canWrite, _ := cmd.Flags().GetBool("can-write")
 
 		// enforce oneOf for clan and handle
 		var clanNo int
@@ -197,7 +196,7 @@ var cmdGameUpload = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		db, err := sqlite.Open(ctx, dbPath, true, debug)
+		db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
 		if err != nil {
 			return errors.Join(fmt.Errorf("game: db open failed"), err)
 		}
@@ -207,10 +206,19 @@ var cmdGameUpload = &cobra.Command{
 
 		authzSvc := authz.New(db)
 		authnSvc := authn.New(db, authzSvc)
-		tzSvc, err := iana.New(db)
-		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
-		docSvc := documents.New(db, authzSvc, usersSvc)
-		gamesSvc := games.New(db, authnSvc, authzSvc, usersSvc)
+		ianaSvc, err := iana.New(db)
+		if err != nil {
+			return err
+		}
+		usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+		docSvc, err := documents.New(db, authzSvc, usersSvc)
+		if err != nil {
+			return errors.Join(fmt.Errorf("sessions.new"), err)
+		}
+		gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc)
+		if err != nil {
+			return err
+		}
 
 		actor := &domains.Actor{ID: authz.SysopId, Sysop: true}
 		var clan *domains.Clan
@@ -234,17 +242,17 @@ var cmdGameUpload = &cobra.Command{
 		var docId domains.ID
 		switch mimeType {
 		case domains.DOCXMimeType:
-			docId, err = docSvc.LoadDocxFromFS(actor, clan, path, name, canDelete, canRead, canShare, canWrite)
+			docId, err = docSvc.LoadDocxFromFS(actor, clan, path, name, quiet, verbose, debug)
 			if err != nil {
 				return errors.Join(fmt.Errorf("%q", path), err)
 			}
 		case domains.ReportMimeType:
-			docId, err = docSvc.LoadReportFromFS(actor, clan, path, name, canDelete, canRead, canShare, canWrite)
+			docId, err = docSvc.LoadReportFromFS(actor, clan, path, name, quiet, verbose, debug)
 			if err != nil {
 				return errors.Join(fmt.Errorf("%q", path), err)
 			}
 		case domains.WXXMimeType:
-			docId, err = docSvc.LoadMapFromFS(actor, clan, path, name, canDelete, canRead, canShare, canWrite)
+			docId, err = docSvc.LoadMapFromFS(actor, clan, path, name, quiet, verbose, debug)
 			if err != nil {
 				return errors.Join(fmt.Errorf("%q", path), err)
 			}
