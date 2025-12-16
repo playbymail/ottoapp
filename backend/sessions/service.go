@@ -21,9 +21,9 @@ import (
 	"github.com/playbymail/ottoapp/backend/restapi"
 	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/services/authz"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
-	"github.com/playbymail/ottoapp/backend/users"
 )
 
 // Service provides session management operations.

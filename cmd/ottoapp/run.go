@@ -4,7 +4,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,8 +13,6 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/parsers/reports"
-	"github.com/playbymail/ottoapp/backend/services/email"
-	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/services/reports/cst"
 	"github.com/playbymail/ottoapp/backend/services/reports/cst2"
 	parsers "github.com/playbymail/ottoapp/backend/services/reports/docx"
@@ -438,87 +435,88 @@ func cmdRunWelcomeEmail() *cobra.Command {
 		Short:        "Send a welcome email to all players in a game",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if gameDataPath == "" {
-				return fmt.Errorf("--game-data is required")
-			}
-			if gameID == "" {
-				return fmt.Errorf("--game is required")
-			}
-
-			// load the game data from the json file (should be in the database?)
-			data, err := games.LoadGameData(gameDataPath)
-			if err != nil {
-				return err
-			} else if data.Config.Mailgun == nil {
-				log.Printf("error: missing mailgun config in game data\n")
-				return nil
-			}
-
-			ctx := context.Background()
-
-			emailSvc, err := email.NewMailgun(data.Config.Mailgun.ApiBase, data.Config.Mailgun.Domain, data.Config.Mailgun.ApiKey, data.Config.Mailgun.From, data.Config.Mailgun.ReplyTo)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			// fetch the game details
-			var gd *games.ImportGame
-			for _, g := range data.Games {
-				if g.Id == gameID {
-					gd = g
-					break
-				}
-			}
-			if gd == nil {
-				log.Printf("error: unknown game %q\n", gameID)
-				return nil
-			}
-
-			// fetch the players in the game
-			var players []*games.ImportPlayer
-			for _, p := range data.Players {
-				if !(p.Config != nil && p.Config.EmailOptIn == true && p.Config.SendWelcomeMail == true) {
-					continue
-				}
-				for _, g := range p.Games {
-					if g.Id == gd.Id {
-						players = append(players, p)
-						break
-					}
-				}
-			}
-
-			log.Printf("%s: sending welcome email to %d players\n", gd.Description, len(players))
-			if len(players) == 0 {
-				return nil
-			}
-
-			for _, p := range players {
-				if p.Email == "" {
-					continue
-				}
-				var pgd *games.ImportPlayerGame
-				for _, g := range p.Games {
-					if g.Id == gd.Id {
-						pgd = g
-						break
-					}
-				}
-				if pgd == nil { // should never happen
-					continue
-				}
-
-				// On registration:
-				if err := emailSvc.SendWelcome(ctx, p.Email, p.Username, gd.Description, pgd.Clan, p.Password); err != nil {
-					log.Printf("%s: %04d: %s: email %v\n", gd.Description, pgd.Clan, p.Email, err)
-					continue
-				}
-
-				log.Printf("%s: %04d: %s: email sent\n", gd.Description, pgd.Clan, p.Email)
-			}
-
-			log.Println("Done.")
-			return nil
+			panic("update to pull from database")
+			//if gameDataPath == "" {
+			//	return fmt.Errorf("--game-data is required")
+			//}
+			//if gameID == "" {
+			//	return fmt.Errorf("--game is required")
+			//}
+			//
+			//// load the game data from the json file (should be in the database?)
+			//data, err := games.LoadGameData(gameDataPath)
+			//if err != nil {
+			//	return err
+			//} else if data.Config.Mailgun == nil {
+			//	log.Printf("error: missing mailgun config in game data\n")
+			//	return nil
+			//}
+			//
+			//ctx := context.Background()
+			//
+			//emailSvc, err := email.NewMailgun(data.Config.Mailgun.ApiBase, data.Config.Mailgun.Domain, data.Config.Mailgun.ApiKey, data.Config.Mailgun.From, data.Config.Mailgun.ReplyTo)
+			//if err != nil {
+			//	log.Fatal(err)
+			//}
+			//
+			//// fetch the game details
+			//var gd *games.Game_t
+			//for _, g := range data.Games {
+			//	if g.Id == gameID {
+			//		gd = g
+			//		break
+			//	}
+			//}
+			//if gd == nil {
+			//	log.Printf("error: unknown game %q\n", gameID)
+			//	return nil
+			//}
+			//
+			//// fetch the players in the game
+			//var players []*games.ImportPlayer
+			//for _, p := range data.Players {
+			//	if !(p.Config != nil && p.Config.EmailOptIn == true && p.Config.SendWelcomeMail == true) {
+			//		continue
+			//	}
+			//	for _, g := range p.Games {
+			//		if g.Id == gd.Id {
+			//			players = append(players, p)
+			//			break
+			//		}
+			//	}
+			//}
+			//
+			//log.Printf("%s: sending welcome email to %d players\n", gd.Description, len(players))
+			//if len(players) == 0 {
+			//	return nil
+			//}
+			//
+			//for _, p := range players {
+			//	if p.Email == "" {
+			//		continue
+			//	}
+			//	var pgd *games.ImportPlayerGame
+			//	for _, g := range p.Games {
+			//		if g.Id == gd.Id {
+			//			pgd = g
+			//			break
+			//		}
+			//	}
+			//	if pgd == nil { // should never happen
+			//		continue
+			//	}
+			//
+			//	// On registration:
+			//	if err := emailSvc.SendWelcome(ctx, p.Email, p.Username, gd.Description, pgd.Clan, p.Password); err != nil {
+			//		log.Printf("%s: %04d: %s: email %v\n", gd.Description, pgd.Clan, p.Email, err)
+			//		continue
+			//	}
+			//
+			//	log.Printf("%s: %04d: %s: email sent\n", gd.Description, pgd.Clan, p.Email)
+			//}
+			//
+			//log.Println("Done.")
+			//return nil
 		},
 	}
 

@@ -32,7 +32,7 @@ type MapView struct {
 	ID        string         `jsonapi:"primary,map"` // singular when sending a payload
 	Game      string         `jsonapi:"attr,game"`
 	Clan      string         `jsonapi:"attr,clan"`
-	Turn      domains.TurnNo `jsonapi:"attr,turn"`
+	Turn      domains.TurnID `jsonapi:"attr,turn"`
 	CreatedAt time.Time      `jsonapi:"attr,created-at,iso8601"`
 	UpdatedAt time.Time      `jsonapi:"attr,updated-at,iso8601"`
 }

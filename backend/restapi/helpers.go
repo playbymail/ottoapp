@@ -134,6 +134,10 @@ func WriteJsonApiInvalidQueryParameter(w http.ResponseWriter, field, title strin
 	})
 }
 
+func WriteJsonApiNotImplementedError(w http.ResponseWriter, r *http.Request) {
+	WriteJsonApiError(w, http.StatusNotImplemented, "not_implemented", "Not Implemented", fmt.Sprintf("%s %s: not implemented", r.Method, r.URL))
+}
+
 func WriteJsonApiInternalServerError(w http.ResponseWriter, details ...string) {
 	var detail string
 	for _, s := range details {

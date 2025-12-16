@@ -13,15 +13,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/services/authz"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
-	"github.com/playbymail/ottoapp/backend/users"
 )
 
 // Service provides document management operations.
@@ -168,7 +169,7 @@ func (s *Service) ReadDocument(actor *domains.Actor, owner *domains.Clan, docume
 		if _, ok := handles[id]; ok {
 			continue
 		}
-		handle, err := qtx.GetUserHandle(ctx, int64(id))
+		handle, err := qtx.ReadHandleByUserId(ctx, int64(id))
 		if err != nil {
 			log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 			return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", id), err)
@@ -192,7 +193,7 @@ func (s *Service) ReadDocument(actor *domains.Actor, owner *domains.Clan, docume
 		ID:           fmt.Sprintf("%d", d.DocumentID),
 		OwnerHandle:  handles[owner.UserID],
 		UserHandle:   handles[owner.UserID],
-		GameId:       d.GameID,
+		GameId:       fmt.Sprintf("%s", d.GameID),
 		ClanNo:       fmt.Sprintf("%04d", owner.ClanNo),
 		DocumentName: d.DocumentName,
 		DocumentType: d.DocumentType,
@@ -225,7 +226,7 @@ func (s *Service) ReadDocumentContents(actor *domains.Actor, owner *domains.Clan
 		if _, ok := handles[id]; ok {
 			continue
 		}
-		handle, err := qtx.GetUserHandle(ctx, int64(id))
+		handle, err := qtx.ReadHandleByUserId(ctx, int64(id))
 		if err != nil {
 			log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 			return nil, errors.Join(domains.ErrDatabaseError, err)
@@ -318,7 +319,7 @@ func (s *Service) ReadDocumentsByUser(actor *domains.Actor, userId domains.ID, d
 
 	// cache handles by user_id to avoid repeated database calls
 	handles := map[domains.ID]string{}
-	actorHandle, err := qtx.GetUserHandle(ctx, int64(actor.ID))
+	actorHandle, err := qtx.ReadHandleByUserId(ctx, int64(actor.ID))
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", actor.ID), err)
 	}
@@ -342,13 +343,13 @@ func (s *Service) ReadDocumentsByUser(actor *domains.Actor, userId domains.ID, d
 		if !ok {
 			clan, err := qtx.GetClan(ctx, doc.ClanID)
 			if err != nil {
-				return nil, errors.Join(fmt.Errorf("GetClan(%d)", doc.ClanID), err)
+				return nil, errors.Join(fmt.Errorf("ReadClan(%d)", doc.ClanID), err)
 			}
-			ownerClan = &domains.Clan{GameID: clan.GameID, UserID: domains.ID(clan.UserID), ClanID: domains.ID(clan.ClanID), ClanNo: int(clan.Clan)}
+			ownerClan = &domains.Clan{GameID: domains.GameID(clan.GameID), UserID: domains.ID(clan.UserID), ClanID: domains.ID(clan.ClanID), ClanNo: int(clan.Clan)}
 		}
 		var ownerHandle string
 		if ownerHandle, ok = handles[ownerClan.UserID]; !ok {
-			ownerHandle, err = qtx.GetUserHandle(ctx, int64(ownerClan.UserID))
+			ownerHandle, err = qtx.ReadHandleByUserId(ctx, int64(ownerClan.UserID))
 			if err != nil {
 				return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", ownerClan.UserID), err)
 			}
@@ -358,7 +359,7 @@ func (s *Service) ReadDocumentsByUser(actor *domains.Actor, userId domains.ID, d
 			ID:           fmt.Sprintf("%d", doc.DocumentID),
 			OwnerHandle:  ownerHandle,
 			UserHandle:   ownerHandle,
-			GameId:       doc.GameID,
+			GameId:       strconv.FormatInt(doc.GameID, 10),
 			ClanNo:       fmt.Sprintf("%04d", ownerClan.ClanNo),
 			DocumentName: doc.DocumentName,
 			DocumentType: doc.DocumentType,
@@ -385,7 +386,7 @@ func (s *Service) ReadDocumentOwner(documentId domains.ID, quiet, verbose, debug
 		return nil, domains.ErrNotExists
 	}
 	return &domains.Clan{
-		GameID:   clan.GameID,
+		GameID:   domains.GameID(clan.GameID),
 		UserID:   domains.ID(clan.UserID),
 		ClanID:   domains.ID(clan.ClanID),
 		ClanNo:   int(clan.Clan),
@@ -801,18 +802,18 @@ func (s *Service) loadFromRequest(r *http.Request) (domains.ID, error) {
 	return domains.InvalidID, domains.ErrNotImplemented
 }
 
-func (s *Service) FindClanByGameAndNumber(gameID string, clanNo int) (*domains.Clan, error) {
+func (s *Service) FindClanByGameAndNumber(gameId domains.GameID, clanNo int) (*domains.Clan, error) {
 	q := s.db.Queries()
 	ctx := s.db.Context()
 	row, err := q.GetClanByGameClanNo(ctx, sqlc.GetClanByGameClanNoParams{
-		GameID: gameID,
+		GameID: int64(gameId),
 		ClanNo: int64(clanNo),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &domains.Clan{
-		GameID: row.GameID,
+		GameID: domains.GameID(row.GameID),
 		UserID: domains.ID(row.UserID),
 		ClanID: domains.ID(row.ClanID),
 		ClanNo: int(row.Clan),

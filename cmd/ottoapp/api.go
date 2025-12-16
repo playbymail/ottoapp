@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -17,9 +16,9 @@ import (
 	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/documents"
 	"github.com/playbymail/ottoapp/backend/services/games"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/sessions"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
-	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/playbymail/ottoapp/backend/versions"
 	"github.com/spf13/cobra"
 )
@@ -125,13 +124,14 @@ var cmdApiServe = &cobra.Command{
 
 		// Import test users for in-memory database
 		if path == ":memory:" {
-			var data games.ImportFile
-			err = json.Unmarshal(memdbPlayersJsonData, &data)
-			if err != nil {
-				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
-			} else if err = gamesSvc.Import(&data); err != nil {
-				log.Printf("[memdb] warning: failed to import test users: %v\n", err)
-			}
+			panic("obsolete: replace with sync.Service")
+			//var data games.ImportFile
+			//err = json.Unmarshal(memdbPlayersJsonData, &data)
+			//if err != nil {
+			//	log.Printf("[memdb] warning: failed to import test users: %v\n", err)
+			//} else if err = gamesSvc.Import(&data); err != nil {
+			//	log.Printf("[memdb] warning: failed to import test users: %v\n", err)
+			//}
 		}
 
 		s, err := rest.New(authnSvc, authzSvc, documentsSvc, gamesSvc, sessionsSvc, tzSvc, usersSvc, versionSvc, options...)

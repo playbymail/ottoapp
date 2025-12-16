@@ -24,13 +24,13 @@ func (s *Server) handleGetTimezones(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the "active" query parameter is set
 	if r.URL.Query().Get("active") == "true" {
-		list, err = s.services.tzSvc.Active()
+		list, err = s.services.ianaSvc.Active()
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 	} else {
-		list = s.services.tzSvc.Names()
+		list = s.services.ianaSvc.Names()
 	}
 
 	// Convert to structured format with id and label

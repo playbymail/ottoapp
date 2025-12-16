@@ -6,14 +6,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/services/authz"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite/sqlc"
-	"github.com/playbymail/ottoapp/backend/users"
 )
 
 type Service struct {
@@ -40,16 +41,16 @@ func New(db *sqlite.DB, authnSvc *authn.Service, authzSvc *authz.Service, usersS
 	return &Service{db: db, authnSvc: authnSvc, authzSvc: authzSvc, usersSvc: usersSvc}, nil
 }
 
-func (s *Service) GetClan(gameId domains.GameID, clanNo int) (*domains.Clan, error) {
+func (s *Service) ReadClanByGameIdAndClanNo(gameId domains.GameID, clanNo int, quiet, verbose, debug bool) (*domains.Clan, error) {
 	clan, err := s.db.Queries().GetClanByGameClanNo(s.db.Context(), sqlc.GetClanByGameClanNoParams{
-		GameID: string(gameId),
+		GameID: int64(gameId),
 		ClanNo: int64(clanNo),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &domains.Clan{
-		GameID:   clan.GameID,
+		GameID:   domains.GameID(clan.GameID),
 		UserID:   domains.ID(clan.UserID),
 		ClanID:   domains.ID(clan.ClanID),
 		ClanNo:   int(clan.Clan),
@@ -57,16 +58,16 @@ func (s *Service) GetClan(gameId domains.GameID, clanNo int) (*domains.Clan, err
 	}, nil
 }
 
-func (s *Service) GetClanForUser(gameId domains.GameID, userId domains.ID) (*domains.Clan, error) {
+func (s *Service) ReadClanByGameIdAndUserId(gameId domains.GameID, userId domains.ID) (*domains.Clan, error) {
 	clan, err := s.db.Queries().GetClanByGameUser(s.db.Context(), sqlc.GetClanByGameUserParams{
-		GameID: string(gameId),
+		GameID: int64(gameId),
 		UserID: int64(userId),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &domains.Clan{
-		GameID:   clan.GameID,
+		GameID:   domains.GameID(clan.GameID),
 		UserID:   domains.ID(clan.UserID),
 		ClanID:   domains.ID(clan.ClanID),
 		ClanNo:   int(clan.Clan),
@@ -74,8 +75,8 @@ func (s *Service) GetClanForUser(gameId domains.GameID, userId domains.ID) (*dom
 	}, nil
 }
 
-func (s *Service) GetGamesList() ([]*domains.Game, error) {
-	rows, err := s.db.Queries().GetGamesList(s.db.Context())
+func (s *Service) ReadGames() ([]*domains.Game, error) {
+	rows, err := s.db.Queries().ReadGames(s.db.Context())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return []*domains.Game{}, nil
@@ -84,11 +85,20 @@ func (s *Service) GetGamesList() ([]*domains.Game, error) {
 	}
 	var games []*domains.Game
 	for _, row := range rows {
-		games = append(games, &domains.Game{
+		game := &domains.Game{
 			ID:          domains.GameID(row.GameID),
+			Code:        row.Code,
 			Description: row.Description,
 			IsActive:    row.IsActive,
-		})
+			ActiveTurn: &domains.Turn{
+				ID:        domains.TurnID(row.ActiveTurnID),
+				Year:      int(row.ActiveTurnYear),
+				Month:     int(row.ActiveTurnMonth),
+				No:        int(row.ActiveTurnNo),
+				OrdersDue: time.Time{},
+			},
+		}
+		games = append(games, game)
 	}
 	if len(games) == 0 {
 		return []*domains.Game{}, nil
@@ -97,14 +107,14 @@ func (s *Service) GetGamesList() ([]*domains.Game, error) {
 }
 
 func (s *Service) ReadClansByGame(gameId domains.GameID, quiet, verbose, debug bool) ([]*domains.Clan, error) {
-	rows, err := s.db.Queries().ReadClansByGame(s.db.Context(), string(gameId))
+	rows, err := s.db.Queries().ReadClansByGame(s.db.Context(), int64(gameId))
 	if err != nil {
 		return nil, err
 	}
 	var clans []*domains.Clan
 	for _, row := range rows {
 		clans = append(clans, &domains.Clan{
-			GameID: row.GameID,
+			GameID: domains.GameID(row.GameID),
 			UserID: domains.ID(row.UserID),
 			ClanID: domains.ID(row.ClanID),
 			ClanNo: int(row.Clan),
@@ -114,4 +124,12 @@ func (s *Service) ReadClansByGame(gameId domains.GameID, quiet, verbose, debug b
 		clans = []*domains.Clan{}
 	}
 	return clans, nil
+}
+
+func (s *Service) GameIdClanNoToClan(id domains.GameID, clanNo int) (*domains.Clan, error) {
+	return nil, domains.ErrNotImplemented
+}
+
+func (s *Service) GameCodeYearMonthToGameTurnId(code, yearMonth string) (domains.GameID, domains.TurnID, error) {
+	return domains.InvalidGameID, domains.InvalidTurnID, domains.ErrNotImplemented
 }

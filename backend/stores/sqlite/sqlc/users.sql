@@ -1,11 +1,4 @@
---  Copyright (c) 2025 Michael D Henderson. All rights reserved.
-
--- UpsertUser creates a new user and returns its id.
--- The email must be lowercase and unique.
--- Timezone is the user's timezone. Use UTC if unknown.
--- The password is stored as a bcrypt hash.
---
--- name: UpsertUser :one
+-- name: CreateUser :one
 INSERT INTO users (handle,
                    email,
                    username,
@@ -18,88 +11,49 @@ VALUES (:handle,
         :timezone,
         :created_at,
         :updated_at)
-ON CONFLICT (handle) DO UPDATE
-    SET email      = excluded.email,
-        username   = excluded.username,
-        timezone   = excluded.timezone,
-        updated_at = excluded.updated_at
 RETURNING user_id;
 
--- GetUserByID returns the user with the given id.
---
--- name: GetUserByID :one
-SELECT user_id,
-       username,
-       email,
-       handle,
-       timezone,
-       created_at,
-       updated_at
+-- name: ReadEmailByUserId :one
+SELECT email
 FROM users
 WHERE user_id = :user_id;
 
--- GetUserByEmail returns the user with the given email address.
---
--- name: GetUserByEmail :one
-SELECT user_id,
-       username,
-       email,
-       handle,
-       timezone,
-       created_at,
-       updated_at
-FROM users
-WHERE email = :email;
-
--- GetUserByHandle returns the user with the given handle.
---
--- name: GetUserByHandle :one
-SELECT user_id,
-       username,
-       email,
-       handle,
-       timezone,
-       created_at,
-       updated_at
-FROM users
-WHERE handle = :handle;
-
--- GetUserByUsername returns the user with the given username.
---
--- name: GetUserByUsername :one
-SELECT user_id,
-       username,
-       email,
-       handle,
-       timezone,
-       created_at,
-       updated_at
-FROM users
-WHERE username = :username;
-
--- name: GetUserHandle :one
+-- name: ReadHandleByUserId :one
 SELECT handle
 FROM users
 WHERE user_id = :user_id;
 
--- name: GetUserIDByEmail :one
+-- name: ReadUserByUserId :one
+SELECT user_id,
+       username,
+       email,
+       handle,
+       timezone,
+       created_at,
+       updated_at
+FROM users
+WHERE user_id = :user_id;
+
+-- name: ReadUserIdByEmail :one
 SELECT user_id
 FROM users
 WHERE email = :email;
 
--- name: GetUserIDByHandle :one
+-- ReadUserIdByHandle returns the id of the user with the given handle.
+--
+-- name: ReadUserIdByHandle :one
 SELECT user_id
 FROM users
 WHERE handle = :handle;
 
--- name: GetUserIDByUsername :one
+-- ReadUserIdByUsername returns the id of the user with the given username.
+--
+-- name: ReadUserIdByUsername :one
 SELECT user_id
 FROM users
 WHERE username = :username;
 
--- GetAllUsers returns all users.
---
--- name: GetAllUsers :many
+-- name: ReadUsers :many
 SELECT user_id,
        username,
        email,
@@ -110,7 +64,7 @@ SELECT user_id,
 FROM users
 ORDER BY username;
 
--- name: ListUsersVisibleToActor :many
+-- name: ReadUsersVisibleToActor :many
 SELECT user_id,
        username,
        email,
@@ -123,3 +77,36 @@ WHERE :actor_id = 1
   AND :page_size = 1
   AND :page_num = 1
 ORDER BY username;
+
+-- name: UpdateEmailByUserId :exec
+UPDATE users
+SET email      = LOWER(:email),
+    updated_at = :updated_at
+WHERE user_id = :user_id;
+
+-- name: UpdateHandleByUserId :exec
+UPDATE users
+SET handle     = LOWER(:handle),
+    updated_at = :updated_at
+WHERE user_id = :user_id;
+
+-- name: UpdateTimezoneByUserId :exec
+UPDATE users
+SET timezone   = :timezone,
+    updated_at = :updated_at
+WHERE user_id = :user_id;
+
+-- name: UpdateUserByUserId :exec
+UPDATE users
+SET email      = LOWER(:email),
+    handle     = LOWER(:handle),
+    timezone   = :timezone,
+    username   = :username,
+    updated_at = :updated_at
+WHERE user_id = :user_id;
+
+-- name: UpdateUsernameByUserId :exec
+UPDATE users
+SET username   = :username,
+    updated_at = :updated_at
+WHERE user_id = :user_id;

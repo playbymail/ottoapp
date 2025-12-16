@@ -15,8 +15,8 @@ import (
 	"github.com/playbymail/ottoapp/backend/iana"
 	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/services/authz"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
-	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/spf13/cobra"
 )
 
@@ -100,7 +100,7 @@ var cmdUserCreate = &cobra.Command{
 		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
 
 		// For the user create command, use userName as the handle
-		user, err := usersSvc.UpsertUser(handle, email, userName, loc)
+		user, err := usersSvc.CreateUser(handle, email, userName, loc)
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q", handle), err)
 		}
@@ -219,7 +219,22 @@ var cmdUserUpdate = &cobra.Command{
 			return errors.Join(fmt.Errorf("user %q", handle), err)
 		}
 
-		updatedUser, err := usersSvc.UpsertUser(user.Handle, user.Email, user.Username, user.Locale.Timezone.Location)
+		updatedUser := &domains.User_t{
+			ID:       user.ID,
+			Username: user.Username,
+			Email:    user.Email,
+			Handle:   user.Handle,
+			Locale: domains.UserLocale_t{
+				DateFormat: user.Locale.DateFormat,
+				Timezone: domains.UserTimezone_t{
+					Location: user.Locale.Timezone.Location,
+				},
+			},
+			Roles:   user.Roles,
+			Created: user.Created,
+			Updated: time.Now().UTC(),
+		}
+		err = usersSvc.UpdateUser(updatedUser)
 		if err != nil {
 			return fmt.Errorf("user: %q: update %v\n", user.Handle, err)
 		} else {

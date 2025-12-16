@@ -6,6 +6,7 @@ sql:
     queries:
     - "sqlc/authn.sql"
     - "sqlc/authz.sql"
+    - "sqlc/clans.sql"
     - "sqlc/config.sql"
     - "sqlc/documents.sql"
     - "sqlc/games.sql"
@@ -22,15 +23,3 @@ sql:
           nullable: true
           go_type:
             type: "bool"
-        - column: "clan_documents_vw.is_shared"
-          go_type: "bool"
-        - column: "clan_documents_vw.can_read"
-          go_type: "bool"
-        - column: "clan_documents_vw.can_write"
-          go_type: "bool"
-        - column: "clan_documents_vw.can_delete"
-          go_type: "bool"
-        - column: "clan_documents_vw.can_share"
-          go_type: "bool"
-        - column: "clan_documents_vw.owner_id"
-          go_type: "int64"

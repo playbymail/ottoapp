@@ -28,7 +28,7 @@ var (
 type MapRenderFile struct {
 	Name    string // {turn}.{clan}.wxx
 	GameID  domains.GameID
-	TurnNo  domains.TurnNo
+	TurnNo  domains.TurnID
 	Clan    *domains.Clan
 	UnitId  domains.UnitId
 	Path    string    // full path to map file
@@ -62,7 +62,7 @@ func sortMapRenderFiles(files []*MapRenderFile) []*MapRenderFile {
 type ReportExtractFile struct {
 	Name    string // {turn}.{clan}.report.txt
 	GameID  domains.GameID
-	TurnNo  domains.TurnNo
+	TurnNo  domains.TurnID
 	Clan    *domains.Clan
 	UnitId  domains.UnitId
 	Path    string    // full path to report extract file
@@ -131,12 +131,12 @@ func ImportMapFiles(db *sqlite.DB, path string, quiet, verbose, debug bool) erro
 	}
 
 	// fetch the list of games from the database
-	gamesList, err := gamesSvc.GetGamesList()
+	gamesList, err := gamesSvc.ReadGames()
 	if err != nil {
 		if debug {
-			log.Printf("import: games: GetGamesList %v\n", err)
+			log.Printf("import: games: ReadGames %v\n", err)
 		}
-		return fmt.Errorf("import: GetGamesList %w", err)
+		return fmt.Errorf("import: ReadGames %w", err)
 	}
 	sort.Slice(gamesList, func(i, j int) bool {
 		return gamesList[i].ID < gamesList[j].ID
@@ -150,7 +150,7 @@ func ImportMapFiles(db *sqlite.DB, path string, quiet, verbose, debug bool) erro
 	}
 	gameData := map[domains.GameID]*gameData_t{}
 	for _, game := range gamesList {
-		gameDir := filepath.Join(filesPath, string(game.ID))
+		gameDir := filepath.Join(filesPath, game.Code)
 		if verbose {
 			log.Printf("import: gameDir %q\n", gameDir)
 		}
@@ -210,14 +210,19 @@ func ImportMapFiles(db *sqlite.DB, path string, quiet, verbose, debug bool) erro
 					log.Printf("import: game %q: clan %q: %q\n", game.ID, clanNo, entry.Name())
 					continue
 				}
+				gameId, turnId, err := gamesSvc.GameCodeYearMonthToGameTurnId(game.Code, matches[1])
+				if err != nil {
+					log.Printf("import: game %q: clan %q: %q %v\n", game.ID, clanNo, entry.Name(), err)
+					continue
+				}
 				fi, err := entry.Info()
 				if err != nil || !fi.Mode().IsRegular() {
 					continue
 				}
 				mapRenderFile := &MapRenderFile{
 					Name:    filepath.Join(mapRenderDir, entry.Name()),
-					GameID:  domains.GameID(matches[1]),
-					TurnNo:  domains.TurnNo(matches[2]),
+					GameID:  gameId,
+					TurnNo:  turnId,
 					Clan:    clan,
 					UnitId:  domains.UnitId(clanNo),
 					Path:    fmt.Sprintf("%s.%s", game.ID, entry.Name()),
@@ -309,12 +314,12 @@ func ImportReportExtractFiles(db *sqlite.DB, path string, quiet, verbose, debug 
 	}
 
 	// fetch the list of games from the database
-	gamesList, err := gamesSvc.GetGamesList()
+	gamesList, err := gamesSvc.ReadGames()
 	if err != nil {
 		if debug {
-			log.Printf("import: games: GetGamesList %v\n", err)
+			log.Printf("import: games: ReadGames %v\n", err)
 		}
-		return fmt.Errorf("import: GetGamesList %w", err)
+		return fmt.Errorf("import: ReadGames %w", err)
 	}
 	sort.Slice(gamesList, func(i, j int) bool {
 		return gamesList[i].ID < gamesList[j].ID
@@ -328,7 +333,7 @@ func ImportReportExtractFiles(db *sqlite.DB, path string, quiet, verbose, debug 
 	}
 	gameData := map[domains.GameID]*gameData_t{}
 	for _, game := range gamesList {
-		gameDir := filepath.Join(filesPath, string(game.ID))
+		gameDir := filepath.Join(filesPath, game.Code)
 		if verbose {
 			log.Printf("import: gameDir %q\n", gameDir)
 		}
@@ -388,14 +393,19 @@ func ImportReportExtractFiles(db *sqlite.DB, path string, quiet, verbose, debug 
 					log.Printf("import: game %q: clan %q: %q\n", game.ID, clanNo, entry.Name())
 					continue
 				}
+				gameId, turnId, err := gamesSvc.GameCodeYearMonthToGameTurnId(game.Code, matches[1])
+				if err != nil {
+					log.Printf("import: game %q: clan %q: %q %v\n", game.ID, clanNo, entry.Name(), err)
+					continue
+				}
 				fi, err := entry.Info()
 				if err != nil || !fi.Mode().IsRegular() {
 					continue
 				}
 				reportExtractFile := &ReportExtractFile{
 					Name:    filepath.Join(reportExtractsDir, entry.Name()),
-					GameID:  domains.GameID(matches[1]),
-					TurnNo:  domains.TurnNo(matches[2]),
+					GameID:  gameId,
+					TurnNo:  turnId,
 					Clan:    clan,
 					UnitId:  domains.UnitId(clanNo),
 					Path:    fmt.Sprintf("%s.%s", game.ID, entry.Name()),
@@ -487,12 +497,12 @@ func ImportTurnReportFiles(db *sqlite.DB, path string, quiet, verbose, debug boo
 	}
 
 	// fetch the list of games from the database
-	gamesList, err := gameSvc.GetGamesList()
+	gamesList, err := gameSvc.ReadGames()
 	if err != nil {
 		if debug {
-			log.Printf("import: games: GetGamesList %v\n", err)
+			log.Printf("import: games: ReadGames %v\n", err)
 		}
-		return fmt.Errorf("import: GetGamesList %w", err)
+		return fmt.Errorf("import: ReadGames %w", err)
 	}
 	sort.Slice(gamesList, func(i, j int) bool {
 		return gamesList[i].ID < gamesList[j].ID
@@ -554,7 +564,7 @@ func ImportTurnReportFiles(db *sqlite.DB, path string, quiet, verbose, debug boo
 		gameClan := fmt.Sprintf("%s:%04d", file.GameID, file.Clan.ClanNo)
 		clan, ok := clanCache[gameClan]
 		if !ok {
-			clan, err = gameSvc.GetClan(file.GameID, file.Clan.ClanNo)
+			clan, err = gameSvc.GameIdClanNoToClan(file.GameID, file.Clan.ClanNo)
 			if err != nil {
 				log.Printf("import: cache: game %q: clan %4d: %q %v\n", file.GameID, file.Clan.ClanNo, gameClan, err)
 				continue

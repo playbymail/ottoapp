@@ -1,103 +1,57 @@
---  Copyright (c) 2025 Michael D Henderson. All rights reserved.
-
--- name: UpsertGame :one
-INSERT INTO games (game_id,
-                   description,
-                   setup_turn_no,
-                   setup_turn_year,
-                   setup_turn_month,
-                   is_active,
-                   created_at,
-                   updated_at)
-VALUES (:game_id,
-        :description,
-        :setup_turn_no,
-        :setup_turn_year,
-        :setup_turn_month,
-        :is_active,
-        :created_at,
-        :updated_at)
-ON CONFLICT (game_id) DO UPDATE
-    SET description      = excluded.description,
-        setup_turn_no    = excluded.setup_turn_no,
-        setup_turn_year  = excluded.setup_turn_year,
-        setup_turn_month = excluded.setup_turn_month,
-        is_active        = excluded.is_active,
-        updated_at       = excluded.updated_at
+-- name: CreateGame :one
+INSERT INTO games (code, description, active_turn_id, setup_turn_id, created_at, updated_at)
+VALUES (:code, :description, :active_turn_id, :setup_turn_id, :created_at, :updated_at)
 RETURNING game_id;
 
--- name: GetGame :one
-SELECT game_id,
-       description,
-       setup_turn_year,
-       setup_turn_month,
-       setup_turn_no,
-       is_active
+-- name: ReadGame :one
+SELECT games.game_id,
+       games.code,
+       games.is_active,
+       games.description,
+       active_turn.turn_id    AS active_turn_id,
+       active_turn.turn_year  AS active_turn_year,
+       active_turn.turn_month AS active_turn_month,
+       active_turn.turn_no    AS active_turn_no,
+       active_turn.orders_due AS orders_due
+FROM games,
+     game_turns AS active_turn
+WHERE games.game_id = :game_id
+  AND active_turn.turn_id = games.active_turn;
+
+-- name: ReadGames :many
+SELECT games.game_id,
+       games.code,
+       games.is_active,
+       games.description,
+       active_turn.turn_id    AS active_turn_id,
+       active_turn.turn_year  AS active_turn_year,
+       active_turn.turn_month AS active_turn_month,
+       active_turn.turn_no    AS active_turn_no,
+       active_turn.orders_due AS orders_due
+FROM games,
+     game_turns AS active_turn
+WHERE active_turn.turn_id = games.active_turn;
+
+-- name: UpdateGameActiveTurn :exec
+UPDATE games
+SET active_turn_id = :active_turn_id,
+    updated_at     = :updated_at
+WHERE game_id = :game_id;
+
+-- name: UpsertGame :one
+INSERT INTO games (code, description, active_turn_id, setup_turn_id, created_at, updated_at)
+VALUES (:code, :description, :active_turn_id, :setup_turn_id, :created_at, :updated_at)
+ON CONFLICT (code) DO UPDATE
+    SET description    = excluded.description,
+        is_active      = excluded.is_active,
+        active_turn_id = excluded.active_turn_id,
+        setup_turn_id  = excluded.setup_turn_id,
+        updated_at     = excluded.updated_at
+RETURNING game_id;
+
+
+-- name: DeleteGame :exec
+DELETE
 FROM games
 WHERE game_id = :game_id;
 
--- name: GetGamesList :many
-SELECT game_id,
-       description,
-       is_active
-FROM games;
-
--- UpsertGameUserClan has two business rules
---  user can have at most one clan per game.
---  clan number can be used by at most one user per game.
--- The upsert key is "user_id, game_id," preventing a user
--- from claiming multiple clans in a game. If a user tries
--- claiming an existing clan in a game, it will fail, not
--- silently clobber another user's.
---
--- name: UpsertGameUserClan :one
-INSERT INTO clans (game_id, user_id, clan, setup_turn_no, created_at, updated_at)
-VALUES (:game_id, :user_id, :clan, :setup_turn_no, :created_at, :updated_at)
-ON CONFLICT (user_id, game_id) DO UPDATE SET clan          = excluded.clan,
-                                             setup_turn_no = excluded.setup_turn_no,
-                                             updated_at    = excluded.updated_at
-RETURNING clan_id;
-
--- name: GetClan :one
-SELECT game_id,
-       user_id,
-       clan_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE clan_id = :clan_id;
-
--- name: GetClanByGameUser :one
-SELECT game_id,
-       user_id,
-       clan_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE game_id = :game_id
-  AND user_id = :user_id;
-
--- name: GetClanByGameClanNo :one
-SELECT game_id,
-       user_id,
-       clan_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE game_id = :game_id
-  AND clan = :clan_no;
-
--- name: ReadClansByGame :many
-SELECT game_id, user_id, clan_id, clan
-FROM clans
-WHERE game_id = :game_id
-  AND is_active = 1
-ORDER BY clans.clan;
-
--- name: RemoveClan :exec
-DELETE
-FROM clans
-WHERE clan_id = :clan_id;
