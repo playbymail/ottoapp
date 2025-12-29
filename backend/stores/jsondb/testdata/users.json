@@ -1,0 +1,31 @@
+{
+  "penguin": {
+    "user-name": "Penguin",
+    "email": "penguin@ottoapp",
+    "tz": "Antarctica/Palmer",
+    "password": "happy hoppy chevy levy",
+    "roles": ["active", "admin", "gm", "user"]
+  },
+  "catbird": {
+    "user-name": "CatBird",
+    "email": "catbird@ottoapp",
+    "tz": "America/Denver",
+    "roles": ["active", "player"]
+  },
+  "frojo": {
+    "user-name": "FroJo",
+    "email": "frojo@ottoapp",
+    "tz": "America/Chicago",
+    "password": "change-me",
+    "roles": ["inactive"],
+    "change-password": true
+  },
+  "SamBo": {
+    "user-name": "SamBo",
+    "email": "SamBo@ottoapp",
+    "tz": "America/Chicago",
+    "password": "update-me",
+    "roles": ["active"],
+    "update-password": true
+  }
+}

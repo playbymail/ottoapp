@@ -8,19 +8,22 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/jsonapi"
+	"github.com/mdhender/phrases/v2"
 	"github.com/playbymail/ottoapp/backend/domains"
 	"github.com/playbymail/ottoapp/backend/restapi"
 	"github.com/playbymail/ottoapp/backend/services/authn"
 	"github.com/playbymail/ottoapp/backend/services/authz"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/sessions"
-	"github.com/playbymail/ottoapp/backend/users"
 )
 
-// HandleGetSession returns the current session
-func HandleGetSession(authzSvc *authz.Service, sessionsSvc *sessions.Service) http.HandlerFunc {
+// handleGetSession returns the current session
+func handleGetSession(authzSvc *authz.Service, sessionsSvc *sessions.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//log.Printf("%s %s: entered", r.Method, r.URL.Path)
 		if r.Method != http.MethodGet {
@@ -43,8 +46,60 @@ func HandleGetSession(authzSvc *authz.Service, sessionsSvc *sessions.Service) ht
 	}
 }
 
-// HandlePostLogin creates a session and sets the cookie.
-func HandlePostLogin(authnSvc *authn.Service, authzSvc *authz.Service, sessionsSvc *sessions.Service, usersSvc *users.Service) http.HandlerFunc {
+// handlePatchPassword updates the target's credentials
+// PATCH /api/users/:id/password
+func handlePatchPassword(authnSvc *authn.Service, authzSvc *authz.Service) http.HandlerFunc {
+	type patchPasswordRequest struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Parse target user ID from path
+		targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || domains.ID(targetID) == domains.InvalidID {
+			restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
+				Status: strconv.Itoa(http.StatusBadRequest),
+				Code:   "invalid_user_id",
+				Title:  "Invalid UserID",
+				Detail: "Provide a valid UserID.",
+				Source: &jsonapi.ErrorSource{
+					Parameter: "id",
+				},
+			})
+			return
+		}
+
+		// Parse request body
+		var req patchPasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			restapi.WriteJsonApiError(w, http.StatusBadRequest, "bad_request", "Invalid Request Body", "")
+			return
+		}
+
+		actor, err := authzSvc.GetActor(r)
+		if err != nil || !actor.IsValid() {
+			restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
+			return
+		}
+		target, err := authzSvc.GetActorById(domains.ID(targetID))
+		if err != nil || !target.IsValid() {
+			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user passwords.")
+			return
+		}
+
+		_, err = authnSvc.UpdateCredentials(actor, target, req.CurrentPassword, req.NewPassword)
+		if err != nil {
+			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to update user passwords.")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handlePostLogin creates a session and sets the cookie.
+func handlePostLogin(authnSvc *authn.Service, authzSvc *authz.Service, sessionsSvc *sessions.Service, usersSvc *users.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s: entered", r.Method, r.URL.Path)
 		if r.Method != http.MethodPost {
@@ -102,5 +157,54 @@ func HandlePostLogin(authnSvc *authn.Service, authzSvc *authz.Service, sessionsS
 
 		sessionsSvc.HandleCreateSession(w, r, user)
 		<-timer.C
+	}
+}
+
+// handlePostResetPassword resets a user's password (admin only)
+// POST /api/users/:id/reset-password
+func handlePostResetPassword(authnSvc *authn.Service, authzSvc *authz.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Parse target user ID from path
+		targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || domains.ID(targetID) == domains.InvalidID {
+			restapi.WriteJsonApiErrorObjects(w, http.StatusBadRequest, &jsonapi.ErrorObject{
+				Status: strconv.Itoa(http.StatusBadRequest),
+				Code:   "invalid_user_id",
+				Title:  "Invalid UserID",
+				Detail: "Provide a valid UserID.",
+				Source: &jsonapi.ErrorSource{
+					Parameter: "id",
+				},
+			})
+			return
+		}
+
+		actor, err := authzSvc.GetActor(r)
+		if err != nil || !actor.IsValid() {
+			restapi.WriteJsonApiError(w, http.StatusUnauthorized, "not_authenticated", "Unauthorized", "Sign in to access this resource.")
+			return
+		}
+		target, err := authzSvc.GetActorById(domains.ID(targetID))
+		if err != nil || !target.IsValid() {
+			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to reset the user's password.")
+			return
+		}
+
+		// Generate temporary password reset link
+		magicLink := phrases.Generate(6)
+		_, err = authnSvc.UpdateCredentials(actor, target, "", magicLink)
+		if err != nil {
+			log.Printf("%s %s: %d: %d: %v", r.Method, r.URL.Path, actor.ID, target.ID, err)
+			restapi.WriteJsonApiError(w, http.StatusForbidden, "forbidden", "Forbidden", "You do not have permission to reset the user's password.")
+			return
+		}
+
+		restapi.WriteJsonApiData(w, http.StatusOK, &struct {
+			Message   string `jsonapi:"attr,message"`
+			MagicLink string `jsonapi:"attr,link"`
+		}{
+			Message:   "Magic link generated",
+			MagicLink: magicLink,
+		})
 	}
 }

@@ -20,8 +20,8 @@ import (
 	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/documents"
 	"github.com/playbymail/ottoapp/backend/services/games"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/sessions"
-	"github.com/playbymail/ottoapp/backend/users"
 	"github.com/playbymail/ottoapp/backend/versions"
 )
 
@@ -32,8 +32,8 @@ type Server struct {
 		authzSvc     *authz.Service
 		documentsSvc *documents.Service
 		gamesSvc     *games.Service
+		ianaSvc      *iana.Service
 		sessionsSvc  *sessions.Service
-		tzSvc        *iana.Service
 		usersSvc     *users.Service
 		versionsSvc  *versions.Service
 	}
@@ -80,7 +80,7 @@ func New(
 	s.services.documentsSvc = documentsSvc
 	s.services.gamesSvc = gamesSvc
 	s.services.sessionsSvc = sessionsSvc
-	s.services.tzSvc = tzSvc
+	s.services.ianaSvc = tzSvc
 	s.services.usersSvc = usersSvc
 	s.services.versionsSvc = versionsSvc
 
@@ -109,8 +109,8 @@ func New(
 	} else if s.services.sessionsSvc == nil {
 		log.Printf("[rest] sessionsSvc not initialized")
 		return nil, domains.ErrInvalidArgument
-	} else if s.services.tzSvc == nil {
-		log.Printf("[rest] tzSvc not initialized")
+	} else if s.services.ianaSvc == nil {
+		log.Printf("[rest] ianaSvc not initialized")
 		return nil, domains.ErrInvalidArgument
 	} else if s.services.usersSvc == nil {
 		log.Printf("[rest] usersSvc not initialized")

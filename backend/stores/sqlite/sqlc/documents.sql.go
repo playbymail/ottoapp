@@ -163,7 +163,7 @@ type ReadDocumentByClanAndNameParams struct {
 }
 
 type ReadDocumentByClanAndNameRow struct {
-	GameID       string
+	GameID       int64
 	UserID       int64
 	Clan         int64
 	DocumentID   int64
@@ -265,7 +265,7 @@ type ReadDocumentContentsByIdAuthorizedParams struct {
 }
 
 type ReadDocumentContentsByIdAuthorizedRow struct {
-	GameID       string
+	GameID       int64
 	UserID       int64
 	Clan         int64
 	DocumentID   int64
@@ -304,7 +304,7 @@ SELECT clans.game_id,
        clans.user_id,
        clans.clan_id,
        clans.clan,
-       clans.setup_turn_no,
+       clans.setup_turn_id,
        clans.is_active
 FROM documents,
      clans
@@ -313,11 +313,11 @@ WHERE documents.document_id = ?1
 `
 
 type ReadDocumentOwnerRow struct {
-	GameID      string
+	GameID      int64
 	UserID      int64
 	ClanID      int64
 	Clan        int64
-	SetupTurnNo int64
+	SetupTurnID int64
 	IsActive    bool
 }
 
@@ -329,7 +329,7 @@ func (q *Queries) ReadDocumentOwner(ctx context.Context, documentID int64) (Read
 		&i.UserID,
 		&i.ClanID,
 		&i.Clan,
-		&i.SetupTurnNo,
+		&i.SetupTurnID,
 		&i.IsActive,
 	)
 	return i, err
@@ -355,13 +355,13 @@ WHERE clans.game_id = ?1
 `
 
 type ReadDocumentsByGameAndClanNoParams struct {
-	GameID     string
+	GameID     int64
 	ClanNo     int64
 	DocumentID int64
 }
 
 type ReadDocumentsByGameAndClanNoRow struct {
-	GameID       string
+	GameID       int64
 	UserID       int64
 	Clan         int64
 	DocumentID   int64
@@ -427,7 +427,7 @@ WHERE document_contents.contents_hash = ?1
 `
 
 type ReadDocumentsByHashRow struct {
-	GameID       string
+	GameID       int64
 	UserID       int64
 	Clan         int64
 	DocumentID   int64
@@ -475,7 +475,7 @@ WHERE clans.user_id = ?1
 `
 
 type ReadDocumentsByUserRow struct {
-	GameID       string
+	GameID       int64
 	UserID       int64
 	Clan         int64
 	DocumentID   int64
@@ -538,7 +538,7 @@ order by game_id, turn_no, clan
 
 type ReadReportExtractsRow struct {
 	DocumentID   int64
-	GameID       string
+	GameID       int64
 	TurnNo       string
 	Clan         int64
 	DocumentName string

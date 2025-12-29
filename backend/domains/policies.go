@@ -109,6 +109,19 @@ func ValidateEmail(email string) error {
 		return ErrBadInput
 	} else if !strings.Contains(email, "@") {
 		return ErrBadInput
+	} else if email != strings.ToLower(email) {
+		return ErrBadInput
+	}
+	return nil
+}
+
+func ValidateGameCode(code string) error {
+	if code != strings.TrimSpace(code) {
+		return ErrBadInput
+	} else if !(1 < len(code) && len(code) <= 4) {
+		return ErrBadInput
+	} else if code != strings.ToUpper(code) {
+		return ErrBadInput
 	}
 	return nil
 }

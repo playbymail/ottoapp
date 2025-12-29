@@ -93,7 +93,7 @@ func (s *Service) GetActor(r *http.Request) (*domains.Actor, error) {
 // GetActorByEmail returns a domain Actor or an error.
 func (s *Service) GetActorByEmail(email string) (*domains.Actor, error) {
 	//log.Printf("[auth] getActorByEmail(%q)", email)
-	userId, err := s.db.Queries().GetUserIDByEmail(s.db.Context(), email)
+	userId, err := s.db.Queries().ReadUserIdByEmail(s.db.Context(), email)
 	if err != nil {
 		//log.Printf("[auth] getActorByEmail(%q): %v", email, err)
 		return nil, err
@@ -104,7 +104,7 @@ func (s *Service) GetActorByEmail(email string) (*domains.Actor, error) {
 // GetActorByHandle returns a domain Actor or an error.
 func (s *Service) GetActorByHandle(handle string) (*domains.Actor, error) {
 	//log.Printf("[auth] getActorByHandle(%q)", handle)
-	userId, err := s.db.Queries().GetUserIDByHandle(s.db.Context(), handle)
+	userId, err := s.db.Queries().ReadUserIdByHandle(s.db.Context(), handle)
 	if err != nil {
 		//log.Printf("[auth] getActorByHandle(%q): %v", handle, err)
 		return nil, err

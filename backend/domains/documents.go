@@ -14,7 +14,7 @@ type Document struct {
 	ID             ID           // unique identifier for document
 	GameID         GameID       // game associated with the document
 	ClanId         ID           // clan associated with the document
-	TurnNo         TurnNo       // turn associated with the document
+	TurnNo         TurnID       // turn associated with the document
 	ClanNo         int          // clan associated with the document
 	UnitId         string       // unit id associated with the document
 	Path           string       // Client's original name for the source

@@ -9,19 +9,97 @@ import (
 	"context"
 )
 
-const getConfigKeyValue = `-- name: GetConfigKeyValue :one
+const createConfigKeyValue = `-- name: CreateConfigKeyValue :exec
 
+INSERT INTO config (key, value, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+`
+
+type CreateConfigKeyValueParams struct {
+	Key       string
+	Value     string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+// Copyright (c) 2025 Michael D Henderson. All rights reserved.
+func (q *Queries) CreateConfigKeyValue(ctx context.Context, arg CreateConfigKeyValueParams) error {
+	_, err := q.db.ExecContext(ctx, createConfigKeyValue,
+		arg.Key,
+		arg.Value,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const deleteConfigKeyValue = `-- name: DeleteConfigKeyValue :exec
+DELETE
+FROM config
+WHERE key = ?1
+`
+
+func (q *Queries) DeleteConfigKeyValue(ctx context.Context, key string) error {
+	_, err := q.db.ExecContext(ctx, deleteConfigKeyValue, key)
+	return err
+}
+
+const readConfigKeyValue = `-- name: ReadConfigKeyValue :one
 SELECT value
 FROM config
 WHERE key = ?1
 `
 
-//	Copyright (c) 2025 Michael D Henderson. All rights reserved.
-//
-// GetConfigKeyValue does
-func (q *Queries) GetConfigKeyValue(ctx context.Context, key string) (string, error) {
-	row := q.db.QueryRowContext(ctx, getConfigKeyValue, key)
+func (q *Queries) ReadConfigKeyValue(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRowContext(ctx, readConfigKeyValue, key)
 	var value string
 	err := row.Scan(&value)
 	return value, err
+}
+
+const updateConfigKeyValue = `-- name: UpdateConfigKeyValue :exec
+UPDATE config
+SET value      = ?1,
+    updated_at = ?2
+WHERE key = ?3
+`
+
+type UpdateConfigKeyValueParams struct {
+	Value     string
+	UpdatedAt int64
+	Key       string
+}
+
+func (q *Queries) UpdateConfigKeyValue(ctx context.Context, arg UpdateConfigKeyValueParams) error {
+	_, err := q.db.ExecContext(ctx, updateConfigKeyValue, arg.Value, arg.UpdatedAt, arg.Key)
+	return err
+}
+
+const upsertConfigKeyValue = `-- name: UpsertConfigKeyValue :one
+INSERT INTO config (key, value, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (key)
+    DO UPDATE
+    SET value      = excluded.value,
+        updated_at = excluded.updated_at
+RETURNING key
+`
+
+type UpsertConfigKeyValueParams struct {
+	Key       string
+	Value     string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+func (q *Queries) UpsertConfigKeyValue(ctx context.Context, arg UpsertConfigKeyValueParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, upsertConfigKeyValue,
+		arg.Key,
+		arg.Value,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var key string
+	err := row.Scan(&key)
+	return key, err
 }

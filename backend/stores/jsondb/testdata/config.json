@@ -1,0 +1,8 @@
+{
+  "mailgun": {
+    "domain": "OttoApp.example.com",
+    "from": "OttoApp@ottoapp.example.com",
+    "api-base": "https://api.mailgun.net/v3",
+    "api-key": "not-an-api-key"
+  }
+}

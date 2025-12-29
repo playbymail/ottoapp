@@ -9,219 +9,137 @@ import (
 	"context"
 )
 
-const getClan = `-- name: GetClan :one
-SELECT game_id,
-       user_id,
-       clan_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE clan_id = ?1
+const createGame = `-- name: CreateGame :one
+INSERT INTO games (code, description, active_turn_id, setup_turn_id, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+RETURNING game_id
 `
 
-type GetClanRow struct {
-	GameID      string
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnNo int64
-	IsActive    bool
+type CreateGameParams struct {
+	Code         string
+	Description  string
+	ActiveTurnID int64
+	SetupTurnID  int64
+	CreatedAt    int64
+	UpdatedAt    int64
 }
 
-func (q *Queries) GetClan(ctx context.Context, clanID int64) (GetClanRow, error) {
-	row := q.db.QueryRowContext(ctx, getClan, clanID)
-	var i GetClanRow
-	err := row.Scan(
-		&i.GameID,
-		&i.UserID,
-		&i.ClanID,
-		&i.Clan,
-		&i.SetupTurnNo,
-		&i.IsActive,
+func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createGame,
+		arg.Code,
+		arg.Description,
+		arg.ActiveTurnID,
+		arg.SetupTurnID,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
-	return i, err
+	var game_id int64
+	err := row.Scan(&game_id)
+	return game_id, err
 }
 
-const getClanByGameClanNo = `-- name: GetClanByGameClanNo :one
-SELECT game_id,
-       user_id,
-       clan_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE game_id = ?1
-  AND clan = ?2
-`
-
-type GetClanByGameClanNoParams struct {
-	GameID string
-	ClanNo int64
-}
-
-type GetClanByGameClanNoRow struct {
-	GameID      string
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnNo int64
-	IsActive    bool
-}
-
-func (q *Queries) GetClanByGameClanNo(ctx context.Context, arg GetClanByGameClanNoParams) (GetClanByGameClanNoRow, error) {
-	row := q.db.QueryRowContext(ctx, getClanByGameClanNo, arg.GameID, arg.ClanNo)
-	var i GetClanByGameClanNoRow
-	err := row.Scan(
-		&i.GameID,
-		&i.UserID,
-		&i.ClanID,
-		&i.Clan,
-		&i.SetupTurnNo,
-		&i.IsActive,
-	)
-	return i, err
-}
-
-const getClanByGameUser = `-- name: GetClanByGameUser :one
-SELECT game_id,
-       user_id,
-       clan_id,
-       clan,
-       setup_turn_no,
-       is_active
-FROM clans
-WHERE game_id = ?1
-  AND user_id = ?2
-`
-
-type GetClanByGameUserParams struct {
-	GameID string
-	UserID int64
-}
-
-type GetClanByGameUserRow struct {
-	GameID      string
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnNo int64
-	IsActive    bool
-}
-
-func (q *Queries) GetClanByGameUser(ctx context.Context, arg GetClanByGameUserParams) (GetClanByGameUserRow, error) {
-	row := q.db.QueryRowContext(ctx, getClanByGameUser, arg.GameID, arg.UserID)
-	var i GetClanByGameUserRow
-	err := row.Scan(
-		&i.GameID,
-		&i.UserID,
-		&i.ClanID,
-		&i.Clan,
-		&i.SetupTurnNo,
-		&i.IsActive,
-	)
-	return i, err
-}
-
-const getGame = `-- name: GetGame :one
-SELECT game_id,
-       description,
-       setup_turn_year,
-       setup_turn_month,
-       setup_turn_no,
-       is_active
+const deleteGame = `-- name: DeleteGame :exec
+DELETE
 FROM games
 WHERE game_id = ?1
 `
 
-type GetGameRow struct {
-	GameID         string
-	Description    string
-	SetupTurnYear  int64
-	SetupTurnMonth int64
-	SetupTurnNo    int64
-	IsActive       bool
+func (q *Queries) DeleteGame(ctx context.Context, gameID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteGame, gameID)
+	return err
 }
 
-func (q *Queries) GetGame(ctx context.Context, gameID string) (GetGameRow, error) {
-	row := q.db.QueryRowContext(ctx, getGame, gameID)
-	var i GetGameRow
+const readGame = `-- name: ReadGame :one
+SELECT games.game_id,
+       games.code,
+       games.is_active,
+       games.description,
+       active_turn.turn_id    AS active_turn_id,
+       active_turn.turn_year  AS active_turn_year,
+       active_turn.turn_month AS active_turn_month,
+       active_turn.turn_no    AS active_turn_no,
+       active_turn.orders_due AS orders_due
+FROM games,
+     game_turns AS active_turn
+WHERE games.game_id = ?1
+  AND active_turn.turn_id = games.active_turn
+`
+
+type ReadGameRow struct {
+	GameID          int64
+	Code            string
+	IsActive        bool
+	Description     string
+	ActiveTurnID    int64
+	ActiveTurnYear  int64
+	ActiveTurnMonth int64
+	ActiveTurnNo    int64
+	OrdersDue       int64
+}
+
+func (q *Queries) ReadGame(ctx context.Context, gameID int64) (ReadGameRow, error) {
+	row := q.db.QueryRowContext(ctx, readGame, gameID)
+	var i ReadGameRow
 	err := row.Scan(
 		&i.GameID,
+		&i.Code,
+		&i.IsActive,
 		&i.Description,
-		&i.SetupTurnYear,
-		&i.SetupTurnMonth,
-		&i.SetupTurnNo,
-		&i.IsActive,
+		&i.ActiveTurnID,
+		&i.ActiveTurnYear,
+		&i.ActiveTurnMonth,
+		&i.ActiveTurnNo,
+		&i.OrdersDue,
 	)
 	return i, err
 }
 
-const getGamesList = `-- name: GetGamesList :many
-SELECT game_id,
-       description,
-       is_active
-FROM games
+const readGames = `-- name: ReadGames :many
+SELECT games.game_id,
+       games.code,
+       games.is_active,
+       games.description,
+       active_turn.turn_id    AS active_turn_id,
+       active_turn.turn_year  AS active_turn_year,
+       active_turn.turn_month AS active_turn_month,
+       active_turn.turn_no    AS active_turn_no,
+       active_turn.orders_due AS orders_due
+FROM games,
+     game_turns AS active_turn
+WHERE active_turn.turn_id = games.active_turn
 `
 
-type GetGamesListRow struct {
-	GameID      string
-	Description string
-	IsActive    bool
+type ReadGamesRow struct {
+	GameID          int64
+	Code            string
+	IsActive        bool
+	Description     string
+	ActiveTurnID    int64
+	ActiveTurnYear  int64
+	ActiveTurnMonth int64
+	ActiveTurnNo    int64
+	OrdersDue       int64
 }
 
-func (q *Queries) GetGamesList(ctx context.Context) ([]GetGamesListRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGamesList)
+func (q *Queries) ReadGames(ctx context.Context) ([]ReadGamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, readGames)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetGamesListRow
+	var items []ReadGamesRow
 	for rows.Next() {
-		var i GetGamesListRow
-		if err := rows.Scan(&i.GameID, &i.Description, &i.IsActive); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const readClansByGame = `-- name: ReadClansByGame :many
-SELECT game_id, user_id, clan_id, clan
-FROM clans
-WHERE game_id = ?1
-  AND is_active = 1
-ORDER BY clans.clan
-`
-
-type ReadClansByGameRow struct {
-	GameID string
-	UserID int64
-	ClanID int64
-	Clan   int64
-}
-
-func (q *Queries) ReadClansByGame(ctx context.Context, gameID string) ([]ReadClansByGameRow, error) {
-	rows, err := q.db.QueryContext(ctx, readClansByGame, gameID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ReadClansByGameRow
-	for rows.Next() {
-		var i ReadClansByGameRow
+		var i ReadGamesRow
 		if err := rows.Scan(
 			&i.GameID,
-			&i.UserID,
-			&i.ClanID,
-			&i.Clan,
+			&i.Code,
+			&i.IsActive,
+			&i.Description,
+			&i.ActiveTurnID,
+			&i.ActiveTurnYear,
+			&i.ActiveTurnMonth,
+			&i.ActiveTurnNo,
+			&i.OrdersDue,
 		); err != nil {
 			return nil, err
 		}
@@ -236,110 +154,55 @@ func (q *Queries) ReadClansByGame(ctx context.Context, gameID string) ([]ReadCla
 	return items, nil
 }
 
-const removeClan = `-- name: RemoveClan :exec
-DELETE
-FROM clans
-WHERE clan_id = ?1
+const updateGameActiveTurn = `-- name: UpdateGameActiveTurn :exec
+UPDATE games
+SET active_turn_id = ?1,
+    updated_at     = ?2
+WHERE game_id = ?3
 `
 
-func (q *Queries) RemoveClan(ctx context.Context, clanID int64) error {
-	_, err := q.db.ExecContext(ctx, removeClan, clanID)
+type UpdateGameActiveTurnParams struct {
+	ActiveTurnID int64
+	UpdatedAt    int64
+	GameID       int64
+}
+
+func (q *Queries) UpdateGameActiveTurn(ctx context.Context, arg UpdateGameActiveTurnParams) error {
+	_, err := q.db.ExecContext(ctx, updateGameActiveTurn, arg.ActiveTurnID, arg.UpdatedAt, arg.GameID)
 	return err
 }
 
 const upsertGame = `-- name: UpsertGame :one
-
-INSERT INTO games (game_id,
-                   description,
-                   setup_turn_no,
-                   setup_turn_year,
-                   setup_turn_month,
-                   is_active,
-                   created_at,
-                   updated_at)
-VALUES (?1,
-        ?2,
-        ?3,
-        ?4,
-        ?5,
-        ?6,
-        ?7,
-        ?8)
-ON CONFLICT (game_id) DO UPDATE
-    SET description      = excluded.description,
-        setup_turn_no    = excluded.setup_turn_no,
-        setup_turn_year  = excluded.setup_turn_year,
-        setup_turn_month = excluded.setup_turn_month,
-        is_active        = excluded.is_active,
-        updated_at       = excluded.updated_at
+INSERT INTO games (code, description, active_turn_id, setup_turn_id, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+ON CONFLICT (code) DO UPDATE
+    SET description    = excluded.description,
+        is_active      = excluded.is_active,
+        active_turn_id = excluded.active_turn_id,
+        setup_turn_id  = excluded.setup_turn_id,
+        updated_at     = excluded.updated_at
 RETURNING game_id
 `
 
 type UpsertGameParams struct {
-	GameID         string
-	Description    string
-	SetupTurnNo    int64
-	SetupTurnYear  int64
-	SetupTurnMonth int64
-	IsActive       bool
-	CreatedAt      int64
-	UpdatedAt      int64
+	Code         string
+	Description  string
+	ActiveTurnID int64
+	SetupTurnID  int64
+	CreatedAt    int64
+	UpdatedAt    int64
 }
 
-// Copyright (c) 2025 Michael D Henderson. All rights reserved.
-func (q *Queries) UpsertGame(ctx context.Context, arg UpsertGameParams) (string, error) {
+func (q *Queries) UpsertGame(ctx context.Context, arg UpsertGameParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, upsertGame,
-		arg.GameID,
+		arg.Code,
 		arg.Description,
-		arg.SetupTurnNo,
-		arg.SetupTurnYear,
-		arg.SetupTurnMonth,
-		arg.IsActive,
+		arg.ActiveTurnID,
+		arg.SetupTurnID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
-	var game_id string
+	var game_id int64
 	err := row.Scan(&game_id)
 	return game_id, err
-}
-
-const upsertGameUserClan = `-- name: UpsertGameUserClan :one
-INSERT INTO clans (game_id, user_id, clan, setup_turn_no, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-ON CONFLICT (user_id, game_id) DO UPDATE SET clan          = excluded.clan,
-                                             setup_turn_no = excluded.setup_turn_no,
-                                             updated_at    = excluded.updated_at
-RETURNING clan_id
-`
-
-type UpsertGameUserClanParams struct {
-	GameID      string
-	UserID      int64
-	Clan        int64
-	SetupTurnNo int64
-	CreatedAt   int64
-	UpdatedAt   int64
-}
-
-// UpsertGameUserClan has two business rules
-//
-//	user can have at most one clan per game.
-//	clan number can be used by at most one user per game.
-//
-// The upsert key is "user_id, game_id," preventing a user
-// from claiming multiple clans in a game. If a user tries
-// claiming an existing clan in a game, it will fail, not
-// silently clobber another user's.
-func (q *Queries) UpsertGameUserClan(ctx context.Context, arg UpsertGameUserClanParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, upsertGameUserClan,
-		arg.GameID,
-		arg.UserID,
-		arg.Clan,
-		arg.SetupTurnNo,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	var clan_id int64
-	err := row.Scan(&clan_id)
-	return clan_id, err
 }

@@ -1,4 +1,5 @@
---  Copyright (c) 2025 Michael D Henderson. All rights reserved.
+-- foreign keys must be enabled with every database connection
+PRAGMA foreign_keys = ON;
 
 CREATE TABLE schema_migrations
 (
@@ -27,4 +28,4 @@ CREATE TABLE config
 );
 
 INSERT INTO config (key, value, created_at, updated_at)
-VALUES ('schema.version', '20251029_1540', 0, 0);
+VALUES ('schema.version', '20251029_0000', 0, 0);

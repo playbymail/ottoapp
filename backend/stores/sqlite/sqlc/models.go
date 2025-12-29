@@ -10,11 +10,11 @@ import (
 
 type Clan struct {
 	ClanID      int64
-	GameID      string
+	GameID      int64
 	UserID      int64
 	Clan        int64
-	SetupTurnNo int64
 	IsActive    bool
+	SetupTurnID int64
 	CreatedAt   int64
 	UpdatedAt   int64
 }
@@ -47,6 +47,7 @@ type DocumentContent struct {
 
 type DocumentType struct {
 	DocumentType string
+	DocumentExt  string
 	Descr        string
 	ContentType  string
 }
@@ -60,14 +61,25 @@ type Element struct {
 }
 
 type Game struct {
-	GameID         string
-	Description    string
-	SetupTurnNo    int64
-	SetupTurnYear  int64
-	SetupTurnMonth int64
-	IsActive       bool
-	CreatedAt      int64
-	UpdatedAt      int64
+	GameID       int64
+	Code         string
+	Description  string
+	IsActive     bool
+	ActiveTurnID int64
+	SetupTurnID  int64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type GameTurn struct {
+	TurnID    int64
+	Code      string
+	TurnYear  int64
+	TurnMonth int64
+	TurnNo    int64
+	OrdersDue int64
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Role struct {

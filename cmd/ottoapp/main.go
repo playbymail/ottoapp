@@ -17,6 +17,8 @@ import (
 	"github.com/playbymail/ottoapp"
 	"github.com/playbymail/ottoapp/backend/binder"
 	"github.com/playbymail/ottoapp/backend/make"
+	"github.com/playbymail/ottoapp/backend/services/config"
+	"github.com/playbymail/ottoapp/backend/services/sync"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -130,6 +132,8 @@ func main() {
 
 	cmdRoot.AddCommand(cmdGenerate())
 
+	cmdRoot.AddCommand(cmdImport())
+
 	cmdRoot.AddCommand(cmdPhrase())
 
 	var cmdReport = &cobra.Command{
@@ -214,6 +218,84 @@ func cmdGenerateMakefile() *cobra.Command {
 	}
 	if err := addFlags(cmd); err != nil {
 		log.Fatal(err)
+	}
+	return cmd
+}
+
+func cmdImport() *cobra.Command {
+	addFlags := func(cmd *cobra.Command) error {
+		return nil
+	}
+	var cmd = &cobra.Command{
+		Use:   "import",
+		Short: "import data from the file system",
+	}
+	cmd.AddCommand(cmdSyncImportGames())
+	cmd.AddCommand(cmdSyncImportMapFiles())
+	cmd.AddCommand(cmdImportOttoAppConfig())
+	cmd.AddCommand(cmdSyncImportReportFiles())
+	cmd.AddCommand(cmdSyncImportReportExtractFiles())
+	cmd.AddCommand(cmdSyncImportTurnReportFiles())
+	cmd.AddCommand(cmdSyncImportUsers())
+	if err := addFlags(cmd); err != nil {
+		log.Fatal(err)
+	}
+	return cmd
+}
+
+func cmdImportOttoAppConfig() *cobra.Command {
+	addFlags := func(cmd *cobra.Command) error {
+		return nil
+	}
+	cmd := &cobra.Command{
+		Use:          "ottoapp-config-file <path-to-config-file>",
+		Short:        "update database with new (or changed) configuration",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1), // require path to file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			const checkVersion = true
+			quiet, _ := cmd.Flags().GetBool("quiet")
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			debug, _ := cmd.Flags().GetBool("debug")
+			if quiet {
+				verbose = false
+			}
+
+			dbPath, err := cmd.Flags().GetString("db")
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
+			if err != nil {
+				log.Fatalf("db: open: %v\n", err)
+			}
+			defer func() {
+				_ = db.Close()
+			}()
+
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, nil, configSvc, nil)
+			if err != nil {
+				return err
+			}
+
+			path, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
+			}
+			if verbose {
+				log.Printf("%s: importing configuration\n", path)
+			}
+
+			return syncSvc.ImportOttoAppConfig(path, quiet, verbose, debug)
+		},
+	}
+	if err := addFlags(cmd); err != nil {
+		log.Fatalf("%s: %v\n", cmd.Use, err)
 	}
 	return cmd
 }
@@ -402,12 +484,72 @@ func cmdSyncImport() *cobra.Command {
 		Use:   "import",
 		Short: "import documents",
 	}
+	cmd.AddCommand(cmdSyncImportGames())
 	cmd.AddCommand(cmdSyncImportMapFiles())
 	cmd.AddCommand(cmdSyncImportReportFiles())
 	cmd.AddCommand(cmdSyncImportReportExtractFiles())
 	cmd.AddCommand(cmdSyncImportTurnReportFiles())
+	cmd.AddCommand(cmdSyncImportUsers())
 	if err := addFlags(cmd); err != nil {
 		log.Fatal(err)
+	}
+	return cmd
+}
+
+func cmdSyncImportGames() *cobra.Command {
+	var handles []string
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().StringSliceVar(&handles, "handle", handles, "games to import")
+		return nil
+	}
+	cmd := &cobra.Command{
+		Use:          "games <path-to-games-file>",
+		Short:        "update database with new (or changed) games",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1), // require path to file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			const checkVersion = true
+			quiet, _ := cmd.Flags().GetBool("quiet")
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			debug, _ := cmd.Flags().GetBool("debug")
+			if quiet {
+				verbose = false
+			}
+
+			dbPath, err := cmd.Flags().GetString("db")
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
+			if err != nil {
+				log.Fatalf("db: open: %v\n", err)
+			}
+			defer func() {
+				_ = db.Close()
+			}()
+
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, nil, configSvc, nil)
+			if err != nil {
+				return err
+			}
+
+			path, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
+			}
+
+			log.Printf("%s: importing games\n", path)
+			err = syncSvc.ImportGames(path, handles...)
+			return err
+		},
+	}
+	if err := addFlags(cmd); err != nil {
+		log.Fatalf("%s: %v\n", cmd.Use, err)
 	}
 	return cmd
 }
@@ -627,6 +769,66 @@ func cmdSyncImportTurnReportFiles() *cobra.Command {
 	}
 	if err := addFlags(cmd); err != nil {
 		log.Fatal(err)
+	}
+	return cmd
+}
+
+func cmdSyncImportUsers() *cobra.Command {
+	var handles []string
+	addFlags := func(cmd *cobra.Command) error {
+		cmd.Flags().StringSliceVar(&handles, "handle", handles, "user handle to import")
+		return nil
+	}
+	cmd := &cobra.Command{
+		Use:          "users <path-to-users-file>",
+		Short:        "update database with new (or changed) users",
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1), // require path to file
+		RunE: func(cmd *cobra.Command, args []string) error {
+			const checkVersion = true
+			quiet, _ := cmd.Flags().GetBool("quiet")
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			debug, _ := cmd.Flags().GetBool("debug")
+			if quiet {
+				verbose = false
+			}
+
+			dbPath, err := cmd.Flags().GetString("db")
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
+			if err != nil {
+				log.Fatalf("db: open: %v\n", err)
+			}
+			defer func() {
+				_ = db.Close()
+			}()
+
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, nil, configSvc, nil)
+			if err != nil {
+				return err
+			}
+
+			path, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
+			}
+
+			if !quiet {
+				log.Printf("%s: importing users\n", path)
+			}
+			err = syncSvc.ImportUsers(path, handles...)
+			return err
+		},
+	}
+	if err := addFlags(cmd); err != nil {
+		log.Fatalf("%s: %v\n", cmd.Use, err)
 	}
 	return cmd
 }
