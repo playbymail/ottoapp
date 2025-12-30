@@ -5,6 +5,7 @@ go 1.25.3
 require (
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/jsonapi v1.5.0
+	github.com/maloquacious/hexg v1.0.1
 	github.com/maloquacious/semver v0.4.0
 	github.com/mdhender/phrases/v2 v2.0.0
 	github.com/mitchellh/go-homedir v1.1.0
