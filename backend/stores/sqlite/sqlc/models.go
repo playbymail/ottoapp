@@ -4,19 +4,15 @@
 
 package sqlc
 
-import (
-	"database/sql"
-)
-
 type Clan struct {
-	ClanID      int64
-	GameID      int64
-	UserID      int64
-	Clan        int64
-	IsActive    bool
-	SetupTurnID int64
-	CreatedAt   int64
-	UpdatedAt   int64
+	ClanID    int64
+	GameID    int64
+	UserID    int64
+	Clan      int64
+	IsActive  bool
+	SetupTurn string
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Config struct {
@@ -61,33 +57,24 @@ type Element struct {
 }
 
 type Game struct {
-	GameID       int64
-	Code         string
-	Description  string
-	IsActive     bool
-	ActiveTurnID int64
-	SetupTurnID  int64
-	CreatedAt    int64
-	UpdatedAt    int64
+	GameID      int64
+	Code        string
+	Description string
+	ActiveTurn  string
+	SetupTurn   string
+	OrdersDue   int64
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 type GameTurn struct {
-	TurnID    int64
-	Code      string
+	GameID    int64
+	Turn      string
 	TurnYear  int64
 	TurnMonth int64
 	TurnNo    int64
-	OrdersDue int64
 	CreatedAt int64
 	UpdatedAt int64
-}
-
-type Role struct {
-	RoleID      string
-	IsActive    bool
-	Description string
-	CreatedAt   int64
-	UpdatedAt   int64
 }
 
 type SchemaMigration struct {
@@ -120,26 +107,22 @@ type TurnReport struct {
 }
 
 type User struct {
-	UserID    int64
-	Handle    string
-	Username  string
-	Email     string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
-}
-
-type UserRole struct {
-	UserID    int64
-	RoleID    string
-	CreatedAt int64
-	UpdatedAt int64
-}
-
-type UserSecret struct {
 	UserID            int64
+	Handle            string
+	Username          string
+	Email             string
+	EmailOptIn        bool
+	Timezone          string
+	IsActive          bool
+	IsAdmin           bool
+	IsGm              bool
+	IsGuest           bool
+	IsPlayer          bool
+	IsService         bool
+	IsSysop           bool
+	IsUser            bool
 	HashedPassword    string
-	PlaintextPassword sql.NullString
+	PlaintextPassword string
 	LastLogin         int64
 	CreatedAt         int64
 	UpdatedAt         int64

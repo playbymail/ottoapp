@@ -19,10 +19,11 @@ VERSION=$( go run ./cmd/ottoapp version )
   exit 2
 }
 echo "📦  info: building version '${VERSION}'"
-backendArtifact="ottoapp-${VERSION}"
+ottoappArtifact="ottoapp-${VERSION}"
+ottomapArtifact="ottomap-${VERSION}"
 frontendArtifact="emberjs-${VERSION}"
 tarballArtifact="ottoapp-${VERSION}.tgz"
-prodBackend="dist/prod/${backendArtifact}"
+prodBackend="dist/prod/${ottoappArtifact}"
 prodFrontend="dist/prod/${frontendArtifact}"
 prodTarball="dist/prod/${tarballArtifact}"
 
@@ -38,15 +39,15 @@ mkdir -p dist/prod || {
 }
 
 ## build the executable for linux
-echo "🛠️  info: building '${prodBackend}'"
+echo "🛠️  info: building 'dist/prod/${ottoappArtifact}'"
 CGO_ENABLED=0    # make the executable as static as possible
 GOOS=linux
 GOARCH=amd64
-GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=${CGO_ENABLED} go build -o "${prodBackend}" ./cmd/ottoapp || {
+GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=${CGO_ENABLED} go build -o "dist/prod/${ottoappArtifact}" ./cmd/ottoapp || {
   echo "❌ error: Go build failed"
   exit 2
 }
-echo "✅  info: created backend executable: '${prodBackend}'"
+echo "✅  info: created backend executable: 'dist/prod/${ottoappArtifact}'"
 
 ## build the ember deployment
 echo "🛠️  info: building '${prodFrontend}'"
@@ -71,7 +72,7 @@ cd dist/prod || {
   echo "❌ error: failed to set def to dist/prod"
   exit 2
 }
-gtar -cz -f ${tarballArtifact} --exclude=".DS_Store" ${backendArtifact} ${frontendArtifact} || {
+gtar -cz -f ${tarballArtifact} --exclude=".DS_Store" ${ottoappArtifact} ${frontendArtifact} || {
   echo "❌ error: failed to create tarball"
   exit 2
 }

@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Michael D Henderson. All rights reserved.
 
-// Package report implements a parser that splits a turn report into
+// Package azul implements a parser that splits a turn report into
 // sections. Sections contain only the lines needed to create maps.
-package report
+package azul
 
 import (
 	"bytes"
@@ -10,182 +10,463 @@ import (
 	"log"
 	"path/filepath"
 	"regexp"
+	"strings"
 
+	"github.com/playbymail/ottoapp/backend/parsers/azul/follows"
+	"github.com/playbymail/ottoapp/backend/parsers/azul/goes"
+	"github.com/playbymail/ottoapp/backend/parsers/azul/location"
+	"github.com/playbymail/ottoapp/backend/parsers/azul/scout"
+	"github.com/playbymail/ottoapp/backend/parsers/azul/turn"
 	"github.com/playbymail/ottoapp/backend/parsers/docx"
 )
 
-func ParseReportText(d *docx.Docx, normalizeCRLF, normalizeCR, quiet, verbose, debug bool) (Report, error) {
-	r := Report{
-		Path: filepath.Dir(d.Source),
-		Name: filepath.Base(d.Source),
+// Parse parses a turn report file (the original Word document) and returns
+// the sections for every unit in it.
+func Parse(source string, input []byte, quiet, verbose, debug bool) (Report, error) {
+	const trimLeading, trimTrailing = false, false
+
+	d, err := docx.ParseReader(bytes.NewReader(input), trimLeading, trimTrailing, quiet, verbose, debug)
+	if err != nil {
+		if debug {
+			log.Printf("azul: docx.Parse %v\n", err)
+		}
+		return Report{}, fmt.Errorf("azul: parse: %w", err)
+	} else if d == nil {
+		if debug {
+			log.Printf("azul: docx.Parse returned nil\n")
+		}
+		return Report{}, fmt.Errorf("azul: parse: %w", err)
 	}
 
-	text := d.Text
-	if normalizeCRLF { // CR + LF is Windows end-of-line marker
-		if debug {
-			log.Printf("report: replacing CR+LF with LF")
-		}
-		text = bytes.ReplaceAll(text, []byte{CR, LF}, []byte{LF})
-	}
-	if normalizeCR { // CR is old Mac end-of-line marker?
-		if debug {
-			log.Printf("report: replacing CR with LF")
-		}
-		text = bytes.ReplaceAll(text, []byte{CR}, []byte{LF})
+	r := Report{
+		Path: filepath.Dir(source),
+		Name: filepath.Base(source),
 	}
 
 	var section *Section
-	for _, line := range bytes.Split(text, []byte{LF}) {
-		if idx := reClanSection.FindSubmatchIndex(line); idx != nil {
-			if section != nil {
-				r.Sections = append(r.Sections, section)
-			}
-			section = &Section{
-				UnitId: string(line[idx[2]:idx[3]]),
-				Kind:   "clan",
-				Lines:  [][]byte{line},
-			}
+
+	for _, line := range bytes.Split(d.Text, []byte{LF}) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
 			continue
-		} else if idx = reCourierSection.FindSubmatchIndex(line); idx != nil {
-			if section != nil {
-				r.Sections = append(r.Sections, section)
+		}
+
+		if reClanSection.Match(line) {
+			// found a unit location line, so close out the prior section
+			section = nil
+
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+
+			l, err := location.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: location %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: location: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
 			}
 			section = &Section{
-				UnitId: string(line[idx[2]:idx[3]]),
-				Kind:   "courier",
-				Lines:  [][]byte{line},
+				UnitId:         l.UnitId,
+				Kind:           "clan",
+				PreviousCoords: l.PreviousCoords,
+				CurrentCoords:  l.CurrentCoords,
 			}
+			r.Sections = append(r.Sections, section)
 			continue
-		} else if idx = reElementSection.FindSubmatchIndex(line); idx != nil {
-			if section != nil {
-				r.Sections = append(r.Sections, section)
+		}
+
+		if reCourierSection.Match(line) {
+			// found a unit location line, so close out the prior section
+			section = nil
+
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+
+			l, err := location.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: location %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: location: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
 			}
 			section = &Section{
-				UnitId: string(line[idx[2]:idx[3]]),
-				Kind:   "element",
-				Lines:  [][]byte{line},
+				UnitId:         l.UnitId,
+				Kind:           "courier",
+				PreviousCoords: l.PreviousCoords,
+				CurrentCoords:  l.CurrentCoords,
 			}
+			r.Sections = append(r.Sections, section)
 			continue
-		} else if idx = reFleetSection.FindSubmatchIndex(line); idx != nil {
-			if section != nil {
-				r.Sections = append(r.Sections, section)
+		}
+
+		if reElementSection.Match(line) {
+			// found a unit location line, so close out the prior section
+			section = nil
+
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+
+			l, err := location.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: location %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: location: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
 			}
 			section = &Section{
-				UnitId: string(line[idx[2]:idx[3]]),
-				Kind:   "fleet",
-				Lines:  [][]byte{line},
+				UnitId:         l.UnitId,
+				Kind:           "element",
+				PreviousCoords: l.PreviousCoords,
+				CurrentCoords:  l.CurrentCoords,
 			}
+			r.Sections = append(r.Sections, section)
 			continue
-		} else if idx = reGarrisonSection.FindSubmatchIndex(line); idx != nil {
-			if section != nil {
-				r.Sections = append(r.Sections, section)
+		}
+
+		if reFleetSection.Match(line) {
+			// found a unit location line, so close out the prior section
+			section = nil
+
+			if debug {
+				log.Printf("input %q\n", string(line))
 			}
+
+			l, err := location.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: location %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: location: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
+			}
+			log.Printf("%s: location %+v\n", r.Name, l)
 			section = &Section{
-				UnitId: string(line[idx[2]:idx[3]]),
-				Kind:   "garrison",
-				Lines:  [][]byte{line},
+				UnitId:         l.UnitId,
+				Kind:           "fleet",
+				PreviousCoords: l.PreviousCoords,
+				CurrentCoords:  l.CurrentCoords,
 			}
+			r.Sections = append(r.Sections, section)
 			continue
-		} else if idx = reTribeSection.FindSubmatchIndex(line); idx != nil {
-			if section != nil {
-				r.Sections = append(r.Sections, section)
+		}
+
+		if reGarrisonSection.Match(line) {
+			// found a unit location line, so close out the prior section
+			section = nil
+
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+
+			l, err := location.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: location %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: location: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
 			}
 			section = &Section{
-				UnitId: string(line[idx[2]:idx[3]]),
-				Kind:   "tribe",
-				Lines:  [][]byte{line},
+				UnitId:         l.UnitId,
+				Kind:           "clan",
+				PreviousCoords: l.PreviousCoords,
+				CurrentCoords:  l.CurrentCoords,
 			}
+			r.Sections = append(r.Sections, section)
+			continue
+		}
+
+		if reTribeSection.Match(line) {
+			// found a unit location line, so close out the prior section
+			section = nil
+
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+
+			l, err := location.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: location %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: location: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
+			}
+			section = &Section{
+				UnitId:         l.UnitId,
+				Kind:           "tribe",
+				PreviousCoords: l.PreviousCoords,
+				CurrentCoords:  l.CurrentCoords,
+			}
+			r.Sections = append(r.Sections, section)
+			continue
 		}
 
 		if section == nil {
 			continue
 		}
 
-		if idx := reCurrentTurn.FindSubmatchIndex(line); idx != nil {
-			section.TurnNo = string(line[idx[2]:idx[3]])
-			section.Lines = append(section.Lines, line)
+		if reCurrentTurn.Match(line) {
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			t, err := turn.Expect(r.Name, line)
+			if err != nil {
+				if pe := turn.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: turn %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: turn: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
+			}
+			section.TurnNo = t.TurnNo
 			continue
 		}
 
 		if reClanScry.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		} else if reCourierScry.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		} else if reElementScry.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		} else if reFleetScry.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		} else if reGarrisonScry.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		} else if reTribeScry.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		}
 
 		if reFleetMovement.Match(line) {
-			section.Lines = append(section.Lines, line)
-			continue
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		} else if reTribeFollows.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			f, err := follows.Expect(r.Name, line)
+			if err != nil {
+				if pe := follows.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: follows %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: follows: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
+			}
+			section.Follows = &Follows{
+				UnitId: f.UnitId,
+			}
 			continue
 		} else if reTribeGoesTo.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			g, err := goes.Expect(r.Name, line)
+			if err != nil {
+				if pe := goes.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: goes %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: goes: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
+			}
+			section.GoesTo = &GoesTo{
+				Coords: g.Coords,
+			}
 			continue
 		} else if reTribeMovement.Match(line) {
-			section.Lines = append(section.Lines, line)
-			continue
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			panic("!implemented")
 		}
 
 		if reScout.Match(line) {
-			section.Lines = append(section.Lines, line)
+			if debug {
+				log.Printf("input %q\n", string(line))
+			}
+			s, err := scout.Expect(r.Name, line)
+			if err != nil {
+				if pe := scout.ExtractParseError(err); pe == nil {
+					log.Printf("%s: section: scout %v", r.Name, err)
+				} else {
+					log.Printf("%s: section: scout: parsing error\n%s\n%s^^^\n%v\n",
+						r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+				}
+				continue
+			}
+			log.Printf("scout %+v\n", s)
 			continue
 		}
 
-		if reClanStatus.Match(line) {
-			section.Lines = append(section.Lines, line)
-			r.Sections = append(r.Sections, section)
-			section = nil
-		} else if reCourierStatus.Match(line) {
-			section.Lines = append(section.Lines, line)
-			r.Sections = append(r.Sections, section)
-			section = nil
-		} else if reElementStatus.Match(line) {
-			section.Lines = append(section.Lines, line)
-			r.Sections = append(r.Sections, section)
-			section = nil
-		} else if reFleetStatus.Match(line) {
-			section.Lines = append(section.Lines, line)
-			r.Sections = append(r.Sections, section)
-			section = nil
-		} else if reGarrisonStatus.Match(line) {
-			section.Lines = append(section.Lines, line)
-			r.Sections = append(r.Sections, section)
-			section = nil
-		} else if reTribeStatus.Match(line) {
-			section.Lines = append(section.Lines, line)
-			r.Sections = append(r.Sections, section)
-			section = nil
-		}
-	}
-	if section != nil {
-		r.Sections = append(r.Sections, section)
+		//if reClanStatus.Match(line) {
+		//	if debug {
+		//		log.Printf("input %q\n", string(line))
+		//	}
+		//	s, err := status.Expect(r.Name, line)
+		//	if err != nil {
+		//		if pe := status.ExtractParseError(err); pe == nil {
+		//			log.Printf("%s: section: status %v", r.Name, err)
+		//		} else {
+		//			log.Printf("%s: section: status: parsing error\n%s\n%s^^^\n%v\n",
+		//				r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+		//		}
+		//		continue
+		//	}
+		//	log.Printf("status %+v\n", s)
+		//	section.Status = &Status{}
+		//	section = nil
+		//	continue
+		//} else if reCourierStatus.Match(line) {
+		//	if debug {
+		//		log.Printf("input %q\n", string(line))
+		//	}
+		//	s, err := status.Expect(r.Name, line)
+		//	if err != nil {
+		//		if pe := status.ExtractParseError(err); pe == nil {
+		//			log.Printf("%s: section: status %v", r.Name, err)
+		//		} else {
+		//			log.Printf("%s: section: status: parsing error\n%s\n%s^^^\n%v\n",
+		//				r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+		//		}
+		//		continue
+		//	}
+		//	log.Printf("status %+v\n", s)
+		//	section.Status = &Status{}
+		//	section = nil
+		//	continue
+		//} else if reElementStatus.Match(line) {
+		//	if debug {
+		//		log.Printf("input %q\n", string(line))
+		//	}
+		//	s, err := status.Expect(r.Name, line)
+		//	if err != nil {
+		//		if pe := scout.ExtractParseError(err); pe == nil {
+		//			log.Printf("%s: section: status %v", r.Name, err)
+		//		} else {
+		//			log.Printf("%s: section: status: parsing error\n%s\n%s^^^\n%v\n",
+		//				r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+		//		}
+		//		continue
+		//	}
+		//	log.Printf("status %+v\n", s)
+		//	section.Status = &Status{}
+		//	section = nil
+		//	continue
+		//} else if reFleetStatus.Match(line) {
+		//	if debug {
+		//		log.Printf("input %q\n", string(line))
+		//	}
+		//	s, err := status.Expect(r.Name, line)
+		//	if err != nil {
+		//		if pe := scout.ExtractParseError(err); pe == nil {
+		//			log.Printf("%s: section: status %v", r.Name, err)
+		//		} else {
+		//			log.Printf("%s: section: status: parsing error\n%s\n%s^^^\n%v\n",
+		//				r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+		//		}
+		//		continue
+		//	}
+		//	log.Printf("status %+v\n", s)
+		//	section.Status = &Status{}
+		//	section = nil
+		//	continue
+		//} else if reGarrisonStatus.Match(line) {
+		//	if debug {
+		//		log.Printf("input %q\n", string(line))
+		//	}
+		//	s, err := status.Expect(r.Name, line)
+		//	if err != nil {
+		//		if pe := scout.ExtractParseError(err); pe == nil {
+		//			log.Printf("%s: section: status %v", r.Name, err)
+		//		} else {
+		//			log.Printf("%s: section: status: parsing error\n%s\n%s^^^\n%v\n",
+		//				r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+		//		}
+		//		continue
+		//	}
+		//	log.Printf("status %+v\n", s)
+		//	section.Status = &Status{}
+		//	section = nil
+		//	continue
+		//} else if reTribeStatus.Match(line) {
+		//	if debug {
+		//		log.Printf("input %q\n", string(line))
+		//	}
+		//	s, err := status.Expect(r.Name, line)
+		//	if err != nil {
+		//		if pe := scout.ExtractParseError(err); pe == nil {
+		//			log.Printf("%s: section: status %v", r.Name, err)
+		//		} else {
+		//			log.Printf("%s: section: status: parsing error\n%s\n%s^^^\n%v\n",
+		//				r.Name, string(line), strings.Repeat(" ", pe.Pos.Offset), err)
+		//		}
+		//		continue
+		//	}
+		//	log.Printf("status %+v\n", s)
+		//	section.Status = &Status{}
+		//	section = nil
+		//	continue
+		//}
 	}
 
 	if len(r.Sections) == 0 {
-		return Report{}, fmt.Errorf("invalid report: no sections")
+		return Report{}, fmt.Errorf("azul: parse: no sections")
 	}
 
 	for _, section := range r.Sections {
+		log.Printf("%s: from %-9q to %-9q\n", r.Name, section.PreviousCoords, section.CurrentCoords)
 		if r.TurnNo == "" {
 			r.TurnNo = section.TurnNo
-			continue
 		}
-		if r.TurnNo != section.TurnNo {
-			return Report{}, fmt.Errorf("invalid report: multiple turns")
-		}
+		//if r.TurnNo != section.TurnNo {
+		//	return Report{}, fmt.Errorf("invalid report: multiple turns")
+		//}
 	}
 
 	if r.TurnNo == "" {
-		return Report{}, fmt.Errorf("invalid report: no turn info")
+		return Report{}, fmt.Errorf("azul: parse: no turn info")
 	}
 
 	return r, nil
@@ -205,7 +486,7 @@ var (
 	reGarrisonSection = regexp.MustCompile(`^Garrison\s(\d{4}g[1-9]),`)
 	reTribeSection    = regexp.MustCompile(`^Tribe\s(\d{4}),`)
 
-	// Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025
+	// Current Turn 899-12 (#0), Winter, FINE Split Turn 900-01 (#1), 28/11/2025
 	reCurrentTurn = regexp.MustCompile(`^Current\sTurn\s(\d{3,4}-\d{2})\s\(#\d+\),`)
 
 	// 0987 Scry: QQ 1010:
@@ -248,8 +529,42 @@ type Report struct {
 }
 
 type Section struct {
+	UnitId         string
+	Kind           string
+	TurnNo         string // yyyy-mm
+	PreviousCoords string
+	CurrentCoords  string
+	Follows        *Follows
+	GoesTo         *GoesTo
+	LandMovement   *LandMovement
+	WaterMovement  *WaterMovement
+	ScoutMovement  *ScoutMovement
+	Status         *Status
+}
+
+type Follows struct {
 	UnitId string
-	Kind   string
-	TurnNo string // yyyy-mm
-	Lines  [][]byte
+}
+
+type GoesTo struct {
+	Coords string
+}
+
+type LandMovement struct {
+	Line []byte
+}
+
+type WaterMovement struct {
+	Wind      string
+	Direction string
+	Line      []byte
+}
+
+type ScoutMovement struct {
+	Line []byte
+	No   int
+}
+
+type Status struct {
+	Line []byte
 }

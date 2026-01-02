@@ -1,0 +1,46 @@
+{
+package scout
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+}
+
+// Scout 1:Scout ,Can't Move on Lake to NW of HEX, Nothing of interest found
+
+Scout <- "Scout" SP scoutId:ScoutId ":" "Scout" SP rest:Anything EOF {
+    return Scout {
+        No:   scoutId.(int),
+        Rest: rest.(string),
+    }, nil
+}
+
+ScoutId <- [1-8] &":" {
+    return strconv.Atoi(string(c.text))
+}
+
+Anything <- .* {
+    return string(c.text), nil
+}
+
+UnitId <- DIGIT DIGIT DIGIT DIGIT ([cefg] [1-9])? EOF {
+    return string(c.text), nil
+}
+
+EOF    = !.
+DIGIT  = [0-9]
+SP     = [ \t]
+_      = [ \t]*

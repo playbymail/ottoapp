@@ -96,7 +96,7 @@ var cmdUserCreate = &cobra.Command{
 
 		authzSvc := authz.New(db)
 		authnSvc := authn.New(db, authzSvc)
-		tzSvc, err := iana.New(db)
+		tzSvc, err := iana.New(db, quiet, verbose, debug)
 		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc)
 
 		// For the user create command, use userName as the handle
@@ -108,7 +108,7 @@ var cmdUserCreate = &cobra.Command{
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q", handle), err)
 		}
-		_, err = authnSvc.UpdateCredentials(&domains.Actor{ID: authz.SysopId, Sysop: true}, actor, "", password)
+		_, err = authnSvc.UpdateCredentials(&domains.Actor{ID: authz.SysopId, Roles: domains.Roles{Sysop: true}}, actor, "", password)
 		if err != nil {
 			return errors.Join(fmt.Errorf("user %q: secret %q", handle, password), err)
 		}
@@ -127,8 +127,8 @@ var cmdUserCreate = &cobra.Command{
 
 var cmdUserUpdate = &cobra.Command{
 	Use:          "update <username>",
-	Short:        "Update user record",
-	Long:         `Update fields for a specific user. At least one update flag must be provided.`,
+	Short:        "UpdatePassword user record",
+	Long:         `UpdatePassword fields for a specific user. At least one update flag must be provided.`,
 	Args:         cobra.ExactArgs(1), // require username
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -155,7 +155,7 @@ var cmdUserUpdate = &cobra.Command{
 
 		authzSvc := authz.New(db)
 		authnSvc := authn.New(db, authzSvc)
-		tzSvc, err := iana.New(db)
+		tzSvc, err := iana.New(db, quiet, verbose, debug)
 		if err != nil {
 			return err
 		}
@@ -220,10 +220,11 @@ var cmdUserUpdate = &cobra.Command{
 		}
 
 		updatedUser := &domains.User_t{
-			ID:       user.ID,
-			Username: user.Username,
-			Email:    user.Email,
-			Handle:   user.Handle,
+			ID:         user.ID,
+			Username:   user.Username,
+			Email:      user.Email,
+			EmailOptIn: user.EmailOptIn,
+			Handle:     user.Handle,
 			Locale: domains.UserLocale_t{
 				DateFormat: user.Locale.DateFormat,
 				Timezone: domains.UserTimezone_t{
@@ -243,7 +244,7 @@ var cmdUserUpdate = &cobra.Command{
 		}
 
 		if password != "" {
-			_, err = authnSvc.UpdateCredentials(&domains.Actor{ID: authz.SysopId, Sysop: true}, actor, "", password)
+			_, err = authnSvc.UpdateCredentials(&domains.Actor{ID: authz.SysopId, Roles: domains.Roles{Sysop: true}}, actor, "", password)
 			if err != nil {
 				return fmt.Errorf("user %q: password %q: update %v\n", updatedUser.Handle, password, err)
 			}
@@ -302,7 +303,7 @@ var cmdUserRole = &cobra.Command{
 
 		authzSvc := authz.New(db)
 		authnSvc := authn.New(db, authzSvc)
-		tzSvc, err := iana.New(db)
+		tzSvc, err := iana.New(db, quiet, verbose, debug)
 		if err != nil {
 			return err
 		}

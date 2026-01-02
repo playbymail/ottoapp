@@ -5,30 +5,28 @@ package jsondb
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
-
-	"github.com/mdhender/phrases/v2"
 )
 
 // Users is a map of Handle to User data
 type Users map[string]*User
 
 type User struct {
-	Handle   string
-	UserName string
-	Email    string
-	Tz       *time.Location
-	Password struct {
-		Password string
-		Update   bool
+	Handle     string
+	UserName   string
+	Email      string
+	EmailOptIn bool
+	Tz         *time.Location
+	Password   struct {
+		Password       string
+		CreatePassword bool
+		UpdatePassword bool
+		ChangePassword bool
 	}
-	Roles struct {
-		Active     bool
-		EmailOptIn bool
-		Roles      []string
-	}
+	Roles map[string]bool
 }
 
 func LoadUsers(path string) (Users, error) {
@@ -38,15 +36,12 @@ func LoadUsers(path string) (Users, error) {
 	}
 
 	jsonUsers := map[string]*struct {
-		Handle         string   `json:"handle"`
-		UserName       string   `json:"user-name"`
-		Email          string   `json:"email"`
-		Tz             string   `json:"tz"` // IANA time zone name
-		Password       string   `json:"password"`
-		CreatePassword bool     `json:"create-password"`
-		UpdatePassword bool     `json:"update-password"`
-		ChangePassword bool     `json:"change-password"`
-		Roles          []string `json:"roles"`
+		Handle   string   `json:"handle"`
+		UserName string   `json:"user-name"`
+		Email    string   `json:"email"`
+		Tz       string   `json:"tz"` // IANA time zone name
+		Password string   `json:"password"`
+		Roles    []string `json:"roles"`
 	}{}
 	err = json.Unmarshal(data, &jsonUsers)
 	if err != nil {
@@ -59,6 +54,7 @@ func LoadUsers(path string) (Users, error) {
 			Handle:   strings.ToLower(handle),
 			UserName: jsonUser.UserName,
 			Email:    strings.ToLower(jsonUser.Email),
+			Roles:    map[string]bool{},
 		}
 		// load the timezone, returning any errors
 		user.Tz, err = time.LoadLocation(jsonUser.Tz)
@@ -66,29 +62,37 @@ func LoadUsers(path string) (Users, error) {
 			return nil, fmt.Errorf("iana: %s: %w", jsonUser.Tz, err)
 		}
 		user.Password.Password = jsonUser.Password
-		if user.Password.Password == "" {
-			user.Password.Password = phrases.Generate(6, ".")
-			user.Password.Update = true
-		}
-		if jsonUser.CreatePassword || jsonUser.ChangePassword {
-			user.Password.Password = phrases.Generate(6, ".")
-			user.Password.Update = true
-		}
-		if jsonUser.UpdatePassword {
-			user.Password.Update = true
-		}
 		for _, role := range jsonUser.Roles {
+			role = strings.ToLower(role)
 			switch role {
 			case "active":
-				user.Roles.Active = true
-			case "inactive":
-				user.Roles.Active = false
+				user.Roles[role] = true
+			case "admin":
+				user.Roles[role] = true
+			case "change-password":
+				user.Password.ChangePassword = true
+			case "create-password":
+				user.Password.CreatePassword = true
 			case "email-opt-in":
-				user.Roles.EmailOptIn = true
+				user.EmailOptIn = true
 			case "email-opt-out":
-				user.Roles.EmailOptIn = false
+				user.EmailOptIn = false
+			case "gm":
+				user.Roles[role] = true
+			case "guest":
+				user.Roles[role] = true
+			case "inactive":
+				user.Roles[role] = true
+			case "player":
+				user.Roles[role] = true
+			case "service":
+				user.Roles[role] = true
+			case "update-password":
+				user.Password.UpdatePassword = true
+			case "user":
+				user.Roles[role] = true
 			default:
-				user.Roles.Roles = append(user.Roles.Roles)
+				log.Printf("jsondb: import: user: role %q: ignoring\n", role)
 			}
 		}
 		users[user.Handle] = user

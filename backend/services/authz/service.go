@@ -32,20 +32,28 @@ const (
 
 // AssignRole assigns a role to a user.
 func (s *Service) AssignRole(userID domains.ID, roleID string) error {
-	if err := domains.ValidateRole(roleID); err != nil {
-		return errors.Join(domains.ErrInvalidRole, err)
-	}
-
 	q := s.db.Queries()
 	ctx := s.db.Context()
-	now := time.Now().UTC()
-
-	return q.UpsertUserRole(ctx, sqlc.UpsertUserRoleParams{
-		UserID:    int64(userID),
-		RoleID:    roleID,
-		CreatedAt: now.Unix(),
-		UpdatedAt: now.Unix(),
-	})
+	updatedAt := time.Now().UTC().Unix()
+	switch roleID {
+	case "active":
+		return q.UpdateUserActiveRole(ctx, sqlc.UpdateUserActiveRoleParams{UserID: int64(userID), HasRole: true, UpdatedAt: updatedAt})
+	case "admin":
+		return q.UpdateUserAdminRole(ctx, sqlc.UpdateUserAdminRoleParams{UserID: int64(userID), HasRole: true, UpdatedAt: updatedAt})
+	case "gm":
+		return q.UpdateUserGMRole(ctx, sqlc.UpdateUserGMRoleParams{UserID: int64(userID), HasRole: true, UpdatedAt: updatedAt})
+	case "guest":
+		return q.UpdateUserGuestRole(ctx, sqlc.UpdateUserGuestRoleParams{UserID: int64(userID), HasRole: true, UpdatedAt: updatedAt})
+	case "player":
+		return q.UpdateUserPlayerRole(ctx, sqlc.UpdateUserPlayerRoleParams{UserID: int64(userID), HasRole: true, UpdatedAt: updatedAt})
+	case "service":
+		return domains.ErrNotAuthorized
+	case "sysop":
+		return domains.ErrNotAuthorized
+	case "user":
+		return q.UpdateUserUserRole(ctx, sqlc.UpdateUserUserRoleParams{UserID: int64(userID), HasRole: true, UpdatedAt: updatedAt})
+	}
+	return domains.ErrInvalidRole
 }
 
 // BuildActorAuth returns the actor's authorizations for the target user.
@@ -92,24 +100,24 @@ func (s *Service) GetActor(r *http.Request) (*domains.Actor, error) {
 
 // GetActorByEmail returns a domain Actor or an error.
 func (s *Service) GetActorByEmail(email string) (*domains.Actor, error) {
-	//log.Printf("[auth] getActorByEmail(%q)", email)
-	userId, err := s.db.Queries().ReadUserIdByEmail(s.db.Context(), email)
+	log.Printf("[auth] getActorByEmail(%q)", email)
+	user, err := s.db.Queries().ReadUserByEmail(s.db.Context(), email)
 	if err != nil {
-		//log.Printf("[auth] getActorByEmail(%q): %v", email, err)
+		log.Printf("[auth] getActorByEmail(%q): %v", email, err)
 		return nil, err
 	}
-	return s.GetActorById(domains.ID(userId))
+	return s.GetActorById(domains.ID(user.UserID))
 }
 
 // GetActorByHandle returns a domain Actor or an error.
 func (s *Service) GetActorByHandle(handle string) (*domains.Actor, error) {
 	//log.Printf("[auth] getActorByHandle(%q)", handle)
-	userId, err := s.db.Queries().ReadUserIdByHandle(s.db.Context(), handle)
+	user, err := s.db.Queries().ReadUserByHandle(s.db.Context(), handle)
 	if err != nil {
 		//log.Printf("[auth] getActorByHandle(%q): %v", handle, err)
 		return nil, err
 	}
-	return s.GetActorById(domains.ID(userId))
+	return s.GetActorById(domains.ID(user.UserID))
 }
 
 // GetActorById returns a domain Actor or an error.
@@ -123,24 +131,25 @@ func (s *Service) GetActorByHandle(handle string) (*domains.Actor, error) {
 //	}
 func (s *Service) GetActorById(actorId domains.ID) (*domains.Actor, error) {
 	if actorId == SysopId {
-		return &domains.Actor{ID: SysopId, Sysop: true}, nil
+		return &domains.Actor{ID: SysopId, Roles: domains.Roles{Sysop: true}}, nil
 	}
-	userRoles, err := s.db.Queries().GetUserRoles(s.db.Context(), int64(actorId))
+	user, err := s.db.Queries().ReadUserByUserId(s.db.Context(), int64(actorId))
 	if err != nil {
 		return nil, err
 	}
-	actor := domains.Actor{ID: actorId}
-	for _, role := range userRoles {
-		switch role {
-		case "admin":
-			actor.Admin = true
-		case "service":
-			actor.Service = true
-		case "user":
-			actor.User = true
-		}
-	}
-	return &actor, nil
+	return &domains.Actor{
+		ID: actorId,
+		Roles: domains.Roles{
+			Active:  user.IsActive,
+			Admin:   user.IsAdmin,
+			Gm:      user.IsGm,
+			Guest:   user.IsGuest,
+			Player:  user.IsPlayer,
+			Service: user.IsService,
+			Sysop:   user.IsSysop,
+			User:    user.IsUser,
+		},
+	}, nil
 }
 
 func (s *Service) GetSessionData(r *http.Request) (*domains.SessionView, error) {
@@ -149,71 +158,75 @@ func (s *Service) GetSessionData(r *http.Request) (*domains.SessionView, error) 
 	if err != nil || sessionCookie.Value == "" {
 		return &domains.SessionView{}, ErrMissingSessionCookie
 	}
-	var view domains.SessionView
-	rows, err := s.db.Queries().GetSessionData(s.db.Context(), sqlc.GetSessionDataParams{
+	row, err := s.db.Queries().ReadSessionData(s.db.Context(), sqlc.ReadSessionDataParams{
 		SessionID: sessionCookie.Value,
 		ExpiresAt: time.Now().UTC().Unix(),
 	})
-	//log.Printf("[authz] GetSessionData: %d: %v\n", len(rows), err)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("[authz] GetSessionData: no data found\n")
-			return &domains.SessionView{}, ErrNoSessionData
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[authz] GetSessionData: %v\n", err)
+			return &domains.SessionView{}, errors.Join(domains.ErrDatabaseError, err)
 		}
-		log.Printf("[authz] GetSessionData: %v\n", err)
-		return &domains.SessionView{}, errors.Join(domains.ErrDatabaseError, err)
-	} else if len(rows) == 0 {
 		log.Printf("[authz] GetSessionData: no data found\n")
 		return &domains.SessionView{}, ErrNoSessionData
 	}
-	var isAdmin, isGM, isUser bool
-	for _, row := range rows {
-		view.CSRF = row.Csrf
-		view.UserID = domains.ID(row.UserID)
-		view.Handle = row.Handle
-		switch row.RoleID {
-		case "admin":
-			isAdmin = true
-		case "gm":
-			isGM = true
-		case "user":
-			isUser = true
-		}
-	}
-	view.Roles.AccessAdminRoutes = s.CanAccessAdminRoutes(isAdmin)
-	view.Roles.AccessGMRoutes = s.CanAccessGMRoutes(isAdmin, isGM)
-	view.Roles.AccessUserRoutes = s.CanAccessUserRoutes(isAdmin, isUser)
-	view.Roles.EditHandle = isAdmin
-	//log.Printf("[authz] GetSessionData: %+v\n", view)
-	return &view, nil
+	return &domains.SessionView{
+		CSRF:   row.Csrf,
+		UserID: domains.ID(row.UserID),
+		Handle: row.Handle,
+		Roles: struct {
+			AccessAdminRoutes bool `json:"accessAdminRoutes"`
+			AccessGMRoutes    bool `json:"accessGMRoutes"`
+			AccessUserRoutes  bool `json:"accessUserRoutes"`
+			EditHandle        bool `json:"editHandle"`
+		}{
+			AccessAdminRoutes: s.CanAccessAdminRoutes(row.IsAdmin),
+			AccessGMRoutes:    s.CanAccessGMRoutes(row.IsAdmin, row.IsGm),
+			AccessUserRoutes:  s.CanAccessUserRoutes(row.IsAdmin, row.IsUser),
+			EditHandle:        row.IsAdmin,
+		},
+	}, nil
 }
 
 func (s *Service) GetUserRoles(userID domains.ID) (domains.Roles, error) {
-	q := s.db.Queries()
-	ctx := s.db.Context()
-
-	userRoles, err := q.GetUserRoles(ctx, int64(userID))
+	user, err := s.db.Queries().ReadUserByUserId(s.db.Context(), int64(userID))
 	if err != nil {
-		return nil, err
+		return domains.Roles{}, err
 	}
-	roles := map[domains.Role]bool{}
-	for _, role := range userRoles {
-		roles[domains.Role(role)] = true
-	}
-	return roles, nil
+	return domains.Roles{
+		Active:  user.IsActive,
+		Admin:   user.IsAdmin,
+		Gm:      user.IsGm,
+		Guest:   user.IsGuest,
+		Player:  user.IsPlayer,
+		Service: user.IsService,
+		Sysop:   user.IsSysop,
+		User:    user.IsUser,
+	}, nil
 }
 
 // RemoveRole removes a role from a user.
 func (s *Service) RemoveRole(userID domains.ID, roleID string) error {
-	if err := domains.ValidateRole(roleID); err != nil {
-		return errors.Join(domains.ErrInvalidRole, err)
-	}
-
 	q := s.db.Queries()
 	ctx := s.db.Context()
-
-	return q.RemoveUserRole(ctx, sqlc.RemoveUserRoleParams{
-		UserID: int64(userID),
-		RoleID: roleID,
-	})
+	updatedAt := time.Now().UTC().Unix()
+	switch roleID {
+	case "active":
+		return q.UpdateUserActiveRole(ctx, sqlc.UpdateUserActiveRoleParams{UserID: int64(userID), HasRole: false, UpdatedAt: updatedAt})
+	case "admin":
+		return q.UpdateUserAdminRole(ctx, sqlc.UpdateUserAdminRoleParams{UserID: int64(userID), HasRole: false, UpdatedAt: updatedAt})
+	case "gm":
+		return q.UpdateUserGMRole(ctx, sqlc.UpdateUserGMRoleParams{UserID: int64(userID), HasRole: false, UpdatedAt: updatedAt})
+	case "guest":
+		return q.UpdateUserGuestRole(ctx, sqlc.UpdateUserGuestRoleParams{UserID: int64(userID), HasRole: false, UpdatedAt: updatedAt})
+	case "player":
+		return q.UpdateUserPlayerRole(ctx, sqlc.UpdateUserPlayerRoleParams{UserID: int64(userID), HasRole: false, UpdatedAt: updatedAt})
+	case "service":
+		return domains.ErrNotAuthorized
+	case "sysop":
+		return domains.ErrNotAuthorized
+	case "user":
+		return q.UpdateUserUserRole(ctx, sqlc.UpdateUserUserRoleParams{UserID: int64(userID), HasRole: false, UpdatedAt: updatedAt})
+	}
+	return domains.ErrInvalidRole
 }

@@ -9,24 +9,76 @@ import (
 	"context"
 )
 
+const createGameUserClan = `-- name: CreateGameUserClan :one
+INSERT INTO clans (game_id,
+                   user_id,
+                   clan,
+                   setup_turn,
+                   created_at,
+                   updated_at)
+VALUES (?1,
+        ?2,
+        ?3,
+        ?4,
+        ?5,
+        ?6)
+ON CONFLICT (game_id, user_id) DO UPDATE
+    SET clan       = excluded.clan,
+        setup_turn = excluded.setup_turn,
+        updated_at = excluded.updated_at
+RETURNING clan_id
+`
+
+type CreateGameUserClanParams struct {
+	GameID    int64
+	UserID    int64
+	Clan      int64
+	SetupTurn string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+// CreateUserGameClan has two business rules
+//
+//	user can have at most one clan per game.
+//	clan number can be used by at most one user per game.
+//
+// The upsert key is "user_id, game_id," preventing a user
+// from claiming multiple clans in a game. If a user tries
+// claiming an existing clan in a game, it will fail, not
+// silently clobber another user's.
+func (q *Queries) CreateGameUserClan(ctx context.Context, arg CreateGameUserClanParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createGameUserClan,
+		arg.GameID,
+		arg.UserID,
+		arg.Clan,
+		arg.SetupTurn,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var clan_id int64
+	err := row.Scan(&clan_id)
+	return clan_id, err
+}
+
 const getClan = `-- name: GetClan :one
 SELECT game_id,
        user_id,
        clan_id,
        clan,
-       setup_turn_id,
+       setup_turn,
        is_active
 FROM clans
 WHERE clan_id = ?1
 `
 
 type GetClanRow struct {
-	GameID      int64
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnID int64
-	IsActive    bool
+	GameID    int64
+	UserID    int64
+	ClanID    int64
+	Clan      int64
+	SetupTurn string
+	IsActive  bool
 }
 
 func (q *Queries) GetClan(ctx context.Context, clanID int64) (GetClanRow, error) {
@@ -37,7 +89,7 @@ func (q *Queries) GetClan(ctx context.Context, clanID int64) (GetClanRow, error)
 		&i.UserID,
 		&i.ClanID,
 		&i.Clan,
-		&i.SetupTurnID,
+		&i.SetupTurn,
 		&i.IsActive,
 	)
 	return i, err
@@ -48,7 +100,7 @@ SELECT game_id,
        user_id,
        clan_id,
        clan,
-       setup_turn_id,
+       setup_turn,
        is_active
 FROM clans
 WHERE game_id = ?1
@@ -61,12 +113,12 @@ type GetClanByGameClanNoParams struct {
 }
 
 type GetClanByGameClanNoRow struct {
-	GameID      int64
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnID int64
-	IsActive    bool
+	GameID    int64
+	UserID    int64
+	ClanID    int64
+	Clan      int64
+	SetupTurn string
+	IsActive  bool
 }
 
 func (q *Queries) GetClanByGameClanNo(ctx context.Context, arg GetClanByGameClanNoParams) (GetClanByGameClanNoRow, error) {
@@ -77,7 +129,7 @@ func (q *Queries) GetClanByGameClanNo(ctx context.Context, arg GetClanByGameClan
 		&i.UserID,
 		&i.ClanID,
 		&i.Clan,
-		&i.SetupTurnID,
+		&i.SetupTurn,
 		&i.IsActive,
 	)
 	return i, err
@@ -88,7 +140,7 @@ SELECT game_id,
        user_id,
        clan_id,
        clan,
-       setup_turn_id,
+       setup_turn,
        is_active
 FROM clans
 WHERE game_id = ?1
@@ -101,12 +153,12 @@ type GetClanByGameUserParams struct {
 }
 
 type GetClanByGameUserRow struct {
-	GameID      int64
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnID int64
-	IsActive    bool
+	GameID    int64
+	UserID    int64
+	ClanID    int64
+	Clan      int64
+	SetupTurn string
+	IsActive  bool
 }
 
 func (q *Queries) GetClanByGameUser(ctx context.Context, arg GetClanByGameUserParams) (GetClanByGameUserRow, error) {
@@ -117,8 +169,39 @@ func (q *Queries) GetClanByGameUser(ctx context.Context, arg GetClanByGameUserPa
 		&i.UserID,
 		&i.ClanID,
 		&i.Clan,
-		&i.SetupTurnID,
+		&i.SetupTurn,
 		&i.IsActive,
+	)
+	return i, err
+}
+
+const readClanByGameIdClanNo = `-- name: ReadClanByGameIdClanNo :one
+SELECT game_id, user_id, clan_id, clan
+FROM clans
+WHERE game_id = ?1
+  AND clan = ?2
+`
+
+type ReadClanByGameIdClanNoParams struct {
+	GameID int64
+	ClanNo int64
+}
+
+type ReadClanByGameIdClanNoRow struct {
+	GameID int64
+	UserID int64
+	ClanID int64
+	Clan   int64
+}
+
+func (q *Queries) ReadClanByGameIdClanNo(ctx context.Context, arg ReadClanByGameIdClanNoParams) (ReadClanByGameIdClanNoRow, error) {
+	row := q.db.QueryRowContext(ctx, readClanByGameIdClanNo, arg.GameID, arg.ClanNo)
+	var i ReadClanByGameIdClanNoRow
+	err := row.Scan(
+		&i.GameID,
+		&i.UserID,
+		&i.ClanID,
+		&i.Clan,
 	)
 	return i, err
 }
@@ -175,45 +258,4 @@ WHERE clan_id = ?1
 func (q *Queries) RemoveClan(ctx context.Context, clanID int64) error {
 	_, err := q.db.ExecContext(ctx, removeClan, clanID)
 	return err
-}
-
-const upsertGameUserClan = `-- name: UpsertGameUserClan :one
-INSERT INTO clans (game_id, user_id, clan, setup_turn_id, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-ON CONFLICT (user_id, game_id) DO UPDATE SET clan          = excluded.clan,
-                                             setup_turn_id = excluded.setup_turn_id,
-                                             updated_at    = excluded.updated_at
-RETURNING clan_id
-`
-
-type UpsertGameUserClanParams struct {
-	GameID      int64
-	UserID      int64
-	Clan        int64
-	SetupTurnID int64
-	CreatedAt   int64
-	UpdatedAt   int64
-}
-
-// UpsertGameUserClan has two business rules
-//
-//	user can have at most one clan per game.
-//	clan number can be used by at most one user per game.
-//
-// The upsert key is "user_id, game_id," preventing a user
-// from claiming multiple clans in a game. If a user tries
-// claiming an existing clan in a game, it will fail, not
-// silently clobber another user's.
-func (q *Queries) UpsertGameUserClan(ctx context.Context, arg UpsertGameUserClanParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, upsertGameUserClan,
-		arg.GameID,
-		arg.UserID,
-		arg.Clan,
-		arg.SetupTurnID,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	var clan_id int64
-	err := row.Scan(&clan_id)
-	return clan_id, err
 }

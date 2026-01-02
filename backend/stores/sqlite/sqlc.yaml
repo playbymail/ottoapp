@@ -4,8 +4,6 @@ sql:
     schema:
     - "migrations"
     queries:
-    - "sqlc/authn.sql"
-    - "sqlc/authz.sql"
     - "sqlc/clans.sql"
     - "sqlc/config.sql"
     - "sqlc/documents.sql"

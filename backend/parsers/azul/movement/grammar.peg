@@ -1,0 +1,30 @@
+{
+package movement
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+}
+
+
+EOF    = !.
+DIGIT  = [0-9]
+LETTER = [A-Z]
+SP     = [ \t]
+_      = [ \t]*
+
+
+

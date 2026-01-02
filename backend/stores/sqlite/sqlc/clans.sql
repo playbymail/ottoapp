@@ -1,4 +1,4 @@
--- UpsertGameUserClan has two business rules
+-- CreateUserGameClan has two business rules
 --  user can have at most one clan per game.
 --  clan number can be used by at most one user per game.
 -- The upsert key is "user_id, game_id," preventing a user
@@ -6,12 +6,23 @@
 -- claiming an existing clan in a game, it will fail, not
 -- silently clobber another user's.
 --
--- name: UpsertGameUserClan :one
-INSERT INTO clans (game_id, user_id, clan, setup_turn_id, created_at, updated_at)
-VALUES (:game_id, :user_id, :clan, :setup_turn_id, :created_at, :updated_at)
-ON CONFLICT (user_id, game_id) DO UPDATE SET clan          = excluded.clan,
-                                             setup_turn_id = excluded.setup_turn_id,
-                                             updated_at    = excluded.updated_at
+-- name: CreateGameUserClan :one
+INSERT INTO clans (game_id,
+                   user_id,
+                   clan,
+                   setup_turn,
+                   created_at,
+                   updated_at)
+VALUES (:game_id,
+        :user_id,
+        :clan,
+        :setup_turn,
+        :created_at,
+        :updated_at)
+ON CONFLICT (game_id, user_id) DO UPDATE
+    SET clan       = excluded.clan,
+        setup_turn = excluded.setup_turn,
+        updated_at = excluded.updated_at
 RETURNING clan_id;
 
 -- name: GetClan :one
@@ -19,7 +30,7 @@ SELECT game_id,
        user_id,
        clan_id,
        clan,
-       setup_turn_id,
+       setup_turn,
        is_active
 FROM clans
 WHERE clan_id = :clan_id;
@@ -29,7 +40,7 @@ SELECT game_id,
        user_id,
        clan_id,
        clan,
-       setup_turn_id,
+       setup_turn,
        is_active
 FROM clans
 WHERE game_id = :game_id
@@ -40,8 +51,14 @@ SELECT game_id,
        user_id,
        clan_id,
        clan,
-       setup_turn_id,
+       setup_turn,
        is_active
+FROM clans
+WHERE game_id = :game_id
+  AND clan = :clan_no;
+
+-- name: ReadClanByGameIdClanNo :one
+SELECT game_id, user_id, clan_id, clan
 FROM clans
 WHERE game_id = :game_id
   AND clan = :clan_no;

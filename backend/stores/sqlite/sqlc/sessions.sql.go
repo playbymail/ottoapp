@@ -71,6 +71,63 @@ func (q *Queries) GetSession(ctx context.Context, sessionID string) (GetSessionR
 	return i, err
 }
 
+const readSessionData = `-- name: ReadSessionData :one
+SELECT sessions.csrf,
+       users.user_id,
+       users.handle,
+       users.is_active,
+       users.is_admin,
+       users.is_gm,
+       users.is_guest,
+       users.is_player,
+       users.is_service,
+       users.is_sysop,
+       users.is_user
+FROM sessions,
+     users
+WHERE sessions.session_id = ?1
+  AND sessions.expires_at > ?2
+  AND users.user_id = sessions.user_id
+`
+
+type ReadSessionDataParams struct {
+	SessionID string
+	ExpiresAt int64
+}
+
+type ReadSessionDataRow struct {
+	Csrf      string
+	UserID    int64
+	Handle    string
+	IsActive  bool
+	IsAdmin   bool
+	IsGm      bool
+	IsGuest   bool
+	IsPlayer  bool
+	IsService bool
+	IsSysop   bool
+	IsUser    bool
+}
+
+func (q *Queries) ReadSessionData(ctx context.Context, arg ReadSessionDataParams) (ReadSessionDataRow, error) {
+	row := q.db.QueryRowContext(ctx, readSessionData, arg.SessionID, arg.ExpiresAt)
+	var i ReadSessionDataRow
+	err := row.Scan(
+		&i.Csrf,
+		&i.UserID,
+		&i.Handle,
+		&i.IsActive,
+		&i.IsAdmin,
+		&i.IsGm,
+		&i.IsGuest,
+		&i.IsPlayer,
+		&i.IsService,
+		&i.IsSysop,
+		&i.IsUser,
+	)
+	return i, err
+}
+
 const reapSessions = `-- name: ReapSessions :exec
 DELETE
 FROM sessions

@@ -191,7 +191,7 @@ SELECT clans.game_id,
        clans.user_id,
        clans.clan_id,
        clans.clan,
-       clans.setup_turn_id,
+       clans.setup_turn,
        clans.is_active
 FROM documents,
      clans

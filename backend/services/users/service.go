@@ -72,12 +72,20 @@ func (s *Service) CreateUser(handle, email, userName string, timezone *time.Loca
 	createdAt, updatedAt := now.Unix(), now.Unix()
 
 	userId, err := s.db.Queries().CreateUser(s.db.Context(), sqlc.CreateUserParams{
-		Handle:    handle,
-		Username:  userName,
-		Email:     email,
-		Timezone:  timeZone,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
+		Handle:     handle,
+		Username:   userName,
+		Email:      email,
+		EmailOptIn: false,
+		Timezone:   timeZone,
+		IsActive:   false,
+		IsAdmin:    false,
+		IsGm:       false,
+		IsGuest:    false,
+		IsPlayer:   false,
+		IsService:  false,
+		IsUser:     false,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
 	})
 	if err != nil {
 		return nil, err
@@ -158,12 +166,23 @@ func (s *Service) UpdateUser(user *domains.User_t) error {
 		return errors.Join(domains.ErrInvalidTimezone, domains.ErrBadInput, fmt.Errorf("%q: invalid timezone", user.Locale.Timezone.Location.String()))
 	}
 
-	err := s.db.Queries().UpdateUserByUserId(s.db.Context(), sqlc.UpdateUserByUserIdParams{
-		Email:     user.Email,
-		Handle:    user.Handle,
-		Timezone:  timeZone,
-		Username:  user.Username,
-		UpdatedAt: time.Now().UTC().Unix(),
+	updatedAt := time.Now().UTC().Unix()
+	err := s.db.Queries().UpdateUser(s.db.Context(), sqlc.UpdateUserParams{
+		UserID:     user.ID,
+		Handle:     user.Handle,
+		Username:   user.Username,
+		Email:      user.Email,
+		EmailOptIn: user.EmailOptIn,
+		Timezone:   timeZone,
+		IsActive:   user.Roles.Active,
+		IsAdmin:    user.Roles.Admin,
+		IsGm:       user.Roles.Gm,
+		IsGuest:    user.Roles.Guest,
+		IsPlayer:   user.Roles.Player,
+		IsService:  user.Roles.Service,
+		IsSysop:    user.Roles.Sysop,
+		IsUser:     user.Roles.User,
+		UpdatedAt:  updatedAt,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -185,60 +204,60 @@ func (s *Service) GetUser(actor *domains.Actor) (*domains.User_t, error) {
 // GetUserByEmail returns user data associated with the email.
 // Warning: callers expect this to return the same data that would be returned from GetUserByID!
 func (s *Service) GetUserByEmail(email string) (*domains.User_t, error) {
-	userId, err := s.db.Queries().ReadUserIdByEmail(s.db.Context(), email)
+	user, err := s.db.Queries().ReadUserByEmail(s.db.Context(), email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.Join(domains.ErrNotExists, err)
 		}
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
-	return s.getUserByID(domains.ID(userId))
+	return s.getUserByID(domains.ID(user.UserID))
 }
 
 // GetUserByHandle returns user data associated with the handle.
 // Warning: callers expect this to return the same data that would be returned from GetUserByID!
 func (s *Service) GetUserByHandle(handle string) (*domains.User_t, error) {
-	userId, err := s.db.Queries().ReadUserIdByHandle(s.db.Context(), handle)
+	user, err := s.db.Queries().ReadUserByHandle(s.db.Context(), handle)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.Join(domains.ErrNotExists, err)
 		}
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
-	return s.getUserByID(domains.ID(userId))
+	return s.getUserByID(domains.ID(user.UserID))
 }
 
 func (s *Service) GetUserHandle(userId domains.ID) (string, error) {
-	handle, err := s.db.Queries().ReadHandleByUserId(s.db.Context(), int64(userId))
+	user, err := s.db.Queries().ReadUserByUserId(s.db.Context(), int64(userId))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", errors.Join(domains.ErrNotExists, err)
 		}
 		return "", errors.Join(domains.ErrDatabaseError, err)
 	}
-	return handle, nil
+	return user.Handle, nil
 }
 
 func (s *Service) GetUserIDByEmail(email string) (domains.ID, error) {
-	id, err := s.db.Queries().ReadUserIdByEmail(s.db.Context(), email)
+	user, err := s.db.Queries().ReadUserByEmail(s.db.Context(), email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domains.InvalidID, errors.Join(domains.ErrNotExists, err)
 		}
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
-	return domains.ID(id), nil
+	return domains.ID(user.UserID), nil
 }
 
 func (s *Service) GetUserIDByHandle(handle string) (domains.ID, error) {
-	id, err := s.db.Queries().ReadUserIdByHandle(s.db.Context(), handle)
+	user, err := s.db.Queries().ReadUserByHandle(s.db.Context(), handle)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domains.InvalidID, errors.Join(domains.ErrNotExists, err)
 		}
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
-	return domains.ID(id), nil
+	return domains.ID(user.UserID), nil
 }
 
 // GetUserByID returns the user data associated with the given ID.
@@ -293,10 +312,21 @@ func (s *Service) getUserByID(userID domains.ID) (*domains.User_t, error) {
 	}
 
 	return &domains.User_t{
-		ID:       userID,
-		Username: user.Username,
-		Email:    user.Email,
-		Handle:   user.Handle,
+		ID:         userID,
+		Handle:     user.Handle,
+		Username:   user.Username,
+		Email:      user.Email,
+		EmailOptIn: user.EmailOptIn,
+		Roles: domains.Roles{
+			Active:  user.IsActive,
+			Admin:   user.IsAdmin,
+			Gm:      user.IsGm,
+			Guest:   user.IsGuest,
+			Player:  user.IsPlayer,
+			Service: user.IsService,
+			Sysop:   user.IsSysop,
+			User:    user.IsUser,
+		},
 		Locale: domains.UserLocale_t{
 			DateFormat: "2006-01-02",
 			Timezone: domains.UserTimezone_t{

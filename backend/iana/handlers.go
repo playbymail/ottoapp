@@ -24,7 +24,7 @@ type TimezoneView struct {
 // Returns array of {id, label} objects.
 //
 // GET /api/timezones
-func (s *Service) HandleGetTimezones() http.HandlerFunc {
+func (s *Service) HandleGetTimezones(quiet, verbose, debug bool) http.HandlerFunc {
 	//var list []*TimezoneItem
 	//var err error
 
@@ -43,7 +43,7 @@ func (s *Service) HandleGetTimezones() http.HandlerFunc {
 
 		// Check if the "active" query parameter is set
 		if r.URL.Query().Get("active") == "true" {
-			activeList, err := s.Active()
+			activeList, err := s.Active(quiet, verbose, debug)
 			if err != nil {
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return

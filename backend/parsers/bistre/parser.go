@@ -499,7 +499,7 @@ func ParseScryLine(fid, tid string, unitId UnitId_t, lineNo int, line []byte, ac
 		log.Printf("%s: %s: %d: %q\n", fid, unitId, lineNo, s.Origin)
 		panic(err)
 	}
-	//log.Printf("%s: %s: %d: %q\n", fid, unitId, lineNo, s.Location.CurrentHex())
+	//log.Printf("%s: %s: %d: %q\n", fid, unitId, lineNo, s.Location.CurrentCoords())
 	if bytes.HasPrefix(s.Text, []byte{'S', 'c', 'o', 'u', 't'}) {
 		s.Type = unit_movement.Scouts
 		//log.Printf("scry: unit %q: origin %q: text %q: type %v\n", s.UnitId, s.Origin, s.Text, s.Type)

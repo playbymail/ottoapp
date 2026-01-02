@@ -24,7 +24,7 @@ type Service struct {
 	usersSvc *users.Service
 }
 
-func New(db *sqlite.DB, authnSvc *authn.Service, authzSvc *authz.Service, usersSvc *users.Service) (*Service, error) {
+func New(db *sqlite.DB, authnSvc *authn.Service, authzSvc *authz.Service, usersSvc *users.Service, quiet, verbose, debug bool) (*Service, error) {
 	if authzSvc == nil {
 		authzSvc = authz.New(db)
 	}
@@ -32,13 +32,17 @@ func New(db *sqlite.DB, authnSvc *authn.Service, authzSvc *authz.Service, usersS
 		authnSvc = authn.New(db, authzSvc)
 	}
 	if usersSvc == nil {
-		ianaSvc, err := iana.New(db)
+		ianaSvc, err := iana.New(db, quiet, verbose, debug)
 		if err != nil {
 			return nil, errors.Join(fmt.Errorf("new iana service"), err)
 		}
 		usersSvc = users.New(db, authnSvc, authzSvc, ianaSvc)
 	}
 	return &Service{db: db, authnSvc: authnSvc, authzSvc: authzSvc, usersSvc: usersSvc}, nil
+}
+
+func (s *Service) CreateGame() (domains.ID, error) {
+	panic("!")
 }
 
 func (s *Service) ReadClanByGameIdAndClanNo(gameId domains.GameID, clanNo int, quiet, verbose, debug bool) (*domains.Clan, error) {
@@ -89,14 +93,13 @@ func (s *Service) ReadGames() ([]*domains.Game, error) {
 			ID:          domains.GameID(row.GameID),
 			Code:        row.Code,
 			Description: row.Description,
-			IsActive:    row.IsActive,
+			IsActive:    true,
 			ActiveTurn: &domains.Turn{
-				ID:        domains.TurnID(row.ActiveTurnID),
-				Year:      int(row.ActiveTurnYear),
-				Month:     int(row.ActiveTurnMonth),
-				No:        int(row.ActiveTurnNo),
-				OrdersDue: time.Time{},
+				ID:    row.ActiveTurn,
+				Year:  int(row.TurnYear),
+				Month: int(row.TurnMonth),
 			},
+			OrdersDue: time.Time{},
 		}
 		games = append(games, game)
 	}
@@ -126,10 +129,25 @@ func (s *Service) ReadClansByGame(gameId domains.GameID, quiet, verbose, debug b
 	return clans, nil
 }
 
-func (s *Service) GameIdClanNoToClan(id domains.GameID, clanNo int) (*domains.Clan, error) {
-	return nil, domains.ErrNotImplemented
+func (s *Service) GameIdClanNoToClan(gameId domains.GameID, clanNo int) (*domains.Clan, error) {
+	row, err := s.db.Queries().ReadClanByGameIdClanNo(s.db.Context(), sqlc.ReadClanByGameIdClanNoParams{
+		GameID: int64(gameId),
+		ClanNo: int64(clanNo),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domains.ErrNotFound
+		}
+		return nil, errors.Join(domains.ErrDatabaseError, err)
+	}
+	return &domains.Clan{
+		GameID: gameId,
+		UserID: domains.ID(row.UserID),
+		ClanID: domains.ID(row.ClanID),
+		ClanNo: int(row.Clan),
+	}, nil
 }
 
-func (s *Service) GameCodeYearMonthToGameTurnId(code, yearMonth string) (domains.GameID, domains.TurnID, error) {
+func (s *Service) GameCodeYearMonthToGameTurnId(code, yearMonth string) (domains.GameID, string, error) {
 	return domains.InvalidGameID, domains.InvalidTurnID, domains.ErrNotImplemented
 }

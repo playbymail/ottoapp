@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/playbymail/ottoapp/backend/domains"
 )
 
 // Games is a map of Code to Game data
@@ -17,19 +20,18 @@ type Game struct {
 	// Code is the unique identifier for a game
 	Code string
 	// Description is a short description of the game
-	Description string
-	// Clans is a map of Handle to ClanNo
-	Clans map[string]int
-	// Turns is a map of TurnId (yyyy-mm) to Turn data
-	Turns map[string]*Turn
+	Description           string
+	SetupTurn, ActiveTurn struct {
+		Year, Month int
+	}
+	OrdersDue time.Time
+	// Clans is a map of Handle to ClanSetup
+	Clans map[string]ClanSetup
 }
 
-type Turn struct {
-	Id        string
-	Year      int
-	Month     int
-	No        int
-	OrdersDue time.Time
+type ClanSetup struct {
+	ClanNo    int    `json:"clan-no,omitempty"`
+	SetupTurn string `json:"setup-turn,omitempty"`
 }
 
 func LoadGames(path string) (Games, error) {
@@ -39,16 +41,12 @@ func LoadGames(path string) (Games, error) {
 	}
 
 	jsonGames := map[string]*struct {
-		Code        string         `json:"code"`
-		Description string         `json:"description"`
-		Clans       map[string]int `json:"clans"`
-		Turns       map[string]*struct {
-			Id        string `json:"id"`
-			Year      int    `json:"year"`
-			Month     int    `json:"month"`
-			No        int    `json:"no"`
-			OrdersDue string `json:"orders-due"`
-		} `json:"turns"`
+		Code        string               `json:"code"`
+		Description string               `json:"description"`
+		SetupTurn   string               `json:"setup-turn"`
+		ActiveTurn  string               `json:"active-turn"`
+		OrdersDue   string               `json:"orders-due,omitempty"`
+		Clans       map[string]ClanSetup `json:"clans"`
 	}{}
 	err = json.Unmarshal(data, &jsonGames)
 	if err != nil {
@@ -60,26 +58,29 @@ func LoadGames(path string) (Games, error) {
 		game := &Game{
 			Code:        strings.ToUpper(code),
 			Description: jsonGame.Description,
-			Clans:       map[string]int{},
-			Turns:       map[string]*Turn{},
+			Clans:       map[string]ClanSetup{},
+		}
+		if jsonGame.SetupTurn == "" {
+			game.SetupTurn.Year, game.SetupTurn.Month = 899, 12
+		} else if game.SetupTurn.Year, game.SetupTurn.Month, err = yearMonthHelper(jsonGame.SetupTurn); err != nil {
+			return nil, fmt.Errorf("%s: setup %q: invalid", game.Code, jsonGame.SetupTurn)
+		}
+		if jsonGame.ActiveTurn == "" {
+			game.ActiveTurn = game.SetupTurn
+		} else if game.ActiveTurn.Year, game.ActiveTurn.Month, err = yearMonthHelper(jsonGame.ActiveTurn); err != nil {
+			return nil, fmt.Errorf("%s: active %q: invalid", game.Code, jsonGame.ActiveTurn)
+		}
+		if jsonGame.OrdersDue != "" {
+			game.OrdersDue, err = ianaTimezoneHelper(jsonGame.OrdersDue)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", game.Code, err)
+			}
 		}
 		for handle, clan := range jsonGame.Clans {
+			if clan.SetupTurn == "" {
+				clan.SetupTurn = fmt.Sprintf("%04d-%02d", game.SetupTurn.Year, game.SetupTurn.Month)
+			}
 			game.Clans[handle] = clan
-		}
-		for _, jsonGameTurn := range jsonGame.Turns {
-			turn := &Turn{
-				Id:    fmt.Sprintf("%04d-%02d", jsonGameTurn.Year, jsonGameTurn.Month),
-				Year:  jsonGameTurn.Year,
-				Month: jsonGameTurn.Month,
-				No:    jsonGameTurn.No,
-			}
-			if jsonGameTurn.OrdersDue != "" {
-				turn.OrdersDue, err = ianaTimezoneHelper(jsonGameTurn.OrdersDue)
-				if err != nil {
-					return nil, fmt.Errorf("%s: %w", game.Code, err)
-				}
-			}
-			game.Turns[turn.Id] = turn
 		}
 		games[game.Code] = game
 	}
@@ -119,4 +120,22 @@ func ianaTimezoneHelper(s string) (time.Time, error) {
 	}
 
 	return t.UTC(), nil
+}
+
+func yearMonthHelper(yearMonth string) (year, month int, err error) {
+	if len(yearMonth) != 7 || yearMonth[4] != '-' {
+		return 0, 0, domains.ErrBadInput
+	}
+	year, err = strconv.Atoi(yearMonth[:4])
+	if err != nil {
+		return 0, 0, fmt.Errorf("bad year: %w", err)
+	}
+	month, err = strconv.Atoi(yearMonth[5:])
+	if err != nil {
+		return 0, 0, fmt.Errorf("bad month: %w", err)
+	}
+	if year < 899 || (year == 899 && month != 12) || (month < 1 || month > 12) {
+		return 0, 0, domains.ErrBadInput
+	}
+	return year, month, nil
 }

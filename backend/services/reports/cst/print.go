@@ -128,8 +128,8 @@ func (p *printer) printUnitLine(n *UnitLineNode) {
 	p.printToken("Keyword", n.Keyword)
 	p.printToken("UnitID", n.UnitID)
 	p.printToken("Note", n.Note)
-	p.printCoords("CurrentHex", n.CurrentHex)
-	p.printCoords("PreviousHex", n.PreviousHex)
+	p.printCoords("CurrentCoords", n.CurrentHex)
+	p.printCoords("PreviousCoords", n.PreviousHex)
 
 	p.printErrors(n.errors)
 

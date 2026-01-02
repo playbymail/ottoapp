@@ -10,32 +10,73 @@ import (
 )
 
 const createGame = `-- name: CreateGame :one
-INSERT INTO games (code, description, active_turn_id, setup_turn_id, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+INSERT INTO games (code, description, active_turn, setup_turn, orders_due, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+ON CONFLICT (code)
+    DO UPDATE SET description = excluded.description,
+                  active_turn = excluded.active_turn,
+                  setup_turn  = excluded.setup_turn,
+                  orders_due  = excluded.orders_due,
+                  updated_at  = excluded.updated_at
 RETURNING game_id
 `
 
 type CreateGameParams struct {
-	Code         string
-	Description  string
-	ActiveTurnID int64
-	SetupTurnID  int64
-	CreatedAt    int64
-	UpdatedAt    int64
+	Code        string
+	Description string
+	ActiveTurn  string
+	SetupTurn   string
+	OrdersDue   int64
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createGame,
 		arg.Code,
 		arg.Description,
-		arg.ActiveTurnID,
-		arg.SetupTurnID,
+		arg.ActiveTurn,
+		arg.SetupTurn,
+		arg.OrdersDue,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 	var game_id int64
 	err := row.Scan(&game_id)
 	return game_id, err
+}
+
+const createGameTurn = `-- name: CreateGameTurn :exec
+INSERT INTO game_turns(game_id, turn, turn_year, turn_month, turn_no, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+ON CONFLICT (game_id, turn)
+    DO UPDATE SET turn_year  = excluded.turn_year,
+                  turn_month = excluded.turn,
+                  turn_no    = excluded.turn_no,
+                  updated_at = excluded.updated_at
+`
+
+type CreateGameTurnParams struct {
+	GameID    int64
+	Turn      string
+	TurnYear  int64
+	TurnMonth int64
+	TurnNo    int64
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+func (q *Queries) CreateGameTurn(ctx context.Context, arg CreateGameTurnParams) error {
+	_, err := q.db.ExecContext(ctx, createGameTurn,
+		arg.GameID,
+		arg.Turn,
+		arg.TurnYear,
+		arg.TurnMonth,
+		arg.TurnNo,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }
 
 const deleteGame = `-- name: DeleteGame :exec
@@ -50,31 +91,32 @@ func (q *Queries) DeleteGame(ctx context.Context, gameID int64) error {
 }
 
 const readGame = `-- name: ReadGame :one
+;
+
 SELECT games.game_id,
        games.code,
-       games.is_active,
        games.description,
-       active_turn.turn_id    AS active_turn_id,
-       active_turn.turn_year  AS active_turn_year,
-       active_turn.turn_month AS active_turn_month,
-       active_turn.turn_no    AS active_turn_no,
-       active_turn.orders_due AS orders_due
+       games.active_turn,
+       game_turns.turn_year,
+       game_turns.turn_month,
+       games.setup_turn,
+       games.orders_due
 FROM games,
-     game_turns AS active_turn
+     game_turns
 WHERE games.game_id = ?1
-  AND active_turn.turn_id = games.active_turn
+  AND games.game_id = game_turns.game_id
+  AND game_turns.turn = games.active_turn
 `
 
 type ReadGameRow struct {
-	GameID          int64
-	Code            string
-	IsActive        bool
-	Description     string
-	ActiveTurnID    int64
-	ActiveTurnYear  int64
-	ActiveTurnMonth int64
-	ActiveTurnNo    int64
-	OrdersDue       int64
+	GameID      int64
+	Code        string
+	Description string
+	ActiveTurn  string
+	TurnYear    int64
+	TurnMonth   int64
+	SetupTurn   string
+	OrdersDue   int64
 }
 
 func (q *Queries) ReadGame(ctx context.Context, gameID int64) (ReadGameRow, error) {
@@ -83,12 +125,11 @@ func (q *Queries) ReadGame(ctx context.Context, gameID int64) (ReadGameRow, erro
 	err := row.Scan(
 		&i.GameID,
 		&i.Code,
-		&i.IsActive,
 		&i.Description,
-		&i.ActiveTurnID,
-		&i.ActiveTurnYear,
-		&i.ActiveTurnMonth,
-		&i.ActiveTurnNo,
+		&i.ActiveTurn,
+		&i.TurnYear,
+		&i.TurnMonth,
+		&i.SetupTurn,
 		&i.OrdersDue,
 	)
 	return i, err
@@ -97,28 +138,27 @@ func (q *Queries) ReadGame(ctx context.Context, gameID int64) (ReadGameRow, erro
 const readGames = `-- name: ReadGames :many
 SELECT games.game_id,
        games.code,
-       games.is_active,
        games.description,
-       active_turn.turn_id    AS active_turn_id,
-       active_turn.turn_year  AS active_turn_year,
-       active_turn.turn_month AS active_turn_month,
-       active_turn.turn_no    AS active_turn_no,
-       active_turn.orders_due AS orders_due
+       games.active_turn,
+       game_turns.turn_year,
+       game_turns.turn_month,
+       games.setup_turn,
+       games.orders_due
 FROM games,
-     game_turns AS active_turn
-WHERE active_turn.turn_id = games.active_turn
+     game_turns
+WHERE games.game_id = game_turns.game_id
+  AND game_turns.turn = games.active_turn
 `
 
 type ReadGamesRow struct {
-	GameID          int64
-	Code            string
-	IsActive        bool
-	Description     string
-	ActiveTurnID    int64
-	ActiveTurnYear  int64
-	ActiveTurnMonth int64
-	ActiveTurnNo    int64
-	OrdersDue       int64
+	GameID      int64
+	Code        string
+	Description string
+	ActiveTurn  string
+	TurnYear    int64
+	TurnMonth   int64
+	SetupTurn   string
+	OrdersDue   int64
 }
 
 func (q *Queries) ReadGames(ctx context.Context) ([]ReadGamesRow, error) {
@@ -133,12 +173,11 @@ func (q *Queries) ReadGames(ctx context.Context) ([]ReadGamesRow, error) {
 		if err := rows.Scan(
 			&i.GameID,
 			&i.Code,
-			&i.IsActive,
 			&i.Description,
-			&i.ActiveTurnID,
-			&i.ActiveTurnYear,
-			&i.ActiveTurnMonth,
-			&i.ActiveTurnNo,
+			&i.ActiveTurn,
+			&i.TurnYear,
+			&i.TurnMonth,
+			&i.SetupTurn,
 			&i.OrdersDue,
 		); err != nil {
 			return nil, err
@@ -154,55 +193,48 @@ func (q *Queries) ReadGames(ctx context.Context) ([]ReadGamesRow, error) {
 	return items, nil
 }
 
+const updateGame = `-- name: UpdateGame :exec
+UPDATE games
+SET active_turn = ?1,
+    setup_turn  = ?2,
+    orders_due  = ?3,
+    updated_at  = ?4
+WHERE game_id = ?5
+`
+
+type UpdateGameParams struct {
+	ActiveTurn string
+	SetupTurn  string
+	OrdersDue  int64
+	UpdatedAt  int64
+	GameID     int64
+}
+
+func (q *Queries) UpdateGame(ctx context.Context, arg UpdateGameParams) error {
+	_, err := q.db.ExecContext(ctx, updateGame,
+		arg.ActiveTurn,
+		arg.SetupTurn,
+		arg.OrdersDue,
+		arg.UpdatedAt,
+		arg.GameID,
+	)
+	return err
+}
+
 const updateGameActiveTurn = `-- name: UpdateGameActiveTurn :exec
 UPDATE games
-SET active_turn_id = ?1,
-    updated_at     = ?2
+SET active_turn = ?1,
+    updated_at  = ?2
 WHERE game_id = ?3
 `
 
 type UpdateGameActiveTurnParams struct {
-	ActiveTurnID int64
-	UpdatedAt    int64
-	GameID       int64
+	Turn      string
+	UpdatedAt int64
+	GameID    int64
 }
 
 func (q *Queries) UpdateGameActiveTurn(ctx context.Context, arg UpdateGameActiveTurnParams) error {
-	_, err := q.db.ExecContext(ctx, updateGameActiveTurn, arg.ActiveTurnID, arg.UpdatedAt, arg.GameID)
+	_, err := q.db.ExecContext(ctx, updateGameActiveTurn, arg.Turn, arg.UpdatedAt, arg.GameID)
 	return err
-}
-
-const upsertGame = `-- name: UpsertGame :one
-INSERT INTO games (code, description, active_turn_id, setup_turn_id, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-ON CONFLICT (code) DO UPDATE
-    SET description    = excluded.description,
-        is_active      = excluded.is_active,
-        active_turn_id = excluded.active_turn_id,
-        setup_turn_id  = excluded.setup_turn_id,
-        updated_at     = excluded.updated_at
-RETURNING game_id
-`
-
-type UpsertGameParams struct {
-	Code         string
-	Description  string
-	ActiveTurnID int64
-	SetupTurnID  int64
-	CreatedAt    int64
-	UpdatedAt    int64
-}
-
-func (q *Queries) UpsertGame(ctx context.Context, arg UpsertGameParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, upsertGame,
-		arg.Code,
-		arg.Description,
-		arg.ActiveTurnID,
-		arg.SetupTurnID,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	var game_id int64
-	err := row.Scan(&game_id)
-	return game_id, err
 }
