@@ -107,8 +107,6 @@ func main() {
 
 	cmdRoot.AddCommand(cmdGenerate())
 
-	cmdRoot.AddCommand(cmdImport())
-
 	cmdRoot.AddCommand(cmdPhrase())
 
 	var cmdReport = &cobra.Command{
@@ -122,7 +120,7 @@ func main() {
 	cmdReportParse.Flags().Bool("docxml-only", false, "parse to DocXML only")
 
 	cmdRoot.AddCommand(cmdRun())
-
+	cmdRoot.AddCommand(cmdTest())
 	cmdRoot.AddCommand(cmdSync())
 
 	var cmdUser = &cobra.Command{

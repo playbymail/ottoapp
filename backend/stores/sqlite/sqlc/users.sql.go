@@ -11,9 +11,17 @@ import (
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (handle,
-                   email,
                    username,
+                   email,
+                   email_opt_in,
                    timezone,
+                   is_active,
+                   is_admin,
+                   is_gm,
+                   is_guest,
+                   is_player,
+                   is_service,
+                   is_user,
                    created_at,
                    updated_at)
 VALUES (?1,
@@ -21,25 +29,63 @@ VALUES (?1,
         ?3,
         ?4,
         ?5,
-        ?6)
+        ?6,
+        ?7,
+        ?8,
+        ?9,
+        ?10,
+        ?11,
+        ?12,
+        ?13,
+        ?14)
+ON CONFLICT (user_id) DO UPDATE
+    SET handle       = excluded.handle,
+        username     = excluded.username,
+        email        = excluded.email,
+        email_opt_in = excluded.email_opt_in,
+        timezone     = excluded.timezone,
+        is_active    = excluded.is_active,
+        is_admin     = excluded.is_admin,
+        is_gm        = excluded.is_gm,
+        is_guest     = excluded.is_guest,
+        is_player    = excluded.is_player,
+        is_service   = excluded.is_service,
+        is_user      = excluded.is_user,
+        updated_at   = excluded.updated_at
 RETURNING user_id
 `
 
 type CreateUserParams struct {
-	Handle    string
-	Email     string
-	Username  string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsUser     bool
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createUser,
 		arg.Handle,
-		arg.Email,
 		arg.Username,
+		arg.Email,
+		arg.EmailOptIn,
 		arg.Timezone,
+		arg.IsActive,
+		arg.IsAdmin,
+		arg.IsGm,
+		arg.IsGuest,
+		arg.IsPlayer,
+		arg.IsService,
+		arg.IsUser,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -48,38 +94,149 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, 
 	return user_id, err
 }
 
-const readEmailByUserId = `-- name: ReadEmailByUserId :one
-SELECT email
+const readUserByEmail = `-- name: ReadUserByEmail :one
+SELECT user_id,
+       handle,
+       username,
+       email,
+       email_opt_in,
+       timezone,
+       is_active,
+       is_admin,
+       is_gm,
+       is_guest,
+       is_player,
+       is_service,
+       is_sysop,
+       is_user,
+       created_at,
+       updated_at
 FROM users
-WHERE user_id = ?1
+WHERE email = ?1
 `
 
-func (q *Queries) ReadEmailByUserId(ctx context.Context, userID int64) (string, error) {
-	row := q.db.QueryRowContext(ctx, readEmailByUserId, userID)
-	var email string
-	err := row.Scan(&email)
-	return email, err
+type ReadUserByEmailRow struct {
+	UserID     int64
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsSysop    bool
+	IsUser     bool
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
-const readHandleByUserId = `-- name: ReadHandleByUserId :one
-SELECT handle
+func (q *Queries) ReadUserByEmail(ctx context.Context, email string) (ReadUserByEmailRow, error) {
+	row := q.db.QueryRowContext(ctx, readUserByEmail, email)
+	var i ReadUserByEmailRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Handle,
+		&i.Username,
+		&i.Email,
+		&i.EmailOptIn,
+		&i.Timezone,
+		&i.IsActive,
+		&i.IsAdmin,
+		&i.IsGm,
+		&i.IsGuest,
+		&i.IsPlayer,
+		&i.IsService,
+		&i.IsSysop,
+		&i.IsUser,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const readUserByHandle = `-- name: ReadUserByHandle :one
+SELECT user_id,
+       handle,
+       username,
+       email,
+       email_opt_in,
+       timezone,
+       is_active,
+       is_admin,
+       is_gm,
+       is_guest,
+       is_player,
+       is_service,
+       is_sysop,
+       is_user,
+       created_at,
+       updated_at
 FROM users
-WHERE user_id = ?1
+WHERE handle = ?1
 `
 
-func (q *Queries) ReadHandleByUserId(ctx context.Context, userID int64) (string, error) {
-	row := q.db.QueryRowContext(ctx, readHandleByUserId, userID)
-	var handle string
-	err := row.Scan(&handle)
-	return handle, err
+type ReadUserByHandleRow struct {
+	UserID     int64
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsSysop    bool
+	IsUser     bool
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
+func (q *Queries) ReadUserByHandle(ctx context.Context, handle string) (ReadUserByHandleRow, error) {
+	row := q.db.QueryRowContext(ctx, readUserByHandle, handle)
+	var i ReadUserByHandleRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Handle,
+		&i.Username,
+		&i.Email,
+		&i.EmailOptIn,
+		&i.Timezone,
+		&i.IsActive,
+		&i.IsAdmin,
+		&i.IsGm,
+		&i.IsGuest,
+		&i.IsPlayer,
+		&i.IsService,
+		&i.IsSysop,
+		&i.IsUser,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const readUserByUserId = `-- name: ReadUserByUserId :one
 SELECT user_id,
+       handle,
        username,
        email,
-       handle,
+       email_opt_in,
        timezone,
+       is_active,
+       is_admin,
+       is_gm,
+       is_guest,
+       is_player,
+       is_service,
+       is_sysop,
+       is_user,
        created_at,
        updated_at
 FROM users
@@ -87,13 +244,22 @@ WHERE user_id = ?1
 `
 
 type ReadUserByUserIdRow struct {
-	UserID    int64
-	Username  string
-	Email     string
-	Handle    string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
+	UserID     int64
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsSysop    bool
+	IsUser     bool
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
 func (q *Queries) ReadUserByUserId(ctx context.Context, userID int64) (ReadUserByUserIdRow, error) {
@@ -101,63 +267,95 @@ func (q *Queries) ReadUserByUserId(ctx context.Context, userID int64) (ReadUserB
 	var i ReadUserByUserIdRow
 	err := row.Scan(
 		&i.UserID,
+		&i.Handle,
 		&i.Username,
 		&i.Email,
-		&i.Handle,
+		&i.EmailOptIn,
 		&i.Timezone,
+		&i.IsActive,
+		&i.IsAdmin,
+		&i.IsGm,
+		&i.IsGuest,
+		&i.IsPlayer,
+		&i.IsService,
+		&i.IsSysop,
+		&i.IsUser,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const readUserIdByEmail = `-- name: ReadUserIdByEmail :one
-SELECT user_id
+const readUserRoles = `-- name: ReadUserRoles :one
+SELECT is_active,
+       is_admin,
+       is_gm,
+       is_guest,
+       is_player,
+       is_service,
+       is_sysop,
+       is_user
 FROM users
-WHERE email = ?1
+WHERE user_id = ?1
 `
 
-func (q *Queries) ReadUserIdByEmail(ctx context.Context, email string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, readUserIdByEmail, email)
-	var user_id int64
-	err := row.Scan(&user_id)
-	return user_id, err
+type ReadUserRolesRow struct {
+	IsActive  bool
+	IsAdmin   bool
+	IsGm      bool
+	IsGuest   bool
+	IsPlayer  bool
+	IsService bool
+	IsSysop   bool
+	IsUser    bool
 }
 
-const readUserIdByHandle = `-- name: ReadUserIdByHandle :one
-SELECT user_id
-FROM users
-WHERE handle = ?1
-`
-
-// ReadUserIdByHandle returns the id of the user with the given handle.
-func (q *Queries) ReadUserIdByHandle(ctx context.Context, handle string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, readUserIdByHandle, handle)
-	var user_id int64
-	err := row.Scan(&user_id)
-	return user_id, err
+func (q *Queries) ReadUserRoles(ctx context.Context, userID int64) (ReadUserRolesRow, error) {
+	row := q.db.QueryRowContext(ctx, readUserRoles, userID)
+	var i ReadUserRolesRow
+	err := row.Scan(
+		&i.IsActive,
+		&i.IsAdmin,
+		&i.IsGm,
+		&i.IsGuest,
+		&i.IsPlayer,
+		&i.IsService,
+		&i.IsSysop,
+		&i.IsUser,
+	)
+	return i, err
 }
 
-const readUserIdByUsername = `-- name: ReadUserIdByUsername :one
-SELECT user_id
+const readUserSecret = `-- name: ReadUserSecret :one
+SELECT hashed_password
 FROM users
-WHERE username = ?1
+WHERE user_id = ?1
 `
 
-// ReadUserIdByUsername returns the id of the user with the given username.
-func (q *Queries) ReadUserIdByUsername(ctx context.Context, username string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, readUserIdByUsername, username)
-	var user_id int64
-	err := row.Scan(&user_id)
-	return user_id, err
+// ReadUserSecret returns the password for a user.
+// The password is stored as a bcrypt hash.
+func (q *Queries) ReadUserSecret(ctx context.Context, userID int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, readUserSecret, userID)
+	var hashed_password string
+	err := row.Scan(&hashed_password)
+	return hashed_password, err
 }
 
 const readUsers = `-- name: ReadUsers :many
 SELECT user_id,
+       handle,
        username,
        email,
-       handle,
+       email_opt_in,
        timezone,
+       is_active,
+       is_admin,
+       is_gm,
+       is_guest,
+       is_player,
+       is_service,
+       is_sysop,
+       is_user,
        created_at,
        updated_at
 FROM users
@@ -165,13 +363,22 @@ ORDER BY username
 `
 
 type ReadUsersRow struct {
-	UserID    int64
-	Username  string
-	Email     string
-	Handle    string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
+	UserID     int64
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsSysop    bool
+	IsUser     bool
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
 func (q *Queries) ReadUsers(ctx context.Context) ([]ReadUsersRow, error) {
@@ -185,10 +392,19 @@ func (q *Queries) ReadUsers(ctx context.Context) ([]ReadUsersRow, error) {
 		var i ReadUsersRow
 		if err := rows.Scan(
 			&i.UserID,
+			&i.Handle,
 			&i.Username,
 			&i.Email,
-			&i.Handle,
+			&i.EmailOptIn,
 			&i.Timezone,
+			&i.IsActive,
+			&i.IsAdmin,
+			&i.IsGm,
+			&i.IsGuest,
+			&i.IsPlayer,
+			&i.IsService,
+			&i.IsSysop,
+			&i.IsUser,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -207,10 +423,19 @@ func (q *Queries) ReadUsers(ctx context.Context) ([]ReadUsersRow, error) {
 
 const readUsersVisibleToActor = `-- name: ReadUsersVisibleToActor :many
 SELECT user_id,
+       handle,
        username,
        email,
-       handle,
+       email_opt_in,
        timezone,
+       is_active,
+       is_admin,
+       is_gm,
+       is_guest,
+       is_player,
+       is_service,
+       is_sysop,
+       is_user,
        created_at,
        updated_at
 FROM users
@@ -227,13 +452,22 @@ type ReadUsersVisibleToActorParams struct {
 }
 
 type ReadUsersVisibleToActorRow struct {
-	UserID    int64
-	Username  string
-	Email     string
-	Handle    string
-	Timezone  string
-	CreatedAt int64
-	UpdatedAt int64
+	UserID     int64
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsSysop    bool
+	IsUser     bool
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
 func (q *Queries) ReadUsersVisibleToActor(ctx context.Context, arg ReadUsersVisibleToActorParams) ([]ReadUsersVisibleToActorRow, error) {
@@ -247,10 +481,19 @@ func (q *Queries) ReadUsersVisibleToActor(ctx context.Context, arg ReadUsersVisi
 		var i ReadUsersVisibleToActorRow
 		if err := rows.Scan(
 			&i.UserID,
+			&i.Handle,
 			&i.Username,
 			&i.Email,
-			&i.Handle,
+			&i.EmailOptIn,
 			&i.Timezone,
+			&i.IsActive,
+			&i.IsAdmin,
+			&i.IsGm,
+			&i.IsGuest,
+			&i.IsPlayer,
+			&i.IsService,
+			&i.IsSysop,
+			&i.IsUser,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -269,19 +512,26 @@ func (q *Queries) ReadUsersVisibleToActor(ctx context.Context, arg ReadUsersVisi
 
 const updateEmailByUserId = `-- name: UpdateEmailByUserId :exec
 UPDATE users
-SET email      = LOWER(?1),
-    updated_at = ?2
-WHERE user_id = ?3
+SET email        = LOWER(?1),
+    email_opt_in = ?2,
+    updated_at   = ?3
+WHERE user_id = ?4
 `
 
 type UpdateEmailByUserIdParams struct {
-	Email     string
-	UpdatedAt int64
-	UserID    int64
+	Email      string
+	EmailOptIn bool
+	UpdatedAt  int64
+	UserID     int64
 }
 
 func (q *Queries) UpdateEmailByUserId(ctx context.Context, arg UpdateEmailByUserIdParams) error {
-	_, err := q.db.ExecContext(ctx, updateEmailByUserId, arg.Email, arg.UpdatedAt, arg.UserID)
+	_, err := q.db.ExecContext(ctx, updateEmailByUserId,
+		arg.Email,
+		arg.EmailOptIn,
+		arg.UpdatedAt,
+		arg.UserID,
+	)
 	return err
 }
 
@@ -321,34 +571,264 @@ func (q *Queries) UpdateTimezoneByUserId(ctx context.Context, arg UpdateTimezone
 	return err
 }
 
-const updateUserByUserId = `-- name: UpdateUserByUserId :exec
+const updateUser = `-- name: UpdateUser :exec
 UPDATE users
-SET email      = LOWER(?1),
-    handle     = LOWER(?2),
-    timezone   = ?3,
-    username   = ?4,
-    updated_at = ?5
-WHERE user_id = ?6
+SET handle       = ?1,
+    username     = ?2,
+    email        = ?3,
+    email_opt_in = ?4,
+    timezone     = ?5,
+    is_active    = ?6,
+    is_admin     = ?7,
+    is_gm        = ?8,
+    is_guest     = ?9,
+    is_player    = ?10,
+    is_service   = ?11,
+    is_sysop     = ?12,
+    is_user      = ?13,
+    updated_at   = ?14
+WHERE ?15 = ?15
 `
 
-type UpdateUserByUserIdParams struct {
-	Email     string
-	Handle    string
-	Timezone  string
-	Username  string
+type UpdateUserParams struct {
+	Handle     string
+	Username   string
+	Email      string
+	EmailOptIn bool
+	Timezone   string
+	IsActive   bool
+	IsAdmin    bool
+	IsGm       bool
+	IsGuest    bool
+	IsPlayer   bool
+	IsService  bool
+	IsSysop    bool
+	IsUser     bool
+	UpdatedAt  int64
+	UserID     interface{}
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	_, err := q.db.ExecContext(ctx, updateUser,
+		arg.Handle,
+		arg.Username,
+		arg.Email,
+		arg.EmailOptIn,
+		arg.Timezone,
+		arg.IsActive,
+		arg.IsAdmin,
+		arg.IsGm,
+		arg.IsGuest,
+		arg.IsPlayer,
+		arg.IsService,
+		arg.IsSysop,
+		arg.IsUser,
+		arg.UpdatedAt,
+		arg.UserID,
+	)
+	return err
+}
+
+const updateUserActiveRole = `-- name: UpdateUserActiveRole :exec
+UPDATE users
+SET is_active  = ?1,
+    updated_at = ?2
+WHERE user_id = ?3
+  AND is_sysop = 0
+`
+
+type UpdateUserActiveRoleParams struct {
+	HasRole   bool
 	UpdatedAt int64
 	UserID    int64
 }
 
-func (q *Queries) UpdateUserByUserId(ctx context.Context, arg UpdateUserByUserIdParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserByUserId,
-		arg.Email,
-		arg.Handle,
-		arg.Timezone,
-		arg.Username,
+func (q *Queries) UpdateUserActiveRole(ctx context.Context, arg UpdateUserActiveRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserActiveRole, arg.HasRole, arg.UpdatedAt, arg.UserID)
+	return err
+}
+
+const updateUserAdminRole = `-- name: UpdateUserAdminRole :exec
+UPDATE users
+SET is_admin   = ?1,
+    updated_at = ?2
+WHERE user_id = ?3
+  AND is_sysop = 0
+`
+
+type UpdateUserAdminRoleParams struct {
+	HasRole   bool
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserAdminRole(ctx context.Context, arg UpdateUserAdminRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserAdminRole, arg.HasRole, arg.UpdatedAt, arg.UserID)
+	return err
+}
+
+const updateUserGMRole = `-- name: UpdateUserGMRole :exec
+UPDATE users
+SET is_gm      = ?1,
+    updated_at = ?2
+WHERE user_id = ?3
+  AND is_sysop = 0
+`
+
+type UpdateUserGMRoleParams struct {
+	HasRole   bool
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserGMRole(ctx context.Context, arg UpdateUserGMRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserGMRole, arg.HasRole, arg.UpdatedAt, arg.UserID)
+	return err
+}
+
+const updateUserGuestRole = `-- name: UpdateUserGuestRole :exec
+UPDATE users
+SET is_active  = 1,
+    is_admin   = 0,
+    is_gm      = 0,
+    is_guest   = ?1,
+    is_player  = 0,
+    is_user    = 0,
+    updated_at = ?2
+WHERE user_id = ?3
+  AND is_sysop = 0
+`
+
+type UpdateUserGuestRoleParams struct {
+	HasRole   bool
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserGuestRole(ctx context.Context, arg UpdateUserGuestRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserGuestRole, arg.HasRole, arg.UpdatedAt, arg.UserID)
+	return err
+}
+
+const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
+UPDATE users
+SET last_login = ?1,
+    updated_at = ?2
+WHERE user_id = ?3
+`
+
+type UpdateUserLastLoginParams struct {
+	LastLogin int64
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserLastLogin(ctx context.Context, arg UpdateUserLastLoginParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserLastLogin, arg.LastLogin, arg.UpdatedAt, arg.UserID)
+	return err
+}
+
+const updateUserPlayerRole = `-- name: UpdateUserPlayerRole :exec
+UPDATE users
+SET is_player  = ?1,
+    updated_at = ?2
+WHERE user_id = ?3
+  AND is_sysop = 0
+`
+
+type UpdateUserPlayerRoleParams struct {
+	HasRole   bool
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserPlayerRole(ctx context.Context, arg UpdateUserPlayerRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserPlayerRole, arg.HasRole, arg.UpdatedAt, arg.UserID)
+	return err
+}
+
+const updateUserRoles = `-- name: UpdateUserRoles :exec
+UPDATE users
+SET is_active  = ?1,
+    is_admin   = ?2,
+    is_gm      = ?3,
+    is_guest   = ?4,
+    is_player  = ?5,
+    is_user    = ?6,
+    updated_at = ?7
+WHERE user_id = ?8
+  AND is_service = 0
+  AND is_sysop = 0
+`
+
+type UpdateUserRolesParams struct {
+	IsActive  bool
+	IsAdmin   bool
+	IsGm      bool
+	IsGuest   bool
+	IsPlayer  bool
+	IsUser    bool
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserRoles(ctx context.Context, arg UpdateUserRolesParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserRoles,
+		arg.IsActive,
+		arg.IsAdmin,
+		arg.IsGm,
+		arg.IsGuest,
+		arg.IsPlayer,
+		arg.IsUser,
 		arg.UpdatedAt,
 		arg.UserID,
 	)
+	return err
+}
+
+const updateUserSecret = `-- name: UpdateUserSecret :exec
+UPDATE users
+SET hashed_password    = ?1,
+    plaintext_password = ?2,
+    updated_at         = ?3
+WHERE user_id = ?4
+`
+
+type UpdateUserSecretParams struct {
+	HashedPassword    string
+	PlaintextPassword string
+	UpdatedAt         int64
+	UserID            int64
+}
+
+// UpdateUserSecret stores the secret for the user.
+// The password is stored as a bcrypt hash.
+func (q *Queries) UpdateUserSecret(ctx context.Context, arg UpdateUserSecretParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserSecret,
+		arg.HashedPassword,
+		arg.PlaintextPassword,
+		arg.UpdatedAt,
+		arg.UserID,
+	)
+	return err
+}
+
+const updateUserUserRole = `-- name: UpdateUserUserRole :exec
+UPDATE users
+SET is_user    = ?1,
+    updated_at = ?2
+WHERE user_id = ?3
+  AND is_sysop = 0
+`
+
+type UpdateUserUserRoleParams struct {
+	HasRole   bool
+	UpdatedAt int64
+	UserID    int64
+}
+
+func (q *Queries) UpdateUserUserRole(ctx context.Context, arg UpdateUserUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserUserRole, arg.HasRole, arg.UpdatedAt, arg.UserID)
 	return err
 }
 

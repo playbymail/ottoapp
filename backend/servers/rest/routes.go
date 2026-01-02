@@ -16,7 +16,7 @@ func Routes(s *Server, quiet, verbose, debug bool) http.Handler {
 	mux.HandleFunc("POST /api/login", handlePostLogin(s.services.authnSvc, s.services.authzSvc, s.services.sessionsSvc, s.services.usersSvc))
 	mux.HandleFunc("GET /api/session", handleGetSession(s.services.authzSvc, s.services.sessionsSvc))
 	mux.HandleFunc("POST /api/shutdown", s.handlePostShutdown(s.debug.shutdownKey))
-	mux.HandleFunc("GET /api/timezones", s.services.ianaSvc.HandleGetTimezones())
+	mux.HandleFunc("GET /api/timezones", s.services.ianaSvc.HandleGetTimezones(true, false, false))
 	mux.HandleFunc("GET /api/versions", s.getAllVersions())
 	mux.HandleFunc("GET /api/versions/{id}", s.getVersions())
 

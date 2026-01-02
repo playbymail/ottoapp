@@ -32,13 +32,13 @@ type Service struct {
 	usersSvc *users.Service
 }
 
-func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service) (*Service, error) {
+func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service, quiet, verbose, debug bool) (*Service, error) {
 	if authzSvc == nil {
 		authzSvc = authz.New(db)
 	}
 	if usersSvc == nil {
 		authnSvc := authn.New(db, authzSvc)
-		ianaSvc, err := iana.New(db)
+		ianaSvc, err := iana.New(db, quiet, verbose, debug)
 		if err != nil {
 			return nil, errors.Join(fmt.Errorf("new iana service"), err)
 		}
@@ -54,7 +54,7 @@ func New(db *sqlite.DB, authzSvc *authz.Service, usersSvc *users.Service) (*Serv
 // Owner is the clan will own the new document.
 func (s *Service) CreateDocument(actor *domains.Actor, owner *domains.Clan, doc *domains.Document, quiet, verbose, debug bool) (domains.ID, error) {
 	if debug {
-		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q)\n", actor.ID, owner.GameID, owner.UserID, doc.Path, doc.Type)
+		log.Printf("[documents] CreateDocument(%d, (%d, %d), %q, %q)\n", actor.ID, owner.GameID, owner.UserID, doc.Path, doc.Type)
 	}
 	if doc.Path != html.EscapeString(doc.Path) {
 		return domains.InvalidID, ErrInvalidPath
@@ -98,7 +98,7 @@ func (s *Service) CreateDocument(actor *domains.Actor, owner *domains.Clan, doc 
 	})
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			log.Printf("[documents] CreateDocument(%d, (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
+			log.Printf("[documents] CreateDocument(%d, (%d, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
 			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 		}
 		// document does not exist; okay to create
@@ -117,7 +117,7 @@ func (s *Service) CreateDocument(actor *domains.Actor, owner *domains.Clan, doc 
 		UpdatedAt:    updatedAt,
 	})
 	if err != nil {
-		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
+		log.Printf("[documents] CreateDocument(%d, (%d, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
@@ -131,18 +131,18 @@ func (s *Service) CreateDocument(actor *domains.Actor, owner *domains.Clan, doc 
 		UpdatedAt:     updatedAt,
 	})
 	if err != nil {
-		log.Printf("[documents] CreateDocument(%d, (%q, %d), (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, owner.GameID, owner.UserID, doc.Path, err)
+		log.Printf("[documents] CreateDocument(%d, (%d, %d), (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, owner.GameID, owner.UserID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
+		log.Printf("[documents] CreateDocument(%d, (%d, %d), %q) %v", actor.ID, owner.GameID, owner.UserID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
 	if debug {
-		log.Printf("[documents] CreateDocument(%d, (%q, %d), %q, %q) %d\n", actor.ID, owner.GameID, owner.UserID, doc.Path, doc.Type, documentId)
+		log.Printf("[documents] CreateDocument(%d, (%d, %d), %q, %q) %d\n", actor.ID, owner.GameID, owner.UserID, doc.Path, doc.Type, documentId)
 	}
 
 	return domains.ID(documentId), nil
@@ -157,7 +157,7 @@ func (s *Service) ReadDocument(actor *domains.Actor, owner *domains.Clan, docume
 	ctx := s.db.Context()
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
-		log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		log.Printf("[documents] ReadDocument(%d, (%d, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
 	defer tx.Rollback() // rollback if we return early; harmless after commit
@@ -169,12 +169,12 @@ func (s *Service) ReadDocument(actor *domains.Actor, owner *domains.Clan, docume
 		if _, ok := handles[id]; ok {
 			continue
 		}
-		handle, err := qtx.ReadHandleByUserId(ctx, int64(id))
+		user, err := qtx.ReadUserByUserId(ctx, int64(id))
 		if err != nil {
-			log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+			log.Printf("[documents] ReadDocument(%d, (%d, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 			return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", id), err)
 		}
-		handles[id] = handle
+		handles[id] = user.Handle
 	}
 
 	d, err := qtx.ReadDocumentContentsByIdAuthorized(s.db.Context(), sqlc.ReadDocumentContentsByIdAuthorizedParams{
@@ -185,7 +185,7 @@ func (s *Service) ReadDocument(actor *domains.Actor, owner *domains.Clan, docume
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domains.ErrNotAuthorized
 		}
-		log.Printf("[documents] ReadDocument(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		log.Printf("[documents] ReadDocument(%d, (%d, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
 
@@ -214,7 +214,7 @@ func (s *Service) ReadDocumentContents(actor *domains.Actor, owner *domains.Clan
 	ctx := s.db.Context()
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
-		log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		log.Printf("[documents] ReadDocumentContents(%d, (%d, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
 	defer tx.Rollback() // rollback if we return early; harmless after commit
@@ -226,12 +226,12 @@ func (s *Service) ReadDocumentContents(actor *domains.Actor, owner *domains.Clan
 		if _, ok := handles[id]; ok {
 			continue
 		}
-		handle, err := qtx.ReadHandleByUserId(ctx, int64(id))
+		user, err := qtx.ReadUserByUserId(ctx, int64(id))
 		if err != nil {
-			log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+			log.Printf("[documents] ReadDocumentContents(%d, (%d, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 			return nil, errors.Join(domains.ErrDatabaseError, err)
 		}
-		handles[id] = handle
+		handles[id] = user.Handle
 	}
 
 	d, err := qtx.ReadDocumentContentsByIdAuthorized(s.db.Context(), sqlc.ReadDocumentContentsByIdAuthorizedParams{
@@ -242,7 +242,7 @@ func (s *Service) ReadDocumentContents(actor *domains.Actor, owner *domains.Clan
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domains.ErrNotAuthorized
 		}
-		log.Printf("[documents] ReadDocumentContents(%d, (%q, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
+		log.Printf("[documents] ReadDocumentContents(%d, (%d, %d), %d) %v\n", actor.ID, owner.GameID, owner.ClanID, documentId, err)
 		return nil, errors.Join(domains.ErrDatabaseError, err)
 	}
 	var documentType domains.DocumentType
@@ -319,12 +319,12 @@ func (s *Service) ReadDocumentsByUser(actor *domains.Actor, userId domains.ID, d
 
 	// cache handles by user_id to avoid repeated database calls
 	handles := map[domains.ID]string{}
-	actorHandle, err := qtx.ReadHandleByUserId(ctx, int64(actor.ID))
+	user, err := qtx.ReadUserByUserId(ctx, int64(actor.ID))
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", actor.ID), err)
 	}
 	//log.Printf("[documents] GetAllDocumentsForUserAcrossGames(%d): actor %q\n", actor.ID, actorHandle)
-	handles[actor.ID] = actorHandle
+	handles[actor.ID] = user.Handle
 
 	// cache clans by clan_id to avoid repeated database calls
 	clans := map[domains.ID]*domains.Clan{}
@@ -349,11 +349,11 @@ func (s *Service) ReadDocumentsByUser(actor *domains.Actor, userId domains.ID, d
 		}
 		var ownerHandle string
 		if ownerHandle, ok = handles[ownerClan.UserID]; !ok {
-			ownerHandle, err = qtx.ReadHandleByUserId(ctx, int64(ownerClan.UserID))
+			user, err := qtx.ReadUserByUserId(ctx, int64(ownerClan.UserID))
 			if err != nil {
 				return nil, errors.Join(fmt.Errorf("GetUserHandle(%d)", ownerClan.UserID), err)
 			}
-			handles[ownerClan.UserID] = ownerHandle
+			handles[ownerClan.UserID] = user.Handle
 		}
 		view := &DocumentView{
 			ID:           fmt.Sprintf("%d", doc.DocumentID),
@@ -424,7 +424,7 @@ func (s *Service) ReplaceDocument(actor *domains.Actor, owner *domains.Clan, doc
 	ctx := s.db.Context()
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
-		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		log.Printf("[documents] ReplaceDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 	defer tx.Rollback() // rollback if we return early; harmless after commit
@@ -438,7 +438,7 @@ func (s *Service) ReplaceDocument(actor *domains.Actor, owner *domains.Clan, doc
 	})
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			log.Printf("[documents] ReplaceDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 		}
 	}
@@ -453,7 +453,7 @@ func (s *Service) ReplaceDocument(actor *domains.Actor, owner *domains.Clan, doc
 		UpdatedAt:    updatedAt,
 	})
 	if err != nil {
-		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		log.Printf("[documents] ReplaceDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
@@ -467,18 +467,18 @@ func (s *Service) ReplaceDocument(actor *domains.Actor, owner *domains.Clan, doc
 		UpdatedAt:     updatedAt,
 	})
 	if err != nil {
-		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		log.Printf("[documents] ReplaceDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		log.Printf("[documents] ReplaceDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 
 	if debug {
-		log.Printf("[documents] ReplaceDocument(%d, (%q, %d), %q) %d\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, documentId)
+		log.Printf("[documents] ReplaceDocument(%d, (%d, %d), %q) %d\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, documentId)
 	}
 
 	return domains.ID(documentId), nil
@@ -515,7 +515,7 @@ func (s *Service) SyncDocument(actor *domains.Actor, owner *domains.Clan, doc *d
 	ctx := s.db.Context()
 	tx, err := s.db.Stdlib().BeginTx(ctx, nil)
 	if err != nil {
-		log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+		log.Printf("[documents] SyncDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 		return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 	}
 	defer tx.Rollback() // rollback if we return early; harmless after commit
@@ -529,7 +529,7 @@ func (s *Service) SyncDocument(actor *domains.Actor, owner *domains.Clan, doc *d
 	})
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			log.Printf("[documents] SyncDocument(%d, (%q, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
+			log.Printf("[documents] SyncDocument(%d, (%d, %d), %q) %v\n", actor.ID, owner.GameID, owner.ClanID, doc.Path, err)
 			return domains.InvalidID, errors.Join(domains.ErrDatabaseError, err)
 		}
 

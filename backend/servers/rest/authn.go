@@ -138,9 +138,11 @@ func handlePostLogin(authnSvc *authn.Service, authzSvc *authz.Service, sessionsS
 
 		// ensure that we spend at least 500ms if the authentication path fails
 		timer := time.NewTimer(500 * time.Millisecond)
+		defer timer.Stop()
 
 		// authenticate
 		actorId, err := authnSvc.AuthenticateEmailCredentials(body.Email, body.Password)
+		log.Printf("%s %s: auth(%q, %q): %v\n", r.Method, r.URL.Path, body.Email, body.Password, err)
 		if err != nil {
 			log.Printf("%s %s: auth(%q, %q): %v\n", r.Method, r.URL.Path, body.Email, body.Password, err)
 			<-timer.C
@@ -148,6 +150,7 @@ func handlePostLogin(authnSvc *authn.Service, authzSvc *authz.Service, sessionsS
 			return
 		}
 		user, err := usersSvc.GetUserByID(actorId)
+		log.Printf("%s %s: getUser(%d): %v\n", r.Method, r.URL.Path, actorId, err)
 		if err != nil {
 			log.Printf("%s %s: getUser(%d): %v\n", r.Method, r.URL.Path, actorId, err)
 			<-timer.C

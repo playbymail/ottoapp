@@ -10,9 +10,14 @@ import (
 	"time"
 
 	"github.com/playbymail/ottoapp"
-	"github.com/playbymail/ottoapp/backend/make"
+	"github.com/playbymail/ottoapp/backend/iana"
+	"github.com/playbymail/ottoapp/backend/services/authn"
+	"github.com/playbymail/ottoapp/backend/services/authz"
 	"github.com/playbymail/ottoapp/backend/services/config"
+	"github.com/playbymail/ottoapp/backend/services/documents"
+	"github.com/playbymail/ottoapp/backend/services/games"
 	"github.com/playbymail/ottoapp/backend/services/sync"
+	"github.com/playbymail/ottoapp/backend/services/users"
 	"github.com/playbymail/ottoapp/backend/stores/sqlite"
 	"github.com/spf13/cobra"
 )
@@ -30,70 +35,8 @@ func cmdSync() *cobra.Command {
 	if err := addFlags(cmd); err != nil {
 		log.Fatal(err)
 	}
-	cmd.AddCommand(cmdSyncConfigFile())
 	cmd.AddCommand(cmdSyncExport())
 	cmd.AddCommand(cmdSyncImport())
-	return cmd
-}
-
-func cmdSyncConfigFile() *cobra.Command {
-	const checkVersion = true
-	configFileName := filepath.Join("config", "configuration.json")
-	addFlags := func(cmd *cobra.Command) error {
-		cmd.Flags().StringVar(&configFileName, "input", configFileName, "name of config file to sync")
-		return nil
-	}
-	cmd := &cobra.Command{
-		Use:          "config-file <path-to-tribenet-data>",
-		Short:        "update database from configuration file",
-		Long:         "Sync the database with the configuration file.",
-		SilenceUsage: true,
-		Args:         cobra.ExactArgs(1), // require path to TN3.1 root
-		RunE: func(cmd *cobra.Command, args []string) error {
-			started := time.Now()
-			path, err := filepath.Abs(args[0])
-			if err != nil {
-				return err
-			}
-			quiet, _ := cmd.Flags().GetBool("quiet")
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if quiet {
-				verbose = false
-			}
-
-			dbPath, err := cmd.Flags().GetString("db")
-			if err != nil {
-				return err
-			}
-			debug, err := cmd.Flags().GetBool("debug")
-			if err != nil {
-				return err
-			}
-			ctx := context.Background()
-			db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
-			if err != nil {
-				log.Fatalf("db: open: %v\n", err)
-			}
-			defer func() {
-				_ = db.Close()
-			}()
-			log.Printf("%s: connected\n", dbPath)
-
-			err = make.SyncConfigFile(db, path, configFileName, quiet, verbose, debug)
-			if err != nil {
-				return err
-			}
-			log.Printf("%s: synchronized to database\n", configFileName)
-
-			if showTiming, _ := cmd.Flags().GetBool("show-timing"); showTiming {
-				log.Printf("sync: config-file: completed in %v\n", time.Since(started))
-			}
-			return nil
-		},
-	}
-	if err := addFlags(cmd); err != nil {
-		log.Fatalf("%s: %v\n", cmd.Use, err)
-	}
 	return cmd
 }
 
@@ -104,63 +47,6 @@ func cmdSyncExport() *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   "export",
 		Short: "export files",
-	}
-	cmd.AddCommand(cmdSyncExportReportExtractFiles())
-	if err := addFlags(cmd); err != nil {
-		log.Fatal(err)
-	}
-	return cmd
-}
-
-func cmdSyncExportReportExtractFiles() *cobra.Command {
-	addFlags := func(cmd *cobra.Command) error {
-		return nil
-	}
-	var cmd = &cobra.Command{
-		Use:          "report-extract-files",
-		Short:        "export report extract files",
-		Long:         "export report export files",
-		SilenceUsage: true,
-		Args:         cobra.ExactArgs(1), // require path to TN3.1 root
-		RunE: func(cmd *cobra.Command, args []string) error {
-			const checkVersion = true
-			quiet, _ := cmd.Flags().GetBool("quiet")
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			debug, _ := cmd.Flags().GetBool("debug")
-			if quiet {
-				verbose = false
-			}
-
-			started := time.Now()
-			path, err := filepath.Abs(args[0])
-			if err != nil {
-				return err
-			}
-
-			dbPath, err := cmd.Flags().GetString("db")
-			if err != nil {
-				return err
-			}
-			ctx := context.Background()
-			db, err := sqlite.Open(ctx, dbPath, checkVersion, quiet, verbose, debug)
-			if err != nil {
-				log.Fatalf("db: open: %v\n", err)
-			}
-			defer func() {
-				_ = db.Close()
-			}()
-			log.Printf("%s: connected\n", dbPath)
-
-			err = make.ExportExtractFiles(db, path, quiet, verbose, debug)
-			if err != nil {
-				return err
-			}
-
-			if showTiming, _ := cmd.Flags().GetBool("show-timing"); showTiming {
-				log.Printf("export: report-extract-files: completed in %v\n", time.Since(started))
-			}
-			return nil
-		},
 	}
 	if err := addFlags(cmd); err != nil {
 		log.Fatal(err)
@@ -176,9 +62,10 @@ func cmdSyncImport() *cobra.Command {
 		Use:   "import",
 		Short: "import documents",
 	}
+
 	cmd.AddCommand(cmdSyncImportGames())
 	cmd.AddCommand(cmdSyncImportMapFiles())
-	cmd.AddCommand(cmdSyncImportReportFiles())
+	cmd.AddCommand(cmdSyncImportOttoAppConfig())
 	cmd.AddCommand(cmdSyncImportReportExtractFiles())
 	cmd.AddCommand(cmdSyncImportTurnReportFiles())
 	cmd.AddCommand(cmdSyncImportUsers())
@@ -221,11 +108,26 @@ func cmdSyncImportGames() *cobra.Command {
 				_ = db.Close()
 			}()
 
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
 			configSvc, err := config.New(db)
 			if err != nil {
 				return err
 			}
-			syncSvc, err := sync.New(db, nil, configSvc, nil)
+			ianaSvc, err := iana.New(db, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+			documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, authnSvc, authzSvc, configSvc, documentsSvc, gamesSvc, usersSvc)
 			if err != nil {
 				return err
 			}
@@ -284,13 +186,37 @@ func cmdSyncImportMapFiles() *cobra.Command {
 			}()
 			log.Printf("%s: connected\n", dbPath)
 
-			err = make.ImportMapFiles(db, path, quiet, verbose, debug)
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			ianaSvc, err := iana.New(db, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+			documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, authnSvc, authzSvc, configSvc, documentsSvc, gamesSvc, usersSvc)
+			if err != nil {
+				return err
+			}
+
+			err = syncSvc.ImportMapFiles(path, quiet, verbose, debug)
 			if err != nil {
 				return err
 			}
 
 			if showTiming, _ := cmd.Flags().GetBool("show-timing"); showTiming {
-				log.Printf("import: map: completed in %v\n", time.Since(started))
+				log.Printf("sync: import: map-files: completed in %v\n", time.Since(started))
 			}
 			return nil
 		},
@@ -301,16 +227,15 @@ func cmdSyncImportMapFiles() *cobra.Command {
 	return cmd
 }
 
-func cmdSyncImportReportFiles() *cobra.Command {
+func cmdSyncImportOttoAppConfig() *cobra.Command {
 	addFlags := func(cmd *cobra.Command) error {
 		return nil
 	}
 	cmd := &cobra.Command{
-		Use:          "report-files <path-to-tribenet-data>",
-		Short:        "update database with new (or changed) turn report files",
-		Long:         "Sync the database with the turn report files on the file system.",
+		Use:          "ottoapp-config-file <path-to-config-file>",
+		Short:        "update database with new (or changed) configuration",
 		SilenceUsage: true,
-		Args:         cobra.ExactArgs(1), // require path to TN3.1 root
+		Args:         cobra.ExactArgs(1), // require path to file
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const checkVersion = true
 			quiet, _ := cmd.Flags().GetBool("quiet")
@@ -318,12 +243,6 @@ func cmdSyncImportReportFiles() *cobra.Command {
 			debug, _ := cmd.Flags().GetBool("debug")
 			if quiet {
 				verbose = false
-			}
-
-			started := time.Now()
-			path, err := filepath.Abs(args[0])
-			if err != nil {
-				return err
 			}
 
 			dbPath, err := cmd.Flags().GetString("db")
@@ -339,15 +258,39 @@ func cmdSyncImportReportFiles() *cobra.Command {
 				_ = db.Close()
 			}()
 
-			err = make.SyncReportFiles(db, path, quiet, verbose, debug)
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			ianaSvc, err := iana.New(db, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+			documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, authnSvc, authzSvc, configSvc, documentsSvc, gamesSvc, usersSvc)
 			if err != nil {
 				return err
 			}
 
-			if showTiming, _ := cmd.Flags().GetBool("show-timing"); showTiming {
-				log.Printf("sync: report-files: completed in %v\n", time.Since(started))
+			path, err := filepath.Abs(args[0])
+			if err != nil {
+				return err
 			}
-			return nil
+			if verbose {
+				log.Printf("%s: importing configuration\n", path)
+			}
+
+			return syncSvc.ImportOttoAppConfig(path, quiet, verbose, debug)
 		},
 	}
 	if err := addFlags(cmd); err != nil {
@@ -392,14 +335,39 @@ func cmdSyncImportReportExtractFiles() *cobra.Command {
 			defer func() {
 				_ = db.Close()
 			}()
+			log.Printf("%s: connected\n", dbPath)
 
-			err = make.ImportReportExtractFiles(db, path, quiet, verbose, debug)
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			ianaSvc, err := iana.New(db, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+			documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, authnSvc, authzSvc, configSvc, documentsSvc, gamesSvc, usersSvc)
+			if err != nil {
+				return err
+			}
+
+			err = syncSvc.ImportReportExtractFiles(path, quiet, verbose, debug)
 			if err != nil {
 				return err
 			}
 
 			if showTiming, _ := cmd.Flags().GetBool("show-timing"); showTiming {
-				log.Printf("sync: report-extract-files: completed in %v\n", time.Since(started))
+				log.Printf("sync: import: report-extract-files: completed in %v\n", time.Since(started))
 			}
 			return nil
 		},
@@ -448,13 +416,37 @@ func cmdSyncImportTurnReportFiles() *cobra.Command {
 			}()
 			log.Printf("%s: connected\n", dbPath)
 
-			err = make.ImportTurnReportFiles(db, path, quiet, verbose, debug)
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
+			configSvc, err := config.New(db)
+			if err != nil {
+				return err
+			}
+			ianaSvc, err := iana.New(db, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+			documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, authnSvc, authzSvc, configSvc, documentsSvc, gamesSvc, usersSvc)
+			if err != nil {
+				return err
+			}
+
+			err = syncSvc.ImportTurnReportFiles(path, quiet, verbose, debug)
 			if err != nil {
 				return err
 			}
 
 			if showTiming, _ := cmd.Flags().GetBool("show-timing"); showTiming {
-				log.Printf("import: turn-report-files: completed in %v\n", time.Since(started))
+				log.Printf("sync: import: turn-report-files: completed in %v\n", time.Since(started))
 			}
 			return nil
 		},
@@ -498,11 +490,26 @@ func cmdSyncImportUsers() *cobra.Command {
 				_ = db.Close()
 			}()
 
+			authzSvc := authz.New(db)
+			authnSvc := authn.New(db, authzSvc)
 			configSvc, err := config.New(db)
 			if err != nil {
 				return err
 			}
-			syncSvc, err := sync.New(db, nil, configSvc, nil)
+			ianaSvc, err := iana.New(db, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			usersSvc := users.New(db, authnSvc, authzSvc, ianaSvc)
+			documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
+			if err != nil {
+				return err
+			}
+			syncSvc, err := sync.New(db, authnSvc, authzSvc, configSvc, documentsSvc, gamesSvc, usersSvc)
 			if err != nil {
 				return err
 			}

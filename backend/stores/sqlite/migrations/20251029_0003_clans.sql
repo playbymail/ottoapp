@@ -16,25 +16,25 @@ PRAGMA foreign_keys = ON;
 -- instructions and GM notes.
 CREATE TABLE clans
 (
-    clan_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    game_id       INTEGER NOT NULL, -- game that the clan participates in
-    user_id       INTEGER NOT NULL, -- user that controls the clan
+    clan_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id    INTEGER NOT NULL, -- game that the clan participates in
+    user_id    INTEGER NOT NULL, -- user that controls the clan
 
-    clan          INTEGER NOT NULL CHECK (clan BETWEEN 1 and 999),
-    is_active     BOOL    NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
-    setup_turn_id INTEGER NOT NULL,
+    clan       INTEGER NOT NULL CHECK (clan BETWEEN 1 and 999),
+    is_active  BOOL    NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    setup_turn TEXT    NOT NULL,
 
     -- audit (unix seconds, UTC)
-    created_at    INTEGER NOT NULL, -- set in app
-    updated_at    INTEGER NOT NULL, -- set in app
+    created_at INTEGER NOT NULL, -- set in app
+    updated_at INTEGER NOT NULL, -- set in app
 
     UNIQUE (user_id, game_id),
     UNIQUE (game_id, clan),
     FOREIGN KEY (game_id)
         REFERENCES games (game_id)
         ON DELETE CASCADE,
-    FOREIGN KEY (setup_turn_id)
-        REFERENCES game_turns (turn_id)
+    FOREIGN KEY (game_id, setup_turn)
+        REFERENCES game_turns (game_id, turn)
         ON DELETE CASCADE,
     FOREIGN KEY (user_id)
         REFERENCES users (user_id)

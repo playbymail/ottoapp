@@ -103,12 +103,12 @@ var cmdApiServe = &cobra.Command{
 
 		authzSvc := authz.New(db)
 		authnSvc := authn.New(db, authzSvc)
-		tzSvc, err := iana.New(db)
+		tzSvc, err := iana.New(db, quiet, verbose, debug)
 		if err != nil {
 			return errors.Join(fmt.Errorf("iana.new"), err)
 		}
 		usersSvc := users.New(db, authnSvc, authzSvc, tzSvc) // uses sqlite + domains
-		documentsSvc, err := documents.New(db, authzSvc, usersSvc)
+		documentsSvc, err := documents.New(db, authzSvc, usersSvc, quiet, verbose, debug)
 		if err != nil {
 			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
@@ -116,7 +116,7 @@ var cmdApiServe = &cobra.Command{
 		if err != nil {
 			return errors.Join(fmt.Errorf("sessions.new"), err)
 		}
-		gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc)
+		gamesSvc, err := games.New(db, authnSvc, authzSvc, usersSvc, quiet, verbose, debug)
 		if err != nil {
 			return err
 		}

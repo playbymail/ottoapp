@@ -32,7 +32,7 @@ type Service struct {
 	tzList []*TimezoneItem
 }
 
-func New(db *sqlite.DB) (*Service, error) {
+func New(db *sqlite.DB, quiet, verbose, debug bool) (*Service, error) {
 	s := &Service{
 		db:             db,
 		canonicalNames: map[string]*TimezoneItem{},
@@ -44,7 +44,9 @@ func New(db *sqlite.DB) (*Service, error) {
 		}
 		loc, err := time.LoadLocation(cn)
 		if err != nil {
-			log.Printf("[iana] tz %-55s: location not found\n", cn)
+			if !quiet {
+				log.Printf("[iana] tz %-55s: location not found\n", cn)
+			}
 			continue
 		}
 		item := &TimezoneItem{
@@ -64,7 +66,7 @@ func New(db *sqlite.DB) (*Service, error) {
 	return s, nil
 }
 
-func (s *Service) Active() ([]*TimezoneItem, error) {
+func (s *Service) Active(quiet, verbose, debug bool) ([]*TimezoneItem, error) {
 	names, err := s.db.Queries().GetActiveTimezones(s.db.Context())
 	if err != nil {
 		return nil, err
@@ -73,12 +75,16 @@ func (s *Service) Active() ([]*TimezoneItem, error) {
 	for _, name := range names {
 		cn, ok := Normalize(name)
 		if !ok {
-			log.Printf("[iana] tz %-55s: name not canonical\n", name)
+			if !quiet {
+				log.Printf("[iana] tz %-55s: name not canonical\n", name)
+			}
 			continue
 		}
 		item, ok := s.canonicalNames[cn]
 		if !ok {
-			log.Printf("[iana] tz %-55s: location not canonical\n", cn)
+			if !quiet {
+				log.Printf("[iana] tz %-55s: location not canonical\n", cn)
+			}
 			continue
 		}
 		list = append(list, item)

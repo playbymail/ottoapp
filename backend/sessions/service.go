@@ -461,10 +461,29 @@ type userPayload struct {
 func toPayload(csrf string, user *domains.User_t) sessionPayload {
 	// convert roles to a slice
 	var roles []string
-	for role, valid := range user.Roles {
-		if valid {
-			roles = append(roles, string(role))
-		}
+	if user.Roles.Active {
+		roles = append(roles, "active")
+	}
+	if user.Roles.Admin {
+		roles = append(roles, "admin")
+	}
+	if user.Roles.Gm {
+		roles = append(roles, "gm")
+	}
+	if user.Roles.Guest {
+		roles = append(roles, "guest")
+	}
+	if user.Roles.Player {
+		roles = append(roles, "player")
+	}
+	if user.Roles.Service {
+		roles = append(roles, "service")
+	}
+	if user.Roles.Sysop {
+		roles = append(roles, "sysop")
+	}
+	if user.Roles.User {
+		roles = append(roles, "user")
 	}
 	if roles == nil {
 		roles = []string{}

@@ -304,7 +304,7 @@ SELECT clans.game_id,
        clans.user_id,
        clans.clan_id,
        clans.clan,
-       clans.setup_turn_id,
+       clans.setup_turn,
        clans.is_active
 FROM documents,
      clans
@@ -313,12 +313,12 @@ WHERE documents.document_id = ?1
 `
 
 type ReadDocumentOwnerRow struct {
-	GameID      int64
-	UserID      int64
-	ClanID      int64
-	Clan        int64
-	SetupTurnID int64
-	IsActive    bool
+	GameID    int64
+	UserID    int64
+	ClanID    int64
+	Clan      int64
+	SetupTurn string
+	IsActive  bool
 }
 
 func (q *Queries) ReadDocumentOwner(ctx context.Context, documentID int64) (ReadDocumentOwnerRow, error) {
@@ -329,7 +329,7 @@ func (q *Queries) ReadDocumentOwner(ctx context.Context, documentID int64) (Read
 		&i.UserID,
 		&i.ClanID,
 		&i.Clan,
-		&i.SetupTurnID,
+		&i.SetupTurn,
 		&i.IsActive,
 	)
 	return i, err

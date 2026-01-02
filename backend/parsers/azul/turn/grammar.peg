@@ -1,0 +1,66 @@
+{
+package turn
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+}
+
+// Current Turn 899-12 (#0), Winter, FINE Next Turn 900-01 (#1), 28/11/2025
+
+Turn <- currentTurn:CurrentTurn "," SP season:Season "," SP weather:Weather SP nextTurn:NextTurn "," SP reportDate:ReportDate EOF {
+    return Turn{
+        TurnNo: currentTurn.(string),
+    },  nil
+}
+
+CurrentTurn <- "Current" SP "Turn" SP yearMonth:YearMonth SP "(" "#" turnNo:TurnNo ")" &"," {
+    return yearMonth, nil
+}
+
+YearMonth <- DIGIT DIGIT DIGIT DIGIT? "-" DIGIT DIGIT? {
+    return string(c.text), nil
+}
+
+TurnNo <- DIGIT+ &")" {
+    return string(c.text), nil
+}
+
+Season <- [A-Z][A-Za-z]+ {
+    return string(c.text), nil
+}
+
+Weather <- [A-Z][A-Za-z-]+ {
+    return string(c.text), nil
+}
+
+NextTurn <- "Next" SP "Turn" SP yearMonth:YearMonth SP "(" "#" turnNo:TurnNo ")" &","{
+    return yearMonth, nil
+}
+
+ReportDate <- DIGIT DIGIT? "/" DIGIT DIGIT? "/" DIGIT DIGIT DIGIT DIGIT {
+    return string(c.text), nil
+}
+
+
+EOF    = !.
+DIGIT  = [0-9]
+LETTER = [A-Z]
+SP     = [ \t]
+_      = [ \t]*
+
+
+

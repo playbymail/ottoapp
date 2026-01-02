@@ -1,0 +1,40 @@
+{
+package goes
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+}
+
+// Tribe Goes to QQ 1305
+
+Move <- "Tribe" SP "Goes" SP "to" SP coords:Coords EOF {
+    return Goes {
+        Coords: coords.(string),
+    }, nil
+}
+
+Coords <- "##" SP DIGIT DIGIT DIGIT DIGIT {
+    return string(c.text), nil
+} / LETTER LETTER SP DIGIT DIGIT DIGIT DIGIT {
+    return string(c.text), nil
+}
+
+EOF    = !.
+DIGIT  = [0-9]
+LETTER = [A-Z]
+SP     = [ \t]
+_      = [ \t]*

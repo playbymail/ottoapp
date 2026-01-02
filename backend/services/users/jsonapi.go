@@ -12,9 +12,10 @@ import (
 // UserView is the JSON:API view for a user
 type UserView struct {
 	ID          string          `jsonapi:"primary,user"` // singular when sending a payload
+	Handle      string          `jsonapi:"attr,handle"`
 	Username    string          `jsonapi:"attr,username"`
 	Email       string          `jsonapi:"attr,email"`
-	Handle      string          `jsonapi:"attr,handle"`
+	EmailOptIn  bool            `jsonapi:"attr,email-opt-in"`
 	Timezone    string          `jsonapi:"attr,timezone"`
 	Roles       []string        `jsonapi:"attr,roles,omitempty"`
 	Permissions map[string]bool `jsonapi:"attr,permissions,omitempty"`
@@ -37,9 +38,10 @@ func (s *Service) UserView(user *domains.User_t, actor, target *domains.Actor) *
 	aa := s.authzSvc.BuildActorAuth(actor, target)
 	return &UserView{
 		ID:          fmt.Sprintf("%d", user.ID),
+		Handle:      user.Handle,
 		Username:    user.Username,
 		Email:       user.Email,
-		Handle:      user.Handle,
+		EmailOptIn:  user.EmailOptIn,
 		Timezone:    user.Locale.Timezone.Location.String(),
 		Roles:       aa.Roles,
 		Permissions: aa.Permissions,

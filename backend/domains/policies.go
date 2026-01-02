@@ -19,40 +19,28 @@ import (
 type Actor struct {
 	ID ID // the numeric user_id from the DB
 	// one or more roles: admin, gm, sysop, service, player
-	Admin   bool
-	GM      bool
-	Service bool
-	Sysop   bool
-	User    bool
+	Roles Roles
 }
 
 func (a *Actor) IsValid() bool   { return a != nil && a.ID != InvalidID }
-func (a *Actor) IsAdmin() bool   { return a != nil && a.Admin }
-func (a *Actor) IsGM() bool      { return a != nil && a.GM }
-func (a *Actor) IsService() bool { return a != nil && a.Service }
-func (a *Actor) IsSysop() bool   { return a != nil && a.Sysop }
-func (a *Actor) IsUser() bool    { return a != nil && a.User }
+func (a *Actor) IsActive() bool  { return a != nil && a.Roles.Active }
+func (a *Actor) IsAdmin() bool   { return a != nil && a.Roles.Admin }
+func (a *Actor) IsGM() bool      { return a != nil && a.Roles.Gm }
+func (a *Actor) IsGuest() bool   { return a != nil && a.Roles.Guest }
+func (a *Actor) IsPlayer() bool  { return a != nil && a.Roles.Player }
+func (a *Actor) IsService() bool { return a != nil && a.Roles.Service }
+func (a *Actor) IsSysop() bool   { return a != nil && a.Roles.Sysop }
+func (a *Actor) IsUser() bool    { return a != nil && a.Roles.User }
 
-type Role string
-
-const (
-	RoleAdmin   Role = "admin"
-	RoleGM      Role = "gm"
-	RoleService Role = "service"
-	RoleSysop   Role = "sysop"
-	RoleUser    Role = "user"
-)
-
-type Roles map[Role]bool
-
-func (r Roles) IsAdmin() bool {
-	return r != nil && r[RoleAdmin]
-}
-func (r Roles) IsSysop() bool {
-	return r != nil && r[RoleSysop]
-}
-func (r Roles) IsUser() bool {
-	return r != nil && r[RoleUser]
+type Roles struct {
+	Active  bool
+	Admin   bool
+	Gm      bool
+	Guest   bool
+	Player  bool
+	Service bool
+	Sysop   bool
+	User    bool
 }
 
 // ActorAuthorizations represents the roles and permissions an actor has
@@ -139,9 +127,9 @@ func ValidateHandle(handle string) error {
 	if handle[0] < 'a' || handle[0] > 'z' {
 		return ErrBadInput
 	}
-	// All characters must be lowercase letters, digits, or underscores
+	// All characters must be lowercase letters, digits, dots, dashes, or underscores
 	for _, ch := range handle {
-		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '_') {
 			return ErrBadInput
 		}
 	}

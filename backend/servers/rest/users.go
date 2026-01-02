@@ -179,7 +179,7 @@ func handlePatchUser(authzSvc *authz.Service, usersSvc *users.Service) http.Hand
 			restapi.WriteJsonApiError(w, http.StatusInternalServerError, "server_error", "Internal Server Error", "")
 			return
 		}
-		// Update user
+		// UpdatePassword user
 		updatedUser := &domains.User_t{
 			ID:       user.ID,
 			Username: user.Username,

@@ -1,0 +1,87 @@
+{
+package location
+
+// NB: including all the imports make the parser generator run a bit more quickly.
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+)
+}
+
+// Tribe 0987, , Current Hex = QQ 1004, (Previous Hex = N/A)
+
+Location <- id:UnitId "," SP note:Note "," SP ch:CurrentHex "," SP "(" ph:PreviousHex ")" EOF {
+    previousCoords := ph.(string)
+    if previousCoords == "N/A" {
+        previousCoords = ""
+    }
+    currentCoords := ch.(string)
+    if currentCoords == "N/A" {
+        currentCoords = ""
+    }
+    return Location {
+        UnitId:         id.(string),
+        Note:           note.(string),
+        PreviousCoords: previousCoords,
+        CurrentCoords:  currentCoords,
+    }, nil
+}
+
+UnitId <- "Courier" SP id:CourierId &"," {
+    return id, nil
+} / "Element" SP id:ElementId &"," {
+    return id, nil
+} / "Fleet" SP id:FleetId &"," {
+    return id, nil
+} / "Garrison" SP id:GarrisonId &","  {
+    return id, nil
+} / "Tribe" SP id:TribeId &","  {
+    return id, nil
+}
+
+CourierId   <- DIGIT DIGIT DIGIT DIGIT "c" [1-9] { return string(c.text), nil }
+ElementId   <- DIGIT DIGIT DIGIT DIGIT "e" [1-9] { return string(c.text), nil }
+FleetId     <- DIGIT DIGIT DIGIT DIGIT "f" [1-9] { return string(c.text), nil }
+GarrisonId  <- DIGIT DIGIT DIGIT DIGIT "g" [1-9] { return string(c.text), nil }
+TribeId     <- DIGIT DIGIT DIGIT DIGIT           { return string(c.text), nil }
+
+Note <- (![\n\r,] .)* &"," {
+    return strings.TrimSpace(string(c.text)), nil
+}
+
+CurrentHex <- "Current" SP "Hex" SP "=" SP coords:Coords &"," {
+    return coords.(string), nil
+}
+
+PreviousHex <- "Previous" SP "Hex" SP "=" SP coords:Coords &")" {
+    return coords.(string), nil
+}
+
+Coords <- "N/A" {
+    return "N/A", nil
+} / "##" SP DIGIT DIGIT DIGIT DIGIT {
+    return string(c.text), nil
+} / LETTER LETTER SP DIGIT DIGIT DIGIT DIGIT {
+    return string(c.text), nil
+}
+
+
+EOF    = !.
+DIGIT  = [0-9]
+LETTER = [A-Z]
+SP     = [ \t]
+_      = [ \t]*
+
+
+

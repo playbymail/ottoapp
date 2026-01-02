@@ -5,7 +5,6 @@ package authn
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log"
 	"time"
@@ -34,11 +33,14 @@ func (s *Service) AuthenticateActorCredentials(actor *domains.Actor, secret stri
 
 // AuthenticateEmailCredentials verifies the user's credentials (email + secret).
 func (s *Service) AuthenticateEmailCredentials(email, secret string) (domains.ID, error) {
+	log.Printf("authn: AuthenticateEmailCredentials(%q, %q)\n", email, secret)
 	actor, err := s.authzSvc.GetActorByEmail(email)
+	log.Printf("authn: AuthenticateEmailCredentials(%q, %q) %v\n", email, secret, err)
 	if err != nil {
 		// we need to plow through to prevent timing attacks
 		actor = &domains.Actor{ID: domains.InvalidID}
 	}
+	log.Printf("authn: AuthenticateEmailCredentials(%q, %q) %+v\n", email, secret, *actor)
 	return s.authenticateCredentials(actor, secret)
 }
 
@@ -79,13 +81,22 @@ var dummyHash = []byte("$2a$10$uG3ThGlwW4vB0hUHd8OQ8u4JXkiS2EeMaZDD8f5U2J1cG6r3G
 // If authentication succeeds, the actor's last login time
 // is updated.
 func (s *Service) authenticateCredentials(actor *domains.Actor, secret string) (domains.ID, error) {
-	if actor == nil || !s.authzSvc.CanAuthenticate(actor) {
+	if actor == nil {
+		log.Printf("authn: authenticateCredentials(nil, %q)\n", secret)
 		// burn time to mitigate user-enum: compare against dummy
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(secret))
 		return domains.InvalidID, domains.ErrInvalidCredentials
 	}
-	hashedPassword, err := s.db.Queries().GetUserSecret(s.db.Context(), int64(actor.ID))
+	log.Printf("authn: authenticateCredentials(%+v, %q)\n", *actor, secret)
+	if !s.authzSvc.CanAuthenticate(actor) {
+		log.Printf("authn: authenticateCredentials(%+v, %q) canAuth false\n", *actor, secret)
+		// burn time to mitigate user-enum: compare against dummy
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(secret))
+		return domains.InvalidID, domains.ErrInvalidCredentials
+	}
+	hashedPassword, err := s.db.Queries().ReadUserSecret(s.db.Context(), int64(actor.ID))
 	if err != nil {
+		log.Printf("authn: authenticateCredentials(%+v, %q) getUserSecret(%d) %v\n", *actor, secret, actor.ID, err)
 		// burn time to mitigate user-enum: compare against dummy
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(secret))
 		return domains.InvalidID, domains.ErrInvalidCredentials
@@ -103,16 +114,31 @@ func (s *Service) authenticateCredentials(actor *domains.Actor, secret string) (
 }
 
 // updateUserSecret updates a secret without checking authorization.
-// It forwards the update to upserUserSecret using a generic transaction and context.
-func (s *Service) updateUserSecret(userID domains.ID, newPlainTextSecret string) (domains.ID, error) {
-	return s.upsertUserSecret(s.db.Context(), s.db.Queries(), userID, newPlainTextSecret, time.Now().UTC())
+func (s *Service) updateUserSecret(userId domains.ID, plainTextSecret string) (domains.ID, error) {
+	updatedAt := time.Now().UTC().Unix()
+	if err := domains.ValidatePassword(plainTextSecret); err != nil {
+		return domains.InvalidID, errors.Join(domains.ErrInvalidCredentials, err)
+	}
+	hashedPassword, err := hashPassword(plainTextSecret)
+	if err != nil {
+		return domains.InvalidID, err
+	}
+	err = s.db.Queries().UpdateUserSecret(s.db.Context(), sqlc.UpdateUserSecretParams{
+		UserID:            int64(userId),
+		HashedPassword:    hashedPassword,
+		PlaintextPassword: plainTextSecret,
+		UpdatedAt:         updatedAt,
+	})
+	if err != nil {
+		return domains.InvalidID, err
+	}
+	return userId, nil
 }
 
-// upsertUserSecret does the actual insert or update of a user secret.
-// It requires a sqlc.Queries parameter because it expects that we will want
-// to call it within transactions sometimes. Call updateUserSecret if you
-// want to use an immediate statement and generic context.
-func (s *Service) upsertUserSecret(ctx context.Context, q *sqlc.Queries, userId domains.ID, plainTextSecret string, now time.Time) (domains.ID, error) {
+// updateUserSecretInTransaction accepts sqlc.Queries to allow it to work within
+// a database transaction. Call updateUserSecret if you want to use an immediate
+// statement and generic context.
+func (s *Service) updateUserSecretInTransaction(ctx context.Context, q *sqlc.Queries, userId domains.ID, plainTextSecret string, updatedAt time.Time) (domains.ID, error) {
 	// log.Printf("user %d: password %q\n", userId, plainTextSecret)
 	if err := domains.ValidatePassword(plainTextSecret); err != nil {
 		return domains.InvalidID, errors.Join(domains.ErrInvalidCredentials, err)
@@ -121,12 +147,11 @@ func (s *Service) upsertUserSecret(ctx context.Context, q *sqlc.Queries, userId 
 	if err != nil {
 		return domains.InvalidID, err
 	}
-	err = q.UpsertUserSecret(ctx, sqlc.UpsertUserSecretParams{
+	err = q.UpdateUserSecret(ctx, sqlc.UpdateUserSecretParams{
 		UserID:            int64(userId),
 		HashedPassword:    hashedPassword,
-		PlaintextPassword: sql.NullString{Valid: true, String: plainTextSecret},
-		CreatedAt:         now.UTC().Unix(),
-		UpdatedAt:         now.UTC().Unix(),
+		PlaintextPassword: plainTextSecret,
+		UpdatedAt:         updatedAt.UTC().Unix(),
 	})
 	if err != nil {
 		return domains.InvalidID, err
@@ -141,6 +166,7 @@ func (s *Service) verifyPasswordByID(userID int64, plain string) (domains.ID, er
 
 // hashPassword hashes the password with a reasonable cost.
 func hashPassword(plainTextPassword string) (string, error) {
+	log.Printf("hashPassword(%q)\n", plainTextPassword)
 	hashedPasswordBytes, err := bcrypt.GenerateFromPassword([]byte(plainTextPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err

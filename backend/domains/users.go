@@ -16,10 +16,11 @@ const (
 type User_t struct {
 	ID ID // unique identifier
 
-	Username string // must be unique and lowercase
-	Email    string // must be unique and lowercase
-	Handle   string // must be unique and lowercase
-	Locale   UserLocale_t
+	Username   string // must be unique and lowercase
+	Email      string // must be unique and lowercase
+	EmailOptIn bool
+	Handle     string // must be unique and lowercase
+	Locale     UserLocale_t
 
 	Roles Roles
 

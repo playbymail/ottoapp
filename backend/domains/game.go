@@ -20,25 +20,23 @@ type Game struct {
 	IsActive    bool
 	ActiveTurn  *Turn
 	SetupTurn   *Turn
+	OrdersDue   time.Time
 }
 
-type TurnID int // database key?
-
-const (
-	InvalidTurnID TurnID = 0
-)
-
 type Turn struct {
-	ID        TurnID
-	Year      int // 899...9999
-	Month     int // 1...12
-	No        int // 0...9_999_999
-	OrdersDue time.Time
+	ID    string // YYYY-MM
+	Year  int    // 899...9999
+	Month int    // 1...12
+	No    int    // 0...9_999_999
 }
 
 func (t Turn) String() string {
 	return fmt.Sprintf("%04d-%02d", t.Year, t.Month)
 }
+
+const (
+	InvalidTurnID = "0000-00"
+)
 
 type Clan struct {
 	GameID    GameID

@@ -84,8 +84,8 @@ func testUserCatbird(t *testing.T, user *jsondb.User) {
 	if doNotWant := ""; doNotWant == user.Password.Password {
 		t.Errorf("catbird: Password: do not want %q, got %q\n", doNotWant, user.Password.Password)
 	}
-	if want := true; want != user.Password.Update {
-		t.Errorf("catbird: Password.Update: want %v, got %v\n", want, user.Password.Update)
+	if want := true; want != user.Password.UpdatePassword {
+		t.Errorf("catbird: Password.UpdatePassword: want %v, got %v\n", want, user.Password.UpdatePassword)
 	}
 	if want := true; want != user.Roles.Active {
 		t.Errorf("catbird: Roles.Active: want %v, got %v\n", want, user.Roles.Active)
@@ -111,8 +111,8 @@ func testUserFrojo(t *testing.T, user *jsondb.User) {
 	if doNotWant := "change-me"; doNotWant == user.Password.Password {
 		t.Errorf("frojo: Password: do not want %q, got %q\n", doNotWant, user.Password.Password)
 	}
-	if want := true; want != user.Password.Update {
-		t.Errorf("frojo: Password.Update: want %v, got %v\n", want, user.Password.Update)
+	if want := true; want != user.Password.UpdatePassword {
+		t.Errorf("frojo: Password.UpdatePassword: want %v, got %v\n", want, user.Password.UpdatePassword)
 	}
 	if want := false; want != user.Roles.Active {
 		t.Errorf("frojo: Roles.Active: want %v, got %v\n", want, user.Roles.Active)
@@ -138,8 +138,8 @@ func testUserPenguin(t *testing.T, user *jsondb.User) {
 	if want := "happy hoppy chevy levy"; want != user.Password.Password {
 		t.Errorf("penguin: Password: want %q, got %q\n", want, user.Password.Password)
 	}
-	if want := false; want != user.Password.Update {
-		t.Errorf("penguin: Password.Update: want %v, got %v\n", want, user.Password.Update)
+	if want := false; want != user.Password.UpdatePassword {
+		t.Errorf("penguin: Password.UpdatePassword: want %v, got %v\n", want, user.Password.UpdatePassword)
 	}
 	if want := true; want != user.Roles.Active {
 		t.Errorf("penguin: Roles.Active: want %v, got %v\n", want, user.Roles.Active)
@@ -165,8 +165,8 @@ func testUserSambo(t *testing.T, user *jsondb.User) {
 	if want := "update-me"; want != user.Password.Password {
 		t.Errorf("sambo: Password: want %q, got %q\n", want, user.Password.Password)
 	}
-	if want := true; want != user.Password.Update {
-		t.Errorf("sambo: Password.Update: want %v, got %v\n", want, user.Password.Update)
+	if want := true; want != user.Password.UpdatePassword {
+		t.Errorf("sambo: Password.UpdatePassword: want %v, got %v\n", want, user.Password.UpdatePassword)
 	}
 	if want := true; want != user.Roles.Active {
 		t.Errorf("sambo: Roles.Active: want %v, got %v\n", want, user.Roles.Active)

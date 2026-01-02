@@ -6,6 +6,24 @@
 INSERT INTO sessions (session_id, csrf, user_id, expires_at, created_at, updated_at)
 VALUES (:session_id, :csrf, :user_id, :expires_at, :created_at, :updated_at);
 
+-- name: ReadSessionData :one
+SELECT sessions.csrf,
+       users.user_id,
+       users.handle,
+       users.is_active,
+       users.is_admin,
+       users.is_gm,
+       users.is_guest,
+       users.is_player,
+       users.is_service,
+       users.is_sysop,
+       users.is_user
+FROM sessions,
+     users
+WHERE sessions.session_id = :session_id
+  AND sessions.expires_at > :expires_at
+  AND users.user_id = sessions.user_id;
+
 -- DeleteSession deletes a session.
 --
 -- name: DeleteSession :exec
