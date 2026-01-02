@@ -44,7 +44,7 @@ func New(db *sqlite.DB, quiet, verbose, debug bool) (*Service, error) {
 		}
 		loc, err := time.LoadLocation(cn)
 		if err != nil {
-			if !quiet {
+			if debug {
 				log.Printf("[iana] tz %-55s: location not found\n", cn)
 			}
 			continue

@@ -626,7 +626,7 @@ func (s *Service) ImportTurnReportFiles(path string, quiet, verbose, debug bool)
 			missingDirs = true
 			continue
 		}
-		turnReportFilePath := filepath.Join(gameDir, "Turn-reports")
+		turnReportFilePath := filepath.Join(gameDir, "turn-reports")
 		if !isdir(turnReportFilePath) {
 			log.Printf("sync: import: game: %q: not a folder\n", turnReportFilePath)
 			missingDirs = true
@@ -680,7 +680,7 @@ func (s *Service) ImportTurnReportFiles(path string, quiet, verbose, debug bool)
 		return fmt.Errorf("missing folders")
 	}
 	if verbose {
-		log.Printf("sync: import: found %8d Turn report files\n", len(turnReportFiles))
+		log.Printf("sync: import: found %8d turn report files\n", len(turnReportFiles))
 	}
 
 	// sort the list so that we have a deterministic load order for reports
@@ -700,7 +700,7 @@ func (s *Service) ImportTurnReportFiles(path string, quiet, verbose, debug bool)
 		if !ok {
 			clan, err = s.gameSvc.GameIdClanNoToClan(file.Clan.GameID, file.Clan.ClanNo)
 			if err != nil {
-				log.Printf("sync: import: cache: game %q: Clan %4d: %q %v\n", file.code, file.Clan.ClanNo, gameClan, err)
+				log.Printf("sync: import: cache: game %q: clan %4d: %q %v\n", file.code, file.Clan.ClanNo, gameClan, err)
 				return err
 			}
 			clanCache[gameClan] = clan
