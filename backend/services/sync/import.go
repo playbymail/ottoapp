@@ -243,7 +243,7 @@ func (s *Service) ImportMapFiles(path string, quiet, verbose, debug bool) error 
 				}
 				// clan map file name is {turnNo}.{clanNo}.wxx
 				clanMapFileName := entry.Name()
-				matches := reClanReportExtractFile.FindStringSubmatch(clanMapFileName)
+				matches := reClanMapFile.FindStringSubmatch(clanMapFileName)
 				if matches == nil {
 					log.Printf("%q %+v\n", clanMapFileName, matches)
 					continue

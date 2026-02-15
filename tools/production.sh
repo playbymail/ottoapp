@@ -29,20 +29,20 @@ showHelp=NO
 quiet=NO
 verbose=NO
 debug=NO
-rebuildOttoapp=NO
-rebuildOttomap=NO
+rebuildOttoapp=YES
+rebuildOttomap=YES
 ottoappLogging=
-rebuildDatabase=NO
-importConfig=NO
-importUsers=NO
-importGames=NO
-rebuildClanFolders=NO
-rebuildMakefiles=NO
-renderMaps=NO
-syncReportFiles=NO
-syncReportExtractFiles=NO
-syncMapKeyFiles=NO
-syncMapFiles=NO
+rebuildDatabase=YES
+importConfig=YES
+importUsers=YES
+importGames=YES
+rebuildClanFolders=YES
+rebuildMakefiles=YES
+renderMaps=YES
+syncReportFiles=YES
+syncReportExtractFiles=YES
+syncMapKeyFiles=YES
+syncMapFiles=YES
 
 ############################################################################
 # process command line flags

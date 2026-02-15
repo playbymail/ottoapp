@@ -62,11 +62,11 @@ TurnYearMonth <- DIGIT DIGIT DIGIT DIGIT? "-" DIGIT DIGIT? {
     return string(c.text), nil
 }
 
-Season <- ( "Winter" / "Spring" ) {
+Season <- ( "Winter" / "Spring" / "Summer" / "Fall" ) {
     return Season(string(c.text)), nil
 }
 
-Weather <- "FINE" {
+Weather <- [A-Z][A-Za-z-]+ {
     return Weather(string(c.text)), nil
 }
 

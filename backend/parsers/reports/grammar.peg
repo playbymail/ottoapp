@@ -86,11 +86,11 @@ CurrentTurnLine <- "Current Turn" SP cym:TurnYearMonth SP "(" cno:TurnNo ")" ","
     }, nil
 }
 
-Season <- ( "Winter" / "Spring" ) {
+Season <- ( "Winter" / "Spring" / "Summer" / "Fall" ) {
     return string(c.text), nil
 }
 
-Weather <- "FINE" {
+Weather <- [A-Z][A-Za-z-]+ {
     return string(c.text), nil
 }
 
